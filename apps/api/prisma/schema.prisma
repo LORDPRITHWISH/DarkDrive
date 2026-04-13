@@ -1,0 +1,136 @@
+// Prisma schema for DarkDrive
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  googleId     String   @unique
+  email        String   @unique
+  name         String
+  avatarUrl    String?
+  createdAt    DateTime @default(now())
+
+  rootFolderId String?  @unique
+  rootFolder   Folder?  @relation("UserRoot", fields: [rootFolderId], references: [id])
+
+  folders      Folder[]  @relation("FolderOwner")
+  files        File[]    @relation("FileOwner")
+  spaces       Space[]   @relation("SpaceOwner")
+  memberships  SpaceMember[]
+  shares       Share[]
+}
+
+model Folder {
+  id        String   @id @default(cuid())
+  name      String
+  ownerId   String
+  owner     User     @relation("FolderOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  parentId  String?
+  parent    Folder?  @relation("FolderChildren", fields: [parentId], references: [id], onDelete: Cascade)
+  children  Folder[] @relation("FolderChildren")
+  files     File[]
+  spaceId   String?
+  space     Space?   @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  isHidden  Boolean  @default(false)
+  isTrashed Boolean  @default(false)
+  isStarred Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  rootOf    User?    @relation("UserRoot")
+  spaceRootOf Space? @relation("SpaceRoot")
+  shares    Share[]
+
+  @@index([ownerId, parentId])
+  @@index([spaceId, parentId])
+}
+
+model File {
+  id         String   @id @default(cuid())
+  name       String
+  ownerId    String
+  owner      User     @relation("FileOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  folderId   String
+  folder     Folder   @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  spaceId    String?
+  space      Space?   @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  size       BigInt
+  mimeType   String
+  storageKey String   @unique
+  isHidden   Boolean  @default(false)
+  isTrashed  Boolean  @default(false)
+  isStarred  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  shares     Share[]
+
+  @@index([ownerId, folderId])
+  @@index([spaceId, folderId])
+}
+
+model Space {
+  id           String   @id @default(cuid())
+  name         String
+  ownerId      String
+  owner        User     @relation("SpaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  rootFolderId String   @unique
+  rootFolder   Folder   @relation("SpaceRoot", fields: [rootFolderId], references: [id])
+  createdAt    DateTime @default(now())
+
+  members      SpaceMember[]
+  folders      Folder[]
+  files        File[]
+}
+
+enum SpaceRole {
+  VIEWER
+  EDITOR
+  ADMIN
+}
+
+model SpaceMember {
+  id       String    @id @default(cuid())
+  spaceId  String
+  space    Space     @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role     SpaceRole @default(EDITOR)
+  joinedAt DateTime  @default(now())
+
+  @@unique([spaceId, userId])
+}
+
+enum SharePermission {
+  VIEW
+  EDIT
+}
+
+enum ShareResourceType {
+  FILE
+  FOLDER
+}
+
+model Share {
+  id           String             @id @default(cuid())
+  token        String             @unique
+  resourceType ShareResourceType
+  permission   SharePermission    @default(VIEW)
+  fileId       String?
+  file         File?              @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  folderId     String?
+  folder       Folder?            @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  createdById  String
+  createdBy    User               @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  expiresAt    DateTime?
+  passwordHash String?
+  createdAt    DateTime           @default(now())
+
+  @@index([createdById])
+}

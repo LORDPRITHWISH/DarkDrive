@@ -1,19 +1,65 @@
-import { Button } from "@workspace/ui/components/button"
+import { useEffect } from "react"
+import {
+  BrowserRouter,
+  Navigate,
+  Route,
+  Routes,
+  useNavigate,
+} from "react-router-dom"
+import { useAuth } from "@/store/auth"
+import { LoginPage } from "@/pages/Login"
+import { DrivePage } from "@/pages/Drive"
+import { SharePage } from "@/pages/SharePage"
+import { getSocket } from "@/lib/socket"
+
+function Protected({ children }: { children: React.ReactNode }) {
+  const { user, loading, fetchMe } = useAuth()
+  useEffect(() => {
+    void fetchMe()
+  }, [fetchMe])
+  if (loading) return <div className="grid min-h-svh place-items-center">Loading…</div>
+  if (!user) return <Navigate to="/login" replace />
+  return <>{children}</>
+}
+
+function Root() {
+  const { user, loading, fetchMe } = useAuth()
+  const nav = useNavigate()
+  useEffect(() => {
+    void fetchMe()
+  }, [fetchMe])
+  useEffect(() => {
+    if (!loading) {
+      if (user) nav(`/drive/${user.rootFolderId}`, { replace: true })
+      else nav("/login", { replace: true })
+    }
+  }, [user, loading, nav])
+  return <div className="grid min-h-svh place-items-center">Loading…</div>
+}
 
 export function App() {
+  useEffect(() => {
+    const s = getSocket()
+    return () => {
+      s.disconnect()
+    }
+  }, [])
   return (
-    <div className="flex min-h-svh p-6">
-      <div className="flex max-w-md min-w-0 flex-col gap-4 text-sm leading-loose">
-        <div>
-          <h1 className="font-medium">Project ready!</h1>
-          <p>You may now add components and start building.</p>
-          <p>We&apos;ve already added the button component for you.</p>
-          <Button className="mt-2">Button</Button>
-        </div>
-        <div className="text-muted-foreground font-mono text-xs">
-          (Press <kbd>d</kbd> to toggle dark mode)
-        </div>
-      </div>
-    </div>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Root />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/s/:token" element={<SharePage />} />
+        <Route
+          path="/drive/:folderId"
+          element={
+            <Protected>
+              <DrivePage />
+            </Protected>
+          }
+        />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   )
 }

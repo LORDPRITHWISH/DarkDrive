@@ -1,3 +1,5 @@
+import { apiUrl } from "./config"
+
 export type ApiError = { error: string; issues?: unknown }
 
 async function handle<T>(res: Response): Promise<T> {
@@ -17,7 +19,7 @@ async function handle<T>(res: Response): Promise<T> {
 }
 
 export async function apiGet<T>(path: string): Promise<T> {
-  const res = await fetch(path, { credentials: "include" })
+  const res = await fetch(apiUrl(path), { credentials: "include" })
   return handle<T>(res)
 }
 
@@ -26,7 +28,7 @@ export async function apiJson<T>(
   method: "POST" | "PATCH" | "PUT" | "DELETE",
   body?: unknown
 ): Promise<T> {
-  const res = await fetch(path, {
+  const res = await fetch(apiUrl(path), {
     method,
     credentials: "include",
     headers: { "Content-Type": "application/json" },
@@ -42,7 +44,7 @@ export async function apiUpload<T>(
 ): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const xhr = new XMLHttpRequest()
-    xhr.open("POST", path)
+    xhr.open("POST", apiUrl(path))
     xhr.withCredentials = true
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && onProgress) onProgress((e.loaded / e.total) * 100)

@@ -1,4 +1,5 @@
 import { Button } from "@workspace/ui/components/button"
+import { apiUrl } from "@/lib/config"
 
 export function LoginPage() {
   return (
@@ -16,7 +17,7 @@ export function LoginPage() {
         <Button
           className="mt-6 w-full"
           size="lg"
-          onClick={() => (window.location.href = "/api/auth/google")}
+          onClick={() => (window.location.href = apiUrl("/api/auth/google"))}
         >
           Continue with Google
         </Button>

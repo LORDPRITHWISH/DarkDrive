@@ -21,6 +21,7 @@ import {
 import { useDrive } from "@/store/drive"
 import type { FileItem, Folder } from "@/lib/types"
 import { formatBytes, formatDate } from "@/lib/format"
+import { apiUrl } from "@/lib/config"
 import { ShareDialog } from "./ShareDialog"
 
 function iconFor(mime: string, size = 28) {
@@ -113,7 +114,7 @@ export function FileGrid() {
               selected={selection.has(f.id)}
               onClick={(e) => select(f.id, e.metaKey || e.ctrlKey || e.shiftKey)}
               onDoubleClick={() =>
-                window.open(`/api/files/${f.id}/download?inline=1`, "_blank")
+                window.open(apiUrl(`/api/files/${f.id}/download?inline=1`), "_blank")
               }
               onContextMenu={(e) => openMenu(e, "file", f.id, f.name)}
               file={f}
@@ -173,7 +174,7 @@ export function FileGrid() {
                 }`}
                 onClick={(e) => select(f.id, e.metaKey || e.ctrlKey || e.shiftKey)}
                 onDoubleClick={() =>
-                  window.open(`/api/files/${f.id}/download?inline=1`, "_blank")
+                  window.open(apiUrl(`/api/files/${f.id}/download?inline=1`), "_blank")
                 }
                 onContextMenu={(e) => openMenu(e, "file", f.id, f.name)}
               >
@@ -210,7 +211,7 @@ export function FileGrid() {
             <MenuItem
               icon={<DownloadIcon size={16} />}
               onClick={() => {
-                window.open(`/api/files/${menu.id}/download`, "_blank")
+                window.open(apiUrl(`/api/files/${menu.id}/download`), "_blank")
                 closeMenu()
               }}
             >
@@ -422,7 +423,7 @@ function GridCardFile({
       <div className="bg-muted grid aspect-[4/3] place-items-center overflow-hidden">
         {isImg ? (
           <img
-            src={`/api/files/${file.id}/download?inline=1`}
+            src={apiUrl(`/api/files/${file.id}/download?inline=1`)}
             alt=""
             className="h-full w-full object-cover"
             loading="lazy"

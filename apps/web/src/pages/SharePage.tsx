@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { useParams } from "react-router-dom"
 import { Button } from "@workspace/ui/components/button"
 import { formatBytes } from "@/lib/format"
+import { apiUrl } from "@/lib/config"
 import type { FileItem, Folder } from "@/lib/types"
 
 type Resolved =
@@ -22,8 +23,9 @@ export function SharePage() {
   const [error, setError] = useState<string | null>(null)
 
   async function resolve(pw?: string) {
-    const res = await fetch(`/api/shares/resolve/${token}`, {
+    const res = await fetch(apiUrl(`/api/shares/resolve/${token}`), {
       method: "POST",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(pw ? { password: pw } : {}),
     })
@@ -83,12 +85,12 @@ export function SharePage() {
           {isImg && (
             <img
               className="mt-4 max-h-[60vh] w-full rounded-md object-contain"
-              src={`/api/shares/${token}/download`}
+              src={apiUrl(`/api/shares/${token}/download`)}
             />
           )}
           <div className="mt-4">
             <a
-              href={`/api/shares/${token}/download`}
+              href={apiUrl(`/api/shares/${token}/download`)}
               className="bg-primary text-primary-foreground hover:bg-primary/80 inline-flex items-center rounded-full px-4 py-2 text-sm font-medium"
             >
               Download
@@ -112,7 +114,7 @@ export function SharePage() {
         {data.files.map((f) => (
           <a
             key={f.id}
-            href={`/api/shares/${token}/download/${f.id}`}
+            href={apiUrl(`/api/shares/${token}/download/${f.id}`)}
             className="bg-card hover:border-primary/60 rounded-lg border p-3 transition-colors"
           >
             <div className="truncate font-medium">{f.name}</div>

@@ -40,8 +40,8 @@ export function FileCard({
         setDragging(true)
       }}
       onDragEnd={() => setDragging(false)}
-      className={`bg-card group hover:border-primary/60 relative cursor-pointer overflow-visible rounded-lg border transition-colors ${
-        selected ? "border-primary ring-primary/30 ring-2" : ""
+      className={`group hover:bg-accent/40 relative cursor-pointer overflow-visible rounded-lg transition-colors ${
+        selected ? "bg-accent/60 ring-primary/30 ring-2" : ""
       } ${dragging ? "opacity-40" : ""} ${file.isHidden ? "opacity-60" : ""}`}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
@@ -61,7 +61,7 @@ export function FileCard({
           <LinkSimpleIcon size={12} />
         </div>
       )}
-      <div className="bg-muted grid aspect-4/3 place-items-center overflow-hidden rounded-t-lg">
+      <div className=" grid aspect-4/3 place-items-center overflow-hidden rounded-lg">
         {isImg ? (
           <img
             src={apiUrl(`/api/files/${file.id}/download?inline=1`)}
@@ -70,7 +70,7 @@ export function FileCard({
             loading="lazy"
           />
         ) : (
-          iconFor(file.mimeType, 36)
+          iconFor(file.mimeType, 72, file.name)
         )}
       </div>
       <div className="p-2">

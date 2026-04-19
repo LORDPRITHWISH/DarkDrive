@@ -1,7 +1,11 @@
 import { Router } from "express"
 import { z } from "zod"
+import os from "node:os"
+import fsp from "node:fs/promises"
 import { prisma } from "../db/prisma.js"
+import { redis } from "../db/redis.js"
 import { currentUser, requireAuth } from "../middleware/auth.js"
+import { STORAGE_ROOT } from "../storage/local.js"
 
 export const adminRouter = Router()
 adminRouter.use(requireAuth)
@@ -10,6 +14,110 @@ adminRouter.use((req, res, next) => {
   if (u.role !== "ADMIN") return res.status(403).json({ error: "forbidden" })
   next()
 })
+
+// Live server / OS / process metrics — cheap, read on each request.
+adminRouter.get("/server-stats", async (_req, res) => {
+  const snapshotStart = cpuSnapshot()
+  await new Promise((r) => setTimeout(r, 200))
+  const snapshotEnd = cpuSnapshot()
+  const idleDelta = snapshotEnd.idle - snapshotStart.idle
+  const totalDelta = snapshotEnd.total - snapshotStart.total
+  const cpuUsagePct =
+    totalDelta > 0
+      ? Math.max(0, Math.min(100, 100 * (1 - idleDelta / totalDelta)))
+      : 0
+
+  const totalMem = os.totalmem()
+  const freeMem = os.freemem()
+  const usedMem = totalMem - freeMem
+
+  let disk:
+    | { total: number; free: number; used: number; pct: number }
+    | null = null
+  try {
+    const s = await fsp.statfs(STORAGE_ROOT)
+    const total = Number(s.bsize) * Number(s.blocks)
+    const free = Number(s.bsize) * Number(s.bavail)
+    const used = total - free
+    disk = { total, free, used, pct: total > 0 ? (used / total) * 100 : 0 }
+  } catch {
+    // statfs unsupported — leave as null
+  }
+
+  let redisInfo: Record<string, string> | null = null
+  try {
+    const r = (await redis.info("stats")) as string
+    redisInfo = Object.fromEntries(
+      r
+        .split(/\r?\n/)
+        .filter((l) => l && !l.startsWith("#"))
+        .map((l) => {
+          const [k, ...rest] = l.split(":")
+          return [k, rest.join(":")]
+        })
+    )
+  } catch {
+    // ignore
+  }
+
+  const procMem = process.memoryUsage()
+  const [load1, load5, load15] = os.loadavg()
+  const cpus = os.cpus()
+
+  res.json({
+    host: {
+      platform: os.platform(),
+      arch: os.arch(),
+      hostname: os.hostname(),
+      release: os.release(),
+      node: process.version,
+      uptimeSec: Math.floor(os.uptime()),
+    },
+    process: {
+      pid: process.pid,
+      uptimeSec: Math.floor(process.uptime()),
+      rss: procMem.rss,
+      heapTotal: procMem.heapTotal,
+      heapUsed: procMem.heapUsed,
+      external: procMem.external,
+    },
+    cpu: {
+      model: cpus[0]?.model ?? "unknown",
+      cores: cpus.length,
+      speedMHz: cpus[0]?.speed ?? 0,
+      usagePct: cpuUsagePct,
+      load1,
+      load5,
+      load15,
+    },
+    memory: {
+      total: totalMem,
+      free: freeMem,
+      used: usedMem,
+      pct: totalMem > 0 ? (usedMem / totalMem) * 100 : 0,
+    },
+    disk,
+    redis: redisInfo
+      ? {
+          hits: Number(redisInfo.keyspace_hits ?? 0),
+          misses: Number(redisInfo.keyspace_misses ?? 0),
+          evictedKeys: Number(redisInfo.evicted_keys ?? 0),
+          totalConnections: Number(redisInfo.total_connections_received ?? 0),
+        }
+      : null,
+  })
+})
+
+function cpuSnapshot() {
+  const cpus = os.cpus()
+  let idle = 0
+  let total = 0
+  for (const cpu of cpus) {
+    for (const v of Object.values(cpu.times)) total += v
+    idle += cpu.times.idle
+  }
+  return { idle, total }
+}
 
 // Comprehensive dashboard stats. All aggregated from existing tables in a
 // single endpoint — the panel is read-mostly so this is fine for now; swap in
@@ -295,6 +403,7 @@ adminRouter.get("/users", async (_req, res) => {
       role: true,
       storageQuotaBytes: true,
       upgradeRequestedAt: true,
+      upgradeRequestedBytes: true,
       disabledAt: true,
       createdAt: true,
       avatarUrl: true,
@@ -310,6 +419,9 @@ adminRouter.get("/users", async (_req, res) => {
     users: users.map((u) => ({
       ...u,
       storageQuotaBytes: Number(u.storageQuotaBytes),
+      upgradeRequestedBytes: u.upgradeRequestedBytes
+        ? Number(u.upgradeRequestedBytes)
+        : null,
       usedBytes: Number(byOwner.get(u.id) ?? BigInt(0)),
     })),
   })
@@ -339,7 +451,10 @@ adminRouter.patch("/users/:id", async (req, res) => {
   if (body.storageQuotaBytes !== undefined)
     data.storageQuotaBytes = BigInt(body.storageQuotaBytes)
   if (body.role !== undefined) data.role = body.role
-  if (body.clearUpgradeRequest) data.upgradeRequestedAt = null
+  if (body.clearUpgradeRequest) {
+    data.upgradeRequestedAt = null
+    data.upgradeRequestedBytes = null
+  }
   if (body.disabled !== undefined)
     data.disabledAt = body.disabled ? new Date() : null
 
@@ -353,8 +468,15 @@ adminRouter.patch("/users/:id", async (req, res) => {
       role: true,
       storageQuotaBytes: true,
       upgradeRequestedAt: true,
+      upgradeRequestedBytes: true,
       disabledAt: true,
     },
   })
-  res.json({ ...u, storageQuotaBytes: Number(u.storageQuotaBytes) })
+  res.json({
+    ...u,
+    storageQuotaBytes: Number(u.storageQuotaBytes),
+    upgradeRequestedBytes: u.upgradeRequestedBytes
+      ? Number(u.upgradeRequestedBytes)
+      : null,
+  })
 })

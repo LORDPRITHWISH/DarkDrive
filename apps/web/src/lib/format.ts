@@ -21,3 +21,29 @@ export function formatDate(iso: string): string {
     minute: "2-digit",
   })
 }
+
+// "just now", "3m ago", "4h ago", "2d ago", "3w ago", "Feb 14" — compact
+// relative timestamps tuned for activity feeds.
+export function relativeTime(iso: string): string {
+  const then = new Date(iso).getTime()
+  if (!Number.isFinite(then)) return "—"
+  const diff = Math.max(0, Date.now() - then)
+  const sec = Math.floor(diff / 1000)
+  if (sec < 45) return "just now"
+  const min = Math.floor(sec / 60)
+  if (min < 60) return `${min}m ago`
+  const hr = Math.floor(min / 60)
+  if (hr < 24) return `${hr}h ago`
+  const day = Math.floor(hr / 24)
+  if (day < 7) return `${day}d ago`
+  const wk = Math.floor(day / 7)
+  if (wk < 4) return `${wk}w ago`
+  return new Date(then).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year:
+      new Date(then).getFullYear() === new Date().getFullYear()
+        ? undefined
+        : "numeric",
+  })
+}

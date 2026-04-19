@@ -6,7 +6,6 @@ import {
   ListBulletsIcon,
   EyeIcon,
   EyeSlashIcon,
-  TrashIcon,
 } from "@phosphor-icons/react"
 import { Button } from "@workspace/ui/components/button"
 import { useDrive } from "@/store/drive"
@@ -20,8 +19,6 @@ export function Toolbar() {
     setView,
     showHidden,
     toggleHidden,
-    showTrashed,
-    toggleTrashed,
     createFolder,
     upload,
   } = useDrive()
@@ -57,14 +54,6 @@ export function Toolbar() {
           title="Toggle hidden"
         >
           {showHidden ? <EyeIcon size={16} /> : <EyeSlashIcon size={16} />}
-        </Button>
-        <Button
-          size="sm"
-          variant={showTrashed ? "default" : "ghost"}
-          onClick={toggleTrashed}
-          title="Show trash"
-        >
-          <TrashIcon size={16} />
         </Button>
         <div className="bg-border mx-1 h-5 w-px" />
         <Button

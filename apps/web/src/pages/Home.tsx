@@ -124,7 +124,7 @@ export function HomePage() {
                               loading="lazy"
                             />
                           ) : (
-                            iconFor(f.mimeType, 36)
+                            iconFor(f.mimeType, 56, f.name)
                           )}
                         </div>
                         <div className="p-2">
@@ -166,7 +166,7 @@ export function HomePage() {
                         >
                           <td className="py-2 pl-3">
                             <div className="flex items-center gap-2">
-                              {iconFor(f.mimeType, 18)}
+                              {iconFor(f.mimeType, 18, f.name)}
                               <span className="truncate">{f.name}</span>
                             </div>
                           </td>

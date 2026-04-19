@@ -16,10 +16,13 @@ import { FileTypesPanel } from "./admin/FileTypesPanel"
 import { LargestFiles } from "./admin/LargestFiles"
 import { DuplicatesList } from "./admin/DuplicatesList"
 import { TrashPanel } from "./admin/TrashPanel"
+import { ServerPanel } from "./admin/ServerPanel"
+import { ServerSummary } from "./admin/ServerSummary"
 import { HourlyChart } from "./admin/HourlyChart"
 import { RecentActivity } from "./admin/RecentActivity"
 import { RecentLogins } from "./admin/RecentLogins"
 import { UsersTable } from "./admin/UsersTable"
+import { UpgradeRequests } from "./admin/UpgradeRequests"
 
 export function AdminPage() {
   const me = useAuth((s) => s.user)
@@ -107,10 +110,20 @@ function Dashboard({
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="files">Files</TabsTrigger>
           <TabsTrigger value="activity">Activity</TabsTrigger>
+          <TabsTrigger value="server">Server</TabsTrigger>
           <TabsTrigger value="users">Users</TabsTrigger>
+          <TabsTrigger value="upgrades">
+            Upgrade requests
+            {users.filter((u) => u.upgradeRequestedAt).length > 0 && (
+              <span className="bg-primary text-primary-foreground ml-2 rounded-full px-1.5 text-[10px] font-semibold">
+                {users.filter((u) => u.upgradeRequestedAt).length}
+              </span>
+            )}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="flex flex-col gap-4">
+          <ServerSummary />
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
             <div className="lg:col-span-2">
               <UserGrowth stats={stats} />
@@ -118,11 +131,6 @@ function Dashboard({
             <StoragePanel stats={stats} />
           </div>
           <HourlyChart stats={stats} />
-          <div className="bg-muted/40 text-muted-foreground rounded-lg border p-3 text-xs">
-            <strong>Note:</strong> infra metrics (CPU/RAM, disk I/O, DB latency,
-            Redis cache hit ratio, API latency) live in the host environment,
-            not the app DB.
-          </div>
         </TabsContent>
 
         <TabsContent value="files" className="flex flex-col gap-4">
@@ -144,8 +152,16 @@ function Dashboard({
           <RecentLogins stats={stats} />
         </TabsContent>
 
+        <TabsContent value="server">
+          <ServerPanel />
+        </TabsContent>
+
         <TabsContent value="users">
           <UsersTable users={users} meId={meId} onUpdate={onUpdate} />
+        </TabsContent>
+
+        <TabsContent value="upgrades">
+          <UpgradeRequests users={users} onUpdate={onUpdate} />
         </TabsContent>
       </Tabs>
     </div>

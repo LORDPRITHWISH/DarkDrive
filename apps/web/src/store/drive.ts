@@ -19,7 +19,6 @@ type DriveState = {
   loading: boolean
   error: string | null
   showHidden: boolean
-  showTrashed: boolean
   view: "grid" | "list"
   selection: Set<string>
   spaces: Space[]
@@ -27,7 +26,6 @@ type DriveState = {
 
   setView: (v: "grid" | "list") => void
   toggleHidden: () => void
-  toggleTrashed: () => void
   select: (id: string, multi?: boolean) => void
   clearSelection: () => void
 
@@ -47,7 +45,7 @@ type DriveState = {
   addFileToSpace: (fileId: string, targetFolderId: string) => Promise<void>
   addFolderToSpace: (folderId: string, targetFolderId: string) => Promise<void>
   moveItem: (type: "folder" | "file", id: string, targetFolderId: string) => Promise<void>
-  upload: (files: FileList | File[]) => Promise<void>
+  upload: (files: FileList | File[], explicitTargetId?: string) => Promise<void>
 
   loadSpaces: () => Promise<void>
   createSpace: (name: string) => Promise<Space>
@@ -66,7 +64,6 @@ export const useDrive = create<DriveState>((set, get) => ({
   loading: false,
   error: null,
   showHidden: false,
-  showTrashed: false,
   view: "grid",
   selection: new Set(),
   spaces: [],
@@ -75,10 +72,6 @@ export const useDrive = create<DriveState>((set, get) => ({
   setView: (v) => set({ view: v }),
   toggleHidden: () => {
     set({ showHidden: !get().showHidden })
-    void get().refresh()
-  },
-  toggleTrashed: () => {
-    set({ showTrashed: !get().showTrashed })
     void get().refresh()
   },
   select: (id, multi) => {
@@ -97,7 +90,6 @@ export const useDrive = create<DriveState>((set, get) => ({
     try {
       const q = new URLSearchParams()
       if (get().showHidden) q.set("includeHidden", "1")
-      if (get().showTrashed) q.set("includeTrashed", "1")
       const data = await apiGet<ContentsResponse>(`/api/folders/${id}/contents?${q.toString()}`)
       set({
         folder: data.folder,
@@ -188,8 +180,8 @@ export const useDrive = create<DriveState>((set, get) => ({
     await get().refresh()
   },
 
-  upload: async (files) => {
-    const folderId = get().currentFolderId
+  upload: async (files, explicitTargetId) => {
+    const folderId = explicitTargetId ?? get().currentFolderId
     if (!folderId) return
     const list = Array.from(files)
     const batches: File[][] = []

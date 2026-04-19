@@ -28,14 +28,31 @@ meRouter.get("/quota", async (req, res) => {
     total: Number(user.storageQuotaBytes),
     role: user.role,
     upgradeRequestedAt: user.upgradeRequestedAt,
+    upgradeRequestedBytes: user.upgradeRequestedBytes
+      ? Number(user.upgradeRequestedBytes)
+      : null,
   })
 })
 
 meRouter.post("/request-upgrade", async (req, res) => {
   const user = currentUser(req)
+  const { bytes } = z
+    .object({
+      bytes: z
+        .number()
+        .int()
+        .positive()
+        .max(10 * 1024 ** 4), // 10 TiB cap
+    })
+    .parse(req.body)
+  if (BigInt(bytes) <= user.storageQuotaBytes)
+    return res.status(400).json({ error: "must_exceed_current_quota" })
   await prisma.user.update({
     where: { id: user.id },
-    data: { upgradeRequestedAt: new Date() },
+    data: {
+      upgradeRequestedAt: new Date(),
+      upgradeRequestedBytes: BigInt(bytes),
+    },
   })
   res.json({ ok: true })
 })

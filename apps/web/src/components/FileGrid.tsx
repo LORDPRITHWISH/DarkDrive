@@ -20,9 +20,7 @@ export function FileGrid() {
     view,
     selection,
     select,
-    deleteItem,
     trashItem,
-    restoreItem,
     toggleHiddenItem,
     toggleStarred,
     renameFile,
@@ -208,17 +206,8 @@ export function FileGrid() {
             await toggleHiddenItem(menu.type, menu.id)
             closeMenu()
           }}
-          onTrash={async () => {
+          onDelete={async () => {
             await trashItem(menu.type, menu.id)
-            closeMenu()
-          }}
-          onRestore={async () => {
-            await restoreItem(menu.type, menu.id)
-            closeMenu()
-          }}
-          onDeleteForever={async () => {
-            if (confirm(`Permanently delete "${menu.name}"?`))
-              await deleteItem(menu.type, menu.id)
             closeMenu()
           }}
           onRemoveShortcut={async () => {

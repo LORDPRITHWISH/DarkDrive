@@ -13,7 +13,7 @@ type MeState = {
   loadRecent: (limit?: number) => Promise<void>
   loadSuggestions: (limit?: number) => Promise<void>
   loadFolderSuggestions: (limit?: number) => Promise<void>
-  requestUpgrade: () => Promise<void>
+  requestUpgrade: (bytes: number) => Promise<void>
 
   loadNav: () => Promise<void>
   pushNav: (path: string) => Promise<NavState>
@@ -46,8 +46,8 @@ export const useMe = create<MeState>((set) => ({
     )
     set({ folderSuggestions: r.folders })
   },
-  requestUpgrade: async () => {
-    await apiJson("/api/me/request-upgrade", "POST")
+  requestUpgrade: async (bytes: number) => {
+    await apiJson("/api/me/request-upgrade", "POST", { bytes })
     const q = await apiGet<QuotaInfo>("/api/me/quota")
     set({ quota: q })
   },

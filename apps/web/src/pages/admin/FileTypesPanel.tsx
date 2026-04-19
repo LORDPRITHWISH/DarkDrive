@@ -49,22 +49,37 @@ export function FileTypesPanel({ stats }: { stats: AdminStats }) {
                 )
               })}
             </div>
-            <ul className="space-y-1.5 text-sm">
+            <ul className="flex flex-col">
               {entries
                 .sort(
                   (a, b) =>
                     (stats.files.bytesByType[b[0]] ?? 0) -
                     (stats.files.bytesByType[a[0]] ?? 0)
                 )
-                .map(([k, count]) => (
-                  <li key={k} className="flex items-center gap-2">
-                    <span className={`h-2 w-2 rounded-full ${LABELS[k].color}`} />
-                    <span className="flex-1">{LABELS[k].label}</span>
-                    <span className="text-muted-foreground text-xs">
-                      {count} · {formatBytes(stats.files.bytesByType[k] ?? 0)}
-                    </span>
-                  </li>
-                ))}
+                .map(([k, count]) => {
+                  const bytes = stats.files.bytesByType[k] ?? 0
+                  const pct = totalBytes > 0 ? (bytes / totalBytes) * 100 : 0
+                  return (
+                    <li
+                      key={k}
+                      className="grid grid-cols-[1rem_1fr_auto_auto] items-center gap-3 py-1.5 text-sm"
+                    >
+                      <span
+                        className={`h-2.5 w-2.5 rounded-full ${LABELS[k].color}`}
+                      />
+                      <span className="text-foreground">{LABELS[k].label}</span>
+                      <span className="text-muted-foreground tabular-nums text-xs">
+                        {count.toLocaleString()} file{count === 1 ? "" : "s"}
+                      </span>
+                      <span className="tabular-nums text-xs font-medium w-20 text-right">
+                        {formatBytes(bytes)}
+                        <span className="text-muted-foreground ml-1 font-normal">
+                          · {pct.toFixed(0)}%
+                        </span>
+                      </span>
+                    </li>
+                  )
+                })}
             </ul>
           </>
         )}

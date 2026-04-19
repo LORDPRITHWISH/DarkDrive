@@ -1,7 +1,6 @@
 import {
   ArrowsOutCardinalIcon,
   DownloadIcon,
-  EyeIcon,
   EyeIcon as OpenEyeIcon,
   EyeSlashIcon,
   FolderIcon,
@@ -34,9 +33,7 @@ type Props = {
   onShare: () => void
   onToggleStar: () => void
   onToggleHidden: () => void
-  onTrash: () => void
-  onRestore: () => void
-  onDeleteForever: () => void
+  onDelete: () => void
   onRemoveShortcut: () => void
   onAddToSpace: () => void
 }
@@ -52,9 +49,7 @@ export function FileContextMenu({
   onShare,
   onToggleStar,
   onToggleHidden,
-  onTrash,
-  onRestore,
-  onDeleteForever,
+  onDelete,
   onRemoveShortcut,
   onAddToSpace,
 }: Props) {
@@ -110,18 +105,12 @@ export function FileContextMenu({
           <MenuItem icon={<EyeSlashIcon size={16} />} onClick={onToggleHidden}>
             Toggle hidden
           </MenuItem>
-          <MenuItem icon={<TrashIcon size={16} />} onClick={onTrash}>
-            Move to trash
-          </MenuItem>
-          <MenuItem icon={<EyeIcon size={16} />} onClick={onRestore}>
-            Restore
-          </MenuItem>
           <MenuItem
             icon={<TrashIcon size={16} weight="fill" />}
             danger
-            onClick={onDeleteForever}
+            onClick={onDelete}
           >
-            Delete forever
+            {menu.type === "folder" ? "Delete folder" : "Delete file"}
           </MenuItem>
         </>
       )}

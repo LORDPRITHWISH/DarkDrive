@@ -35,12 +35,14 @@ import { formatBytes, formatDate } from "@/lib/format"
 import type { AdminUser } from "@/lib/types"
 
 const PRESETS = [
-  { label: "500 MB", bytes: 500 * 1024 ** 2 },
   { label: "1 GB", bytes: 1 * 1024 ** 3 },
   { label: "5 GB", bytes: 5 * 1024 ** 3 },
+  { label: "10 GB", bytes: 10 * 1024 ** 3 },
   { label: "15 GB", bytes: 15 * 1024 ** 3 },
+  { label: "20 GB", bytes: 20 * 1024 ** 3 },
   { label: "50 GB", bytes: 50 * 1024 ** 3 },
   { label: "100 GB", bytes: 100 * 1024 ** 3 },
+  { label: "500 GB", bytes: 500 * 1024 ** 3 },
 ]
 
 type UpdateFn = (
@@ -58,20 +60,20 @@ export function UsersTable({
   onUpdate: UpdateFn
 }) {
   return (
-    <Card className="p-0 gap-0">
+    <Card className="gap-0 p-0">
       <CardHeader className="p-4">
         <CardTitle>Users</CardTitle>
       </CardHeader>
-      <CardContent className="p-0 gap-0">
-        <Table>
+      <CardContent className="gap-0 p-0">
+        <Table className="table-fixed">
           <TableHeader>
             <TableRow>
               <TableHead className="pl-4">User</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead className="w-[28%]">Usage</TableHead>
-              <TableHead>Quota</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="pr-4 text-right">Actions</TableHead>
+              <TableHead className="w-96">Usage</TableHead>
+              <TableHead className="w-28">Role</TableHead>
+              <TableHead className="w-32">Quota</TableHead>
+              <TableHead className="w-28">Status</TableHead>
+              <TableHead className="w-24 ">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -128,6 +130,19 @@ function UserRow({
       </TableCell>
 
       <TableCell>
+        <div className="flex flex-col gap-1">
+          <div className="text-muted-foreground flex items-baseline justify-between gap-2 text-xs">
+            <span>{formatBytes(u.usedBytes)}</span>
+            <span>{pct.toFixed(0)}%</span>
+          </div>
+          <Progress
+            value={pct}
+            indicatorClassName={pct >= 80 ? "bg-destructive" : undefined}
+          />
+        </div>
+      </TableCell>
+
+      <TableCell>
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
@@ -159,19 +174,6 @@ function UserRow({
             </DropdownMenuCheckboxItem>
           </DropdownMenuContent>
         </DropdownMenu>
-      </TableCell>
-
-      <TableCell>
-        <div className="flex flex-col gap-1">
-          <div className="text-muted-foreground flex items-baseline justify-between gap-2 text-xs">
-            <span>{formatBytes(u.usedBytes)}</span>
-            <span>{pct.toFixed(0)}%</span>
-          </div>
-          <Progress
-            value={pct}
-            indicatorClassName={pct >= 80 ? "bg-destructive" : undefined}
-          />
-        </div>
       </TableCell>
 
       <TableCell>

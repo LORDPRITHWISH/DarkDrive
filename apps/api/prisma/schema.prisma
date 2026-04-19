@@ -21,10 +21,11 @@ model User {
   avatarUrl    String?
   createdAt    DateTime @default(now())
 
-  role               UserRole  @default(USER)
-  storageQuotaBytes  BigInt    @default(1073741824)
-  upgradeRequestedAt DateTime?
-  disabledAt         DateTime?
+  role                  UserRole  @default(USER)
+  storageQuotaBytes     BigInt    @default(1073741824)
+  upgradeRequestedAt    DateTime?
+  upgradeRequestedBytes BigInt?
+  disabledAt            DateTime?
 
   rootFolderId String?  @unique
   rootFolder   Folder?  @relation("UserRoot", fields: [rootFolderId], references: [id])

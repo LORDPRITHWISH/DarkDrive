@@ -171,7 +171,7 @@ export function RecentPage() {
                           >
                             <td className="py-2 pl-3">
                               <div className="flex items-center gap-2">
-                                {iconFor(f.mimeType, 18)}
+                                {iconFor(f.mimeType, 18, f.name)}
                                 <span className="truncate">{f.name}</span>
                               </div>
                             </td>
@@ -232,7 +232,7 @@ function RecentCard({
       className="bg-card hover:border-primary/60 flex flex-col overflow-hidden rounded-lg border text-left transition-colors"
     >
       <div className="flex items-center gap-2 px-3 py-2">
-        {iconFor(file.mimeType, 16)}
+        {iconFor(file.mimeType, 16, file.name)}
         <span className="truncate text-sm font-medium" title={file.name}>
           {file.name}
         </span>
@@ -247,7 +247,7 @@ function RecentCard({
           />
         ) : (
           <div className="grid h-full place-items-center">
-            {iconFor(file.mimeType, 48)}
+            {iconFor(file.mimeType, 56, file.name)}
           </div>
         )}
       </div>

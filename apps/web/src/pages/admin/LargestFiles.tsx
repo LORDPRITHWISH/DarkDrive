@@ -21,14 +21,24 @@ export function LargestFiles({ stats }: { stats: AdminStats }) {
           </div>
         ) : (
           <ul className="flex flex-col divide-y">
-            {stats.files.largest.map((f) => (
-              <li key={f.id} className="flex items-center gap-2 py-1.5">
-                {iconFor(f.mimeType, 16)}
-                <span className="truncate text-sm" title={f.name}>
-                  {f.name}
+            {stats.files.largest.map((f, i) => (
+              <li key={f.id} className="flex items-center gap-3 py-2">
+                <span className="text-muted-foreground w-5 shrink-0 text-center text-xs tabular-nums">
+                  {i + 1}
                 </span>
-                <span className="text-muted-foreground ml-auto shrink-0 text-xs">
-                  {f.owner?.name ?? "?"} · {formatBytes(f.size)}
+                <span className="text-muted-foreground shrink-0">
+                  {iconFor(f.mimeType, 18, f.name)}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-medium" title={f.name}>
+                    {f.name}
+                  </div>
+                  <div className="text-muted-foreground truncate text-xs">
+                    {f.owner?.name ?? "Unknown owner"}
+                  </div>
+                </div>
+                <span className="tabular-nums shrink-0 text-sm font-semibold">
+                  {formatBytes(f.size)}
                 </span>
               </li>
             ))}

@@ -116,7 +116,7 @@ export function FileListView({
           >
             <td className="py-2 pl-4">
               <div className="flex items-center gap-2">
-                {iconFor(f.mimeType, 20)}
+                {iconFor(f.mimeType, 20, f.name)}
                 <span className={f.isHidden ? "opacity-60 italic" : ""}>{f.name}</span>
                 {f.isStarred && (
                   <StarIcon size={14} weight="fill" className="text-yellow-500" />

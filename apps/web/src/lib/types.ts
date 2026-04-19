@@ -13,6 +13,7 @@ export type QuotaInfo = {
   total: number
   role: "USER" | "ADMIN"
   upgradeRequestedAt: string | null
+  upgradeRequestedBytes: number | null
 }
 
 export type RecentFile = FileItem & { accessedAt: string; action: "view" | "download" }
@@ -23,6 +24,42 @@ export type NavState = {
   canForward: boolean
   length: number
   index: number
+}
+
+export type ServerStats = {
+  host: {
+    platform: string
+    arch: string
+    hostname: string
+    release: string
+    node: string
+    uptimeSec: number
+  }
+  process: {
+    pid: number
+    uptimeSec: number
+    rss: number
+    heapTotal: number
+    heapUsed: number
+    external: number
+  }
+  cpu: {
+    model: string
+    cores: number
+    speedMHz: number
+    usagePct: number
+    load1: number
+    load5: number
+    load15: number
+  }
+  memory: { total: number; free: number; used: number; pct: number }
+  disk: { total: number; free: number; used: number; pct: number } | null
+  redis: {
+    hits: number
+    misses: number
+    evictedKeys: number
+    totalConnections: number
+  } | null
 }
 
 export type AdminStats = {
@@ -102,6 +139,7 @@ export type AdminUser = {
   storageQuotaBytes: number
   usedBytes: number
   upgradeRequestedAt: string | null
+  upgradeRequestedBytes: number | null
   disabledAt: string | null
   createdAt: string
   avatarUrl: string | null

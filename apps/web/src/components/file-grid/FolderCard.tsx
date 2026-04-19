@@ -59,7 +59,7 @@ export function FolderCard({
         if (payload.type === "folder" && payload.id === folder.id) return
         onMoveDrop(folder.id, payload)
       }}
-      className={`group hover:bg-accent/40 relative cursor-pointer rounded-lg transition-colors ${
+      className={`group hover:bg-accent/30 relative cursor-pointer rounded-lg transition-colors ${
         selected ? "bg-accent/60 ring-primary/30 ring-2" : ""
       } ${dragOver ? "ring-primary ring-2" : ""} ${dragging ? "opacity-40" : ""} ${folder.isHidden ? "opacity-60" : ""}`}
       onClick={onClick}

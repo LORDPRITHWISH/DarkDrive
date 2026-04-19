@@ -8,10 +8,12 @@ import {
   ShieldCheckIcon,
   TrashIcon,
   GearSixIcon,
+  UploadIcon,
 } from "@phosphor-icons/react"
 import type { Space } from "@/lib/types"
 import { SpaceManageDialog } from "@/components/SpaceManageDialog"
-import { useEffect, useState } from "react"
+import { UpgradeRequestDialog } from "@/components/UpgradeRequestDialog"
+import { useEffect, useRef, useState } from "react"
 import { useAuth } from "@/store/auth"
 import { useDrive } from "@/store/drive"
 import { useMe } from "@/store/me"
@@ -21,11 +23,13 @@ import { ThemeToggle } from "@/components/ThemeToggle"
 
 export function Sidebar() {
   const user = useAuth((s) => s.user)
-  const { spaces, loadSpaces, createSpace } = useDrive()
+  const { spaces, loadSpaces, createSpace, upload, currentFolderId } =
+    useDrive()
   const { quota, loadQuota, requestUpgrade } = useMe()
+  const fileInput = useRef<HTMLInputElement>(null)
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState("")
-  const [upgrading, setUpgrading] = useState(false)
+  const [upgradeOpen, setUpgradeOpen] = useState(false)
   const [manageSpace, setManageSpace] = useState<Space | null>(null)
   const loc = useLocation()
 
@@ -34,7 +38,10 @@ export function Sidebar() {
     void loadQuota()
   }, [loadSpaces, loadQuota])
 
-  const pct = quota && quota.total > 0 ? Math.min(100, (quota.used / quota.total) * 100) : 0
+  const pct =
+    quota && quota.total > 0
+      ? Math.min(100, (quota.used / quota.total) * 100)
+      : 0
   const nearLimit = pct >= 80
 
   const navItem = (to: string, label: string, icon: React.ReactNode) => (
@@ -43,7 +50,7 @@ export function Sidebar() {
       className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors ${
         loc.pathname === to
           ? "bg-accent text-accent-foreground"
-          : "hover:bg-accent/60 text-muted-foreground hover:text-foreground"
+          : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
       }`}
     >
       {icon}
@@ -52,15 +59,44 @@ export function Sidebar() {
   )
 
   return (
-    <aside className="bg-card w-64 shrink-0 border-r p-3 flex flex-col gap-4 h-screen">
-      <div className="flex items-center gap-2 px-2 py-3">
-        <img src="/DarkDrive.png" alt="DarkDrive" className="h-8 w-8 rounded-md" />
+    <aside className="flex h-screen w-64 shrink-0 flex-col gap-4 border-r bg-card p-3">
+      <div className="flex items-center gap-2 px-1 py-3">
+        <img
+          src="/DarkDrive.png"
+          alt="DarkDrive"
+          className="h-8 w-8 rounded-md"
+        />
         <div className="font-semibold tracking-tight">DarkDrive</div>
+        <Button
+          size="sm"
+          className="ml-auto"
+          onClick={() => fileInput.current?.click()}
+          title="Upload files"
+        >
+          <UploadIcon size={16} weight="bold" />
+          Upload
+        </Button>
+        <input
+          ref={fileInput}
+          type="file"
+          multiple
+          hidden
+          onChange={(e) => {
+            const target = currentFolderId ?? user?.rootFolderId
+            if (e.target.files && target) void upload(e.target.files, target)
+            e.target.value = ""
+          }}
+        />
       </div>
 
       <nav className="flex flex-col gap-0.5">
         {navItem("/home", "Home", <HouseIcon size={18} />)}
-        {user && navItem(`/drive/${user.rootFolderId}`, "My Drive", <FolderIcon size={18} />)}
+        {user &&
+          navItem(
+            `/drive/${user.rootFolderId}`,
+            "My Drive",
+            <FolderIcon size={18} />
+          )}
         {navItem("/recent", "Recent", <ClockCounterClockwiseIcon size={18} />)}
         {navItem("/bin", "Bin", <TrashIcon size={18} />)}
         {user?.role === "ADMIN" &&
@@ -69,11 +105,11 @@ export function Sidebar() {
 
       <div className="mt-2">
         <div className="flex items-center justify-between px-2">
-          <div className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider">
+          <div className="flex items-center gap-1.5 text-xs font-medium tracking-wider text-muted-foreground uppercase">
             <UsersThreeIcon size={14} /> Spaces
           </div>
           <button
-            className="hover:bg-accent rounded-md p-1"
+            className="rounded-md p-1 hover:bg-accent"
             onClick={() => setCreating((v) => !v)}
             title="New space"
           >
@@ -84,7 +120,7 @@ export function Sidebar() {
         {creating && (
           <div className="mt-1 flex gap-1 px-2">
             <input
-              className="bg-background border-input ring-offset-background focus-visible:ring-ring flex-1 rounded-md border px-2 py-1 text-sm focus-visible:ring-2 focus-visible:outline-none"
+              className="flex-1 rounded-md border border-input bg-background px-2 py-1 text-sm ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
               placeholder="Space name"
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -105,15 +141,17 @@ export function Sidebar() {
           {spaces.map((s) => (
             <div
               key={s.id}
-              className="hover:bg-accent/60 group/space flex items-center rounded-md"
+              className="group/space flex items-center rounded-md hover:bg-accent/60"
             >
               <Link
                 to={`/drive/${s.rootFolderId}`}
-                className="text-muted-foreground hover:text-foreground min-w-0 flex-1 truncate px-3 py-1.5 text-sm"
+                className="min-w-0 flex-1 truncate px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground"
                 title={s.name}
               >
                 {s.name}{" "}
-                <span className="text-muted-foreground text-xs">({s.members.length})</span>
+                <span className="text-xs text-muted-foreground">
+                  ({s.members.length})
+                </span>
               </Link>
               <button
                 onClick={(e) => {
@@ -121,7 +159,7 @@ export function Sidebar() {
                   e.stopPropagation()
                   setManageSpace(s)
                 }}
-                className="hover:bg-accent text-muted-foreground hover:text-foreground mr-1 rounded p-1 opacity-0 group-hover/space:opacity-100 focus:opacity-100"
+                className="mr-1 rounded p-1 text-muted-foreground opacity-0 group-hover/space:opacity-100 hover:bg-accent hover:text-foreground focus:opacity-100"
                 title="Manage members"
                 aria-label="Manage members"
               >
@@ -132,17 +170,20 @@ export function Sidebar() {
         </div>
       </div>
 
-      <SpaceManageDialog space={manageSpace} onClose={() => setManageSpace(null)} />
+      <SpaceManageDialog
+        space={manageSpace}
+        onClose={() => setManageSpace(null)}
+      />
 
       {quota && (
         <div className="mt-auto border-t pt-3">
-          <div className="text-muted-foreground mb-1 flex items-center justify-between text-xs">
+          <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
             <span>Storage</span>
             <span>
               {formatBytes(quota.used)} / {formatBytes(quota.total)}
             </span>
           </div>
-          <div className="bg-muted h-1.5 w-full overflow-hidden rounded-full">
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
             <div
               className={`h-full rounded-full transition-all ${
                 nearLimit ? "bg-destructive" : "bg-primary"
@@ -152,21 +193,30 @@ export function Sidebar() {
           </div>
           {quota.role === "USER" && (
             <button
-              onClick={async () => {
-                setUpgrading(true)
-                try {
-                  await requestUpgrade()
-                } finally {
-                  setUpgrading(false)
-                }
-              }}
-              disabled={upgrading || !!quota.upgradeRequestedAt}
-              className="text-primary mt-2 w-full text-left text-xs hover:underline disabled:opacity-60"
+              onClick={() => setUpgradeOpen(true)}
+              disabled={!!quota.upgradeRequestedAt}
+              className="mt-2 w-full text-left text-xs text-primary hover:underline disabled:opacity-60"
             >
-              {quota.upgradeRequestedAt ? "Upgrade pending review" : "Request upgrade"}
+              {quota.upgradeRequestedAt
+                ? `Pending review — requested ${
+                    quota.upgradeRequestedBytes
+                      ? formatBytes(quota.upgradeRequestedBytes)
+                      : "an upgrade"
+                  }`
+                : "Request upgrade"}
             </button>
           )}
         </div>
+      )}
+
+      {quota && (
+        <UpgradeRequestDialog
+          open={upgradeOpen}
+          currentQuotaBytes={quota.total}
+          usedBytes={quota.used}
+          onClose={() => setUpgradeOpen(false)}
+          onSubmit={(bytes) => requestUpgrade(bytes)}
+        />
       )}
 
       <div className="flex items-center gap-2 border-t pt-3">
@@ -175,7 +225,9 @@ export function Sidebar() {
         )}
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium">{user?.name}</div>
-          <div className="text-muted-foreground truncate text-xs">{user?.email}</div>
+          <div className="truncate text-xs text-muted-foreground">
+            {user?.email}
+          </div>
         </div>
         <ThemeToggle />
         <Button

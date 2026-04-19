@@ -14,6 +14,7 @@ import { RecentPage } from "@/pages/Recent"
 import { AdminPage } from "@/pages/Admin"
 import { HomePage } from "@/pages/Home"
 import { BinPage } from "@/pages/Bin"
+import { LandingPage } from "@/pages/Landing"
 import { getSocket } from "@/lib/socket"
 
 function Protected({ children }: { children: React.ReactNode }) {
@@ -33,12 +34,12 @@ function Root() {
     void fetchMe()
   }, [fetchMe])
   useEffect(() => {
-    if (!loading) {
-      if (user) nav("/home", { replace: true })
-      else nav("/login", { replace: true })
-    }
+    if (!loading && user) nav("/home", { replace: true })
   }, [user, loading, nav])
-  return <div className="grid min-h-svh place-items-center">Loading…</div>
+  if (loading)
+    return <div className="grid min-h-svh place-items-center">Loading…</div>
+  if (user) return null
+  return <LandingPage />
 }
 
 export function App() {

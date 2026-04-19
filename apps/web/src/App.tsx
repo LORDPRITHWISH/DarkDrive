@@ -15,6 +15,7 @@ import { AdminPage } from "@/pages/Admin"
 import { HomePage } from "@/pages/Home"
 import { BinPage } from "@/pages/Bin"
 import { LandingPage } from "@/pages/Landing"
+import { StarredPage } from "@/pages/Starred"
 import { getSocket } from "@/lib/socket"
 
 function Protected({ children }: { children: React.ReactNode }) {
@@ -76,6 +77,14 @@ export function App() {
           element={
             <Protected>
               <RecentPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/starred"
+          element={
+            <Protected>
+              <StarredPage />
             </Protected>
           }
         />

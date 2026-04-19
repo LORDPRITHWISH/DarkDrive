@@ -6,6 +6,7 @@ import {
   PlusIcon,
   ClockCounterClockwiseIcon,
   ShieldCheckIcon,
+  StarIcon,
   TrashIcon,
   GearSixIcon,
   UploadIcon,
@@ -61,12 +62,14 @@ export function Sidebar() {
   return (
     <aside className="flex h-screen w-64 shrink-0 flex-col gap-4 border-r bg-card p-3">
       <div className="flex items-center gap-2 px-1 py-3">
-        <img
-          src="/DarkDrive.png"
-          alt="DarkDrive"
-          className="h-8 w-8 rounded-md"
-        />
-        <div className="font-semibold tracking-tight">DarkDrive</div>
+        <Link to="/" className="flex items-center gap-2" title="Home">
+          <img
+            src="/DarkDrive.png"
+            alt="DarkDrive"
+            className="h-8 w-8 rounded-md"
+          />
+          <div className="font-semibold tracking-tight">DarkDrive</div>
+        </Link>
         <Button
           size="sm"
           className="ml-auto"
@@ -98,6 +101,7 @@ export function Sidebar() {
             <FolderIcon size={18} />
           )}
         {navItem("/recent", "Recent", <ClockCounterClockwiseIcon size={18} />)}
+        {navItem("/starred", "Starred", <StarIcon size={18} />)}
         {navItem("/bin", "Bin", <TrashIcon size={18} />)}
         {user?.role === "ADMIN" &&
           navItem("/admin", "Admin", <ShieldCheckIcon size={18} />)}

@@ -57,6 +57,40 @@ meRouter.post("/request-upgrade", async (req, res) => {
   res.json({ ok: true })
 })
 
+meRouter.get("/starred", async (req, res) => {
+  const user = currentUser(req)
+  const spaceIds = (
+    await prisma.spaceMember.findMany({
+      where: { userId: user.id },
+      select: { spaceId: true },
+    })
+  ).map((m) => m.spaceId)
+  const [folders, files] = await Promise.all([
+    prisma.folder.findMany({
+      where: {
+        isStarred: true,
+        isTrashed: false,
+        isHidden: false,
+        OR: [{ ownerId: user.id }, { spaceId: { in: spaceIds } }],
+      },
+      orderBy: { updatedAt: "desc" },
+    }),
+    prisma.file.findMany({
+      where: {
+        isStarred: true,
+        isTrashed: false,
+        isHidden: false,
+        OR: [{ ownerId: user.id }, { spaceId: { in: spaceIds } }],
+      },
+      orderBy: { updatedAt: "desc" },
+    }),
+  ])
+  res.json({
+    folders,
+    files: files.map((f) => ({ ...f, size: Number(f.size) })),
+  })
+})
+
 meRouter.get("/trash", async (req, res) => {
   const user = currentUser(req)
   const [folders, files] = await Promise.all([

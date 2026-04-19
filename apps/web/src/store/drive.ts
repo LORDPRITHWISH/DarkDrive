@@ -1,6 +1,7 @@
 import { create } from "zustand"
 import { apiGet, apiJson, apiUpload } from "@/lib/api"
 import type { Breadcrumb, FileItem, Folder, Space } from "@/lib/types"
+import { useMe } from "./me"
 
 type ContentsResponse = {
   folder: Folder
@@ -33,8 +34,9 @@ type DriveState = {
   loadFolder: (id: string) => Promise<void>
   refresh: () => Promise<void>
 
-  createFolder: (name: string) => Promise<void>
+  createFolder: (name: string, color?: string | null) => Promise<void>
   renameFolder: (id: string, name: string) => Promise<void>
+  recolorFolder: (id: string, color: string | null) => Promise<void>
   renameFile: (id: string, name: string) => Promise<void>
   toggleHiddenItem: (type: "folder" | "file", id: string) => Promise<void>
   toggleStarred: (type: "folder" | "file", id: string) => Promise<void>
@@ -108,14 +110,18 @@ export const useDrive = create<DriveState>((set, get) => ({
     if (id) await get().loadFolder(id)
   },
 
-  createFolder: async (name) => {
+  createFolder: async (name, color) => {
     const parentId = get().currentFolderId
     if (!parentId) return
-    await apiJson("/api/folders", "POST", { name, parentId })
+    await apiJson("/api/folders", "POST", { name, parentId, color: color ?? null })
     await get().refresh()
   },
   renameFolder: async (id, name) => {
     await apiJson(`/api/folders/${id}`, "PATCH", { name })
+    await get().refresh()
+  },
+  recolorFolder: async (id, color) => {
+    await apiJson(`/api/folders/${id}`, "PATCH", { color })
     await get().refresh()
   },
   renameFile: async (id, name) => {
@@ -200,6 +206,7 @@ export const useDrive = create<DriveState>((set, get) => ({
       }
     }
     await get().refresh()
+    void useMe.getState().loadQuota()
     // auto-clear after a short delay
     setTimeout(() => set({ uploads: get().uploads.filter((u) => !u.done) }), 4000)
   },

@@ -6,6 +6,7 @@ import { Toolbar } from "@/components/Toolbar"
 import { Breadcrumbs } from "@/components/Breadcrumbs"
 import { FileGrid } from "@/components/FileGrid"
 import { UploadToaster } from "@/components/UploadToaster"
+import { NavButtons } from "@/components/NavButtons"
 
 export function DrivePage() {
   const { folderId } = useParams<{ folderId: string }>()
@@ -28,7 +29,7 @@ export function DrivePage() {
     >
       <Sidebar />
       <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-between border-b px-4 py-3">
+        <header className="flex items-center justify-between gap-3 border-b px-4 py-3">
           <Breadcrumbs />
           {folder?.spaceId && (
             <span className="bg-accent text-accent-foreground rounded-full px-2 py-0.5 text-xs">
@@ -36,7 +37,9 @@ export function DrivePage() {
             </span>
           )}
         </header>
-        <div className="border-b p-3">
+        <div className="flex items-center gap-3 border-b p-3">
+          <NavButtons />
+          <div className="bg-border h-6 w-px" />
           <Toolbar />
         </div>
         <div className="flex-1 overflow-auto">

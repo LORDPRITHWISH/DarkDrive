@@ -67,13 +67,18 @@ async function breadcrumbs(folderId: string) {
 foldersRouter.post("/", async (req, res) => {
   const user = currentUser(req)
   const body = z
-    .object({ name: z.string().min(1).max(255), parentId: z.string() })
+    .object({
+      name: z.string().min(1).max(255),
+      parentId: z.string(),
+      color: z.string().max(32).nullable().optional(),
+    })
     .parse(req.body)
   const parent = await getFolderWithAccess(user.id, body.parentId, "write")
   if (!parent) return res.status(403).json({ error: "forbidden" })
   const f = await prisma.folder.create({
     data: {
       name: body.name,
+      color: body.color ?? null,
       parentId: parent.id,
       ownerId: parent.ownerId,
       spaceId: parent.spaceId,
@@ -88,6 +93,7 @@ foldersRouter.patch("/:id", async (req, res) => {
   const body = z
     .object({
       name: z.string().min(1).max(255).optional(),
+      color: z.string().max(32).nullable().optional(),
       isHidden: z.boolean().optional(),
       isStarred: z.boolean().optional(),
       isTrashed: z.boolean().optional(),

@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import {
   FolderIcon,
@@ -17,12 +17,16 @@ import {
   ShareNetworkIcon,
   DownloadIcon,
   PencilSimpleIcon,
+  InfoIcon,
+  EyeIcon as OpenEyeIcon,
 } from "@phosphor-icons/react"
 import { useDrive } from "@/store/drive"
 import type { FileItem, Folder } from "@/lib/types"
 import { formatBytes, formatDate } from "@/lib/format"
 import { apiUrl } from "@/lib/config"
 import { ShareDialog } from "./ShareDialog"
+import { FilePreview } from "./FilePreview"
+import { NewFolderDialog } from "./NewFolderDialog"
 
 function iconFor(mime: string, size = 28) {
   if (mime.startsWith("image/")) return <ImageIcon size={size} weight="fill" />
@@ -53,12 +57,15 @@ export function FileGrid() {
     toggleStarred,
     renameFile,
     renameFolder,
+    recolorFolder,
   } = useDrive()
   const nav = useNavigate()
   const [menu, setMenu] = useState<Menu>(null)
   const [share, setShare] = useState<{ type: "FILE" | "FOLDER"; id: string; name: string } | null>(
     null
   )
+  const [preview, setPreview] = useState<FileItem | null>(null)
+  const [colorEditFolder, setColorEditFolder] = useState<Folder | null>(null)
   const [renaming, setRenaming] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState("")
 
@@ -113,9 +120,7 @@ export function FileGrid() {
               key={f.id}
               selected={selection.has(f.id)}
               onClick={(e) => select(f.id, e.metaKey || e.ctrlKey || e.shiftKey)}
-              onDoubleClick={() =>
-                window.open(apiUrl(`/api/files/${f.id}/download?inline=1`), "_blank")
-              }
+              onDoubleClick={() => setPreview(f)}
               onContextMenu={(e) => openMenu(e, "file", f.id, f.name)}
               file={f}
               renaming={renaming === f.id}
@@ -149,7 +154,12 @@ export function FileGrid() {
               >
                 <td className="py-2 pl-4">
                   <div className="flex items-center gap-2">
-                    <FolderIcon size={20} weight="fill" className="text-primary" />
+                    <FolderIcon
+                      size={20}
+                      weight="fill"
+                      style={{ color: f.color || undefined }}
+                      className={f.color ? "" : "text-primary"}
+                    />
                     <span className={f.isHidden ? "opacity-60 italic" : ""}>{f.name}</span>
                     {f.isStarred && <StarIcon size={14} weight="fill" className="text-yellow-500" />}
                   </div>
@@ -173,9 +183,7 @@ export function FileGrid() {
                   selection.has(f.id) ? "bg-accent/60" : ""
                 }`}
                 onClick={(e) => select(f.id, e.metaKey || e.ctrlKey || e.shiftKey)}
-                onDoubleClick={() =>
-                  window.open(apiUrl(`/api/files/${f.id}/download?inline=1`), "_blank")
-                }
+                onDoubleClick={() => setPreview(f)}
                 onContextMenu={(e) => openMenu(e, "file", f.id, f.name)}
               >
                 <td className="py-2 pl-4">
@@ -208,15 +216,37 @@ export function FileGrid() {
           onClick={(e) => e.stopPropagation()}
         >
           {menu.type === "file" && (
-            <MenuItem
-              icon={<DownloadIcon size={16} />}
-              onClick={() => {
-                window.open(apiUrl(`/api/files/${menu.id}/download`), "_blank")
-                closeMenu()
-              }}
-            >
-              Download
-            </MenuItem>
+            <>
+              <MenuItem
+                icon={<OpenEyeIcon size={16} />}
+                onClick={() => {
+                  const f = files.find((x) => x.id === menu.id)
+                  if (f) setPreview(f)
+                  closeMenu()
+                }}
+              >
+                Open
+              </MenuItem>
+              <MenuItem
+                icon={<InfoIcon size={16} />}
+                onClick={() => {
+                  const f = files.find((x) => x.id === menu.id)
+                  if (f) setPreview(f)
+                  closeMenu()
+                }}
+              >
+                Properties
+              </MenuItem>
+              <MenuItem
+                icon={<DownloadIcon size={16} />}
+                onClick={() => {
+                  window.open(apiUrl(`/api/files/${menu.id}/download`), "_blank")
+                  closeMenu()
+                }}
+              >
+                Download
+              </MenuItem>
+            </>
           )}
           <MenuItem
             icon={<PencilSimpleIcon size={16} />}
@@ -228,6 +258,18 @@ export function FileGrid() {
           >
             Rename
           </MenuItem>
+          {menu.type === "folder" && (
+            <MenuItem
+              icon={<FolderIcon size={16} weight="fill" />}
+              onClick={() => {
+                const f = folders.find((x) => x.id === menu.id)
+                if (f) setColorEditFolder(f)
+                closeMenu()
+              }}
+            >
+              Change color…
+            </MenuItem>
+          )}
           <MenuItem
             icon={<ShareNetworkIcon size={16} />}
             onClick={() => {
@@ -299,6 +341,103 @@ export function FileGrid() {
           resourceName={share.name}
         />
       )}
+
+      <FilePreview file={preview} onClose={() => setPreview(null)} />
+
+      <NewFolderDialog
+        open={!!colorEditFolder}
+        title="Folder color"
+        submitLabel="Save"
+        initialName={colorEditFolder?.name ?? ""}
+        initialColor={colorEditFolder?.color ?? null}
+        onClose={() => setColorEditFolder(null)}
+        onSubmit={async (name, color) => {
+          if (!colorEditFolder) return
+          if (name !== colorEditFolder.name) await renameFolder(colorEditFolder.id, name)
+          if ((color ?? null) !== (colorEditFolder.color ?? null))
+            await recolorFolder(colorEditFolder.id, color)
+        }}
+      />
+    </div>
+  )
+}
+
+function StarToggle({
+  type,
+  id,
+  starred,
+  className,
+}: {
+  type: "folder" | "file"
+  id: string
+  starred: boolean
+  className?: string
+}) {
+  const toggleStarred = useDrive((s) => s.toggleStarred)
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!confirmOpen) return
+    const onDoc = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setConfirmOpen(false)
+    }
+    document.addEventListener("mousedown", onDoc)
+    return () => document.removeEventListener("mousedown", onDoc)
+  }, [confirmOpen])
+
+  async function handle(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (starred) {
+      setConfirmOpen((v) => !v)
+    } else {
+      await toggleStarred(type, id)
+    }
+  }
+
+  return (
+    <div
+      ref={ref}
+      className={`relative ${className ?? ""}`}
+      onClick={(e) => e.stopPropagation()}
+      onDoubleClick={(e) => e.stopPropagation()}
+    >
+      <button
+        onClick={handle}
+        className={`rounded p-1 transition-opacity ${
+          starred ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus:opacity-100"
+        }`}
+        title={starred ? "Remove star" : "Star"}
+        aria-label={starred ? "Remove star" : "Star"}
+      >
+        <StarIcon
+          size={16}
+          weight={starred ? "fill" : "regular"}
+          className={starred ? "text-yellow-500" : "text-muted-foreground"}
+        />
+      </button>
+      {confirmOpen && (
+        <div className="bg-popover text-popover-foreground absolute top-full right-0 z-20 mt-1 w-44 rounded-md border p-2 text-sm shadow-lg">
+          <div className="mb-2">Remove from starred?</div>
+          <div className="flex justify-end gap-1">
+            <button
+              onClick={() => setConfirmOpen(false)}
+              className="hover:bg-accent rounded px-2 py-1 text-xs"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={async () => {
+                await toggleStarred(type, id)
+                setConfirmOpen(false)
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 rounded px-2 py-1 text-xs"
+            >
+              Remove
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -354,35 +493,47 @@ function GridCard({
 }) {
   return (
     <div
-      className={`bg-card group hover:border-primary/60 cursor-pointer rounded-lg border p-3 transition-colors ${
-        selected ? "border-primary ring-primary/30 ring-2" : ""
+      className={`group hover:bg-accent/40 relative cursor-pointer rounded-lg transition-colors ${
+        selected ? "bg-accent/60 ring-primary/30 ring-2" : ""
       } ${folder.isHidden ? "opacity-60" : ""}`}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
       onContextMenu={onContextMenu}
     >
-      <div className="flex items-center justify-between">
-        <FolderIcon size={28} weight="fill" className="text-primary" />
-        {folder.isStarred && <StarIcon size={14} weight="fill" className="text-yellow-500" />}
-      </div>
-      {renaming ? (
-        <input
-          className="bg-background mt-2 w-full rounded border px-1 text-sm"
-          value={renameValue}
-          onChange={(e) => onRenameChange(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") onRenameCommit()
-            if (e.key === "Escape") onRenameCancel()
-          }}
-          onBlur={onRenameCommit}
-          autoFocus
-          onClick={(e) => e.stopPropagation()}
+      <StarToggle
+        type="folder"
+        id={folder.id}
+        starred={folder.isStarred}
+        className="absolute top-2 right-2 z-10"
+      />
+      <div className="grid aspect-4/3 place-items-center">
+        <FolderIcon
+          size={72}
+          weight="fill"
+          style={{ color: folder.color || undefined }}
+          className={folder.color ? "" : "text-primary"}
         />
-      ) : (
-        <div className="mt-2 truncate text-sm font-medium" title={folder.name}>
-          {folder.name}
-        </div>
-      )}
+      </div>
+      <div className="px-2 pb-2">
+        {renaming ? (
+          <input
+            className="bg-background w-full rounded border px-1 text-sm"
+            value={renameValue}
+            onChange={(e) => onRenameChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") onRenameCommit()
+              if (e.key === "Escape") onRenameCancel()
+            }}
+            onBlur={onRenameCommit}
+            autoFocus
+            onClick={(e) => e.stopPropagation()}
+          />
+        ) : (
+          <div className="truncate text-sm font-medium" title={folder.name}>
+            {folder.name}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -413,14 +564,20 @@ function GridCardFile({
   const isImg = file.mimeType.startsWith("image/")
   return (
     <div
-      className={`bg-card group hover:border-primary/60 cursor-pointer overflow-hidden rounded-lg border transition-colors ${
+      className={`bg-card group hover:border-primary/60 relative cursor-pointer overflow-visible rounded-lg border transition-colors ${
         selected ? "border-primary ring-primary/30 ring-2" : ""
       } ${file.isHidden ? "opacity-60" : ""}`}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
       onContextMenu={onContextMenu}
     >
-      <div className="bg-muted grid aspect-[4/3] place-items-center overflow-hidden">
+      <StarToggle
+        type="file"
+        id={file.id}
+        starred={file.isStarred}
+        className="absolute top-2 left-0 z-10 bg-red-500 w-fit"
+      />
+      <div className="bg-muted grid aspect-4/3 place-items-center overflow-hidden rounded-t-lg">
         {isImg ? (
           <img
             src={apiUrl(`/api/files/${file.id}/download?inline=1`)}
@@ -433,27 +590,24 @@ function GridCardFile({
         )}
       </div>
       <div className="p-2">
-        <div className="flex items-center justify-between gap-1">
-          {renaming ? (
-            <input
-              className="bg-background w-full rounded border px-1 text-sm"
-              value={renameValue}
-              onChange={(e) => onRenameChange(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") onRenameCommit()
-                if (e.key === "Escape") onRenameCancel()
-              }}
-              onBlur={onRenameCommit}
-              autoFocus
-              onClick={(e) => e.stopPropagation()}
-            />
-          ) : (
-            <div className="truncate text-sm font-medium" title={file.name}>
-              {file.name}
-            </div>
-          )}
-          {file.isStarred && <StarIcon size={14} weight="fill" className="text-yellow-500" />}
-        </div>
+        {renaming ? (
+          <input
+            className="bg-background w-full rounded border px-1 text-sm"
+            value={renameValue}
+            onChange={(e) => onRenameChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") onRenameCommit()
+              if (e.key === "Escape") onRenameCancel()
+            }}
+            onBlur={onRenameCommit}
+            autoFocus
+            onClick={(e) => e.stopPropagation()}
+          />
+        ) : (
+          <div className="truncate text-sm font-medium" title={file.name}>
+            {file.name}
+          </div>
+        )}
         <div className="text-muted-foreground text-xs">{formatBytes(file.size)}</div>
       </div>
     </div>

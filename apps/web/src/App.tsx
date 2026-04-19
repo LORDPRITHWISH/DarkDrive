@@ -10,6 +10,10 @@ import { useAuth } from "@/store/auth"
 import { LoginPage } from "@/pages/Login"
 import { DrivePage } from "@/pages/Drive"
 import { SharePage } from "@/pages/SharePage"
+import { RecentPage } from "@/pages/Recent"
+import { AdminPage } from "@/pages/Admin"
+import { HomePage } from "@/pages/Home"
+import { BinPage } from "@/pages/Bin"
 import { getSocket } from "@/lib/socket"
 
 function Protected({ children }: { children: React.ReactNode }) {
@@ -30,7 +34,7 @@ function Root() {
   }, [fetchMe])
   useEffect(() => {
     if (!loading) {
-      if (user) nav(`/drive/${user.rootFolderId}`, { replace: true })
+      if (user) nav("/home", { replace: true })
       else nav("/login", { replace: true })
     }
   }, [user, loading, nav])
@@ -51,10 +55,42 @@ export function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/s/:token" element={<SharePage />} />
         <Route
+          path="/home"
+          element={
+            <Protected>
+              <HomePage />
+            </Protected>
+          }
+        />
+        <Route
           path="/drive/:folderId"
           element={
             <Protected>
               <DrivePage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/recent"
+          element={
+            <Protected>
+              <RecentPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/bin"
+          element={
+            <Protected>
+              <BinPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/admin"
+          element={
+            <Protected>
+              <AdminPage />
             </Protected>
           }
         />

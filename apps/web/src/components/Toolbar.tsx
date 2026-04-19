@@ -10,11 +10,11 @@ import {
 } from "@phosphor-icons/react"
 import { Button } from "@workspace/ui/components/button"
 import { useDrive } from "@/store/drive"
+import { NewFolderDialog } from "./NewFolderDialog"
 
 export function Toolbar() {
   const fileInput = useRef<HTMLInputElement>(null)
-  const [showNewFolder, setShowNewFolder] = useState(false)
-  const [folderName, setFolderName] = useState("")
+  const [newFolderOpen, setNewFolderOpen] = useState(false)
   const {
     view,
     setView,
@@ -27,7 +27,7 @@ export function Toolbar() {
   } = useDrive()
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-1 items-center gap-2">
       <Button size="sm" onClick={() => fileInput.current?.click()}>
         <UploadIcon size={16} />
         Upload
@@ -39,27 +39,15 @@ export function Toolbar() {
         hidden
         onChange={(e) => e.target.files && upload(e.target.files)}
       />
-      <Button size="sm" variant="outline" onClick={() => setShowNewFolder((v) => !v)}>
+      <Button size="sm" variant="outline" onClick={() => setNewFolderOpen(true)}>
         <FolderPlusIcon size={16} />
         New folder
       </Button>
-      {showNewFolder && (
-        <input
-          className="bg-background rounded-md border px-2 py-1 text-sm"
-          placeholder="Folder name"
-          value={folderName}
-          onChange={(e) => setFolderName(e.target.value)}
-          onKeyDown={async (e) => {
-            if (e.key === "Enter" && folderName.trim()) {
-              await createFolder(folderName.trim())
-              setFolderName("")
-              setShowNewFolder(false)
-            }
-            if (e.key === "Escape") setShowNewFolder(false)
-          }}
-          autoFocus
-        />
-      )}
+      <NewFolderDialog
+        open={newFolderOpen}
+        onClose={() => setNewFolderOpen(false)}
+        onSubmit={(name, color) => createFolder(name, color)}
+      />
 
       <div className="ml-auto flex items-center gap-1">
         <Button

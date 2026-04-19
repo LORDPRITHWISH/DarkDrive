@@ -30,12 +30,15 @@ passport.use(
         if (existing) return done(null, existing)
 
         const user = await prisma.$transaction(async (tx) => {
+          // First-ever user bootstraps as ADMIN so there's no SQL-only escape hatch.
+          const isFirst = (await tx.user.count()) === 0
           const u = await tx.user.create({
             data: {
               googleId: profile.id,
               email,
               name: profile.displayName || email,
               avatarUrl: profile.photos?.[0]?.value,
+              role: isFirst ? "ADMIN" : "USER",
             },
           })
           const root = await tx.folder.create({

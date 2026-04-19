@@ -6,9 +6,7 @@ export function LoginPage() {
     <div className="grid min-h-svh place-items-center p-6">
       <div className="bg-card w-full max-w-md rounded-xl border p-8 shadow-sm">
         <div className="flex items-center gap-2">
-          <div className="bg-primary text-primary-foreground grid h-10 w-10 place-items-center rounded-md text-lg font-bold">
-            D
-          </div>
+          <img src="/DarkDrive.png" alt="DarkDrive" className="h-10 w-10 rounded-md" />
           <div className="text-2xl font-semibold tracking-tight">DarkDrive</div>
         </div>
         <p className="text-muted-foreground mt-2 text-sm">

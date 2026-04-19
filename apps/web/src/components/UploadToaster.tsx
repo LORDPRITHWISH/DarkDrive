@@ -1,5 +1,16 @@
 import { useDrive } from "@/store/drive"
 
+const ERROR_COPY: Record<string, string> = {
+  quota_exceeded: "Out of storage — request an upgrade from the sidebar.",
+  too_large: "File exceeds the per-file size limit.",
+  forbidden: "You don't have permission to upload here.",
+  network_error: "Network error. Check your connection and try again.",
+}
+
+function humanize(err: string) {
+  return ERROR_COPY[err] ?? err
+}
+
 export function UploadToaster() {
   const uploads = useDrive((s) => s.uploads)
   if (uploads.length === 0) return null
@@ -19,7 +30,9 @@ export function UploadToaster() {
               style={{ width: `${u.progress}%` }}
             />
           </div>
-          {u.error && <div className="text-destructive mt-1 text-xs">{u.error}</div>}
+          {u.error && (
+            <div className="text-destructive mt-1 text-xs">{humanize(u.error)}</div>
+          )}
         </div>
       ))}
     </div>

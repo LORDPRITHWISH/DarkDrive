@@ -1,24 +1,37 @@
 import { Link, useLocation } from "react-router-dom"
 import {
   HouseIcon,
+  FolderIcon,
   UsersThreeIcon,
   PlusIcon,
+  ClockCounterClockwiseIcon,
+  ShieldCheckIcon,
+  TrashIcon,
 } from "@phosphor-icons/react"
 import { useEffect, useState } from "react"
 import { useAuth } from "@/store/auth"
 import { useDrive } from "@/store/drive"
+import { useMe } from "@/store/me"
+import { formatBytes } from "@/lib/format"
 import { Button } from "@workspace/ui/components/button"
+import { ThemeToggle } from "@/components/ThemeToggle"
 
 export function Sidebar() {
   const user = useAuth((s) => s.user)
   const { spaces, loadSpaces, createSpace } = useDrive()
+  const { quota, loadQuota, requestUpgrade } = useMe()
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState("")
+  const [upgrading, setUpgrading] = useState(false)
   const loc = useLocation()
 
   useEffect(() => {
     void loadSpaces()
-  }, [loadSpaces])
+    void loadQuota()
+  }, [loadSpaces, loadQuota])
+
+  const pct = quota && quota.total > 0 ? Math.min(100, (quota.used / quota.total) * 100) : 0
+  const nearLimit = pct >= 80
 
   const navItem = (to: string, label: string, icon: React.ReactNode) => (
     <Link
@@ -37,14 +50,17 @@ export function Sidebar() {
   return (
     <aside className="bg-card w-64 shrink-0 border-r p-3 flex flex-col gap-4 h-screen">
       <div className="flex items-center gap-2 px-2 py-3">
-        <div className="bg-primary text-primary-foreground rounded-md w-8 h-8 grid place-items-center font-bold">
-          D
-        </div>
+        <img src="/DarkDrive.png" alt="DarkDrive" className="h-8 w-8 rounded-md" />
         <div className="font-semibold tracking-tight">DarkDrive</div>
       </div>
 
       <nav className="flex flex-col gap-0.5">
-        {user && navItem(`/drive/${user.rootFolderId}`, "My Drive", <HouseIcon size={18} />)}
+        {navItem("/home", "Home", <HouseIcon size={18} />)}
+        {user && navItem(`/drive/${user.rootFolderId}`, "My Drive", <FolderIcon size={18} />)}
+        {navItem("/recent", "Recent", <ClockCounterClockwiseIcon size={18} />)}
+        {navItem("/bin", "Bin", <TrashIcon size={18} />)}
+        {user?.role === "ADMIN" &&
+          navItem("/admin", "Admin", <ShieldCheckIcon size={18} />)}
       </nav>
 
       <div className="mt-2">
@@ -96,7 +112,42 @@ export function Sidebar() {
         </div>
       </div>
 
-      <div className="mt-auto flex items-center gap-2 border-t pt-3">
+      {quota && (
+        <div className="mt-auto border-t pt-3">
+          <div className="text-muted-foreground mb-1 flex items-center justify-between text-xs">
+            <span>Storage</span>
+            <span>
+              {formatBytes(quota.used)} / {formatBytes(quota.total)}
+            </span>
+          </div>
+          <div className="bg-muted h-1.5 w-full overflow-hidden rounded-full">
+            <div
+              className={`h-full rounded-full transition-all ${
+                nearLimit ? "bg-destructive" : "bg-primary"
+              }`}
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+          {quota.role === "USER" && (
+            <button
+              onClick={async () => {
+                setUpgrading(true)
+                try {
+                  await requestUpgrade()
+                } finally {
+                  setUpgrading(false)
+                }
+              }}
+              disabled={upgrading || !!quota.upgradeRequestedAt}
+              className="text-primary mt-2 w-full text-left text-xs hover:underline disabled:opacity-60"
+            >
+              {quota.upgradeRequestedAt ? "Upgrade pending review" : "Request upgrade"}
+            </button>
+          )}
+        </div>
+      )}
+
+      <div className="flex items-center gap-2 border-t pt-3">
         {user?.avatarUrl && (
           <img src={user.avatarUrl} alt="" className="h-8 w-8 rounded-full" />
         )}
@@ -104,6 +155,7 @@ export function Sidebar() {
           <div className="truncate text-sm font-medium">{user?.name}</div>
           <div className="text-muted-foreground truncate text-xs">{user?.email}</div>
         </div>
+        <ThemeToggle />
         <Button
           size="sm"
           variant="ghost"

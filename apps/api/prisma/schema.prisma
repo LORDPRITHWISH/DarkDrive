@@ -8,6 +8,11 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum UserRole {
+  USER
+  ADMIN
+}
+
 model User {
   id           String   @id @default(cuid())
   googleId     String   @unique
@@ -15,6 +20,10 @@ model User {
   name         String
   avatarUrl    String?
   createdAt    DateTime @default(now())
+
+  role               UserRole  @default(USER)
+  storageQuotaBytes  BigInt    @default(1073741824)
+  upgradeRequestedAt DateTime?
 
   rootFolderId String?  @unique
   rootFolder   Folder?  @relation("UserRoot", fields: [rootFolderId], references: [id])
@@ -24,11 +33,26 @@ model User {
   spaces       Space[]   @relation("SpaceOwner")
   memberships  SpaceMember[]
   shares       Share[]
+  fileAccesses FileAccess[]
+}
+
+model FileAccess {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fileId     String
+  file       File     @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  action     String
+  accessedAt DateTime @default(now())
+
+  @@index([userId, accessedAt])
+  @@index([userId, fileId])
 }
 
 model Folder {
   id        String   @id @default(cuid())
   name      String
+  color     String?
   ownerId   String
   owner     User     @relation("FolderOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   parentId  String?
@@ -70,6 +94,7 @@ model File {
   updatedAt  DateTime @updatedAt
 
   shares     Share[]
+  accesses   FileAccess[]
 
   @@index([ownerId, folderId])
   @@index([spaceId, folderId])

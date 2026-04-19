@@ -37,12 +37,25 @@ filesRouter.post("/upload", upload.array("files", 100), async (req, res) => {
   const user = currentUser(req)
   const folderId = z.string().parse(req.body.folderId)
   const folder = await getFolderWithAccess(user.id, folderId, "write")
+  const files = (req.files as Express.Multer.File[]) ?? []
   if (!folder) {
-    // cleanup uploads
-    for (const f of (req.files as Express.Multer.File[]) ?? []) fs.unlinkSync(f.path)
+    for (const f of files) fs.unlinkSync(f.path)
     return res.status(403).json({ error: "forbidden" })
   }
-  const files = (req.files as Express.Multer.File[]) ?? []
+
+  // Quota check — against the owner of the target folder
+  const incoming = files.reduce((n, f) => n + f.size, 0)
+  const used = await prisma.file.aggregate({
+    _sum: { size: true },
+    where: { ownerId: folder.ownerId, isTrashed: false },
+  })
+  const owner = await prisma.user.findUnique({ where: { id: folder.ownerId } })
+  const quota = owner?.storageQuotaBytes ?? BigInt(0)
+  if (BigInt(used._sum.size ?? BigInt(0)) + BigInt(incoming) > quota) {
+    for (const f of files) fs.unlinkSync(f.path)
+    return res.status(413).json({ error: "quota_exceeded" })
+  }
+
   const created = []
   for (const f of files) {
     const key = newStorageKey(f.originalname)
@@ -70,6 +83,16 @@ filesRouter.get("/:id/download", async (req, res) => {
   if (!file) return res.status(404).json({ error: "not_found" })
   const abs = absolutePath(file.storageKey)
   if (!fs.existsSync(abs)) return res.status(410).json({ error: "gone" })
+  // log access for recents / suggestions
+  prisma.fileAccess
+    .create({
+      data: {
+        userId: user.id,
+        fileId: file.id,
+        action: req.query.inline === "1" ? "view" : "download",
+      },
+    })
+    .catch(() => {})
   res.setHeader("Content-Type", file.mimeType)
   res.setHeader(
     "Content-Disposition",

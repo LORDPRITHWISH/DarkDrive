@@ -37,5 +37,7 @@ authRouter.get("/me", requireAuth, async (req, res) => {
     name: u.name,
     avatarUrl: u.avatarUrl,
     rootFolderId,
+    role: u.role,
+    storageQuotaBytes: Number(u.storageQuotaBytes),
   })
 })

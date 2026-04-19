@@ -24,6 +24,7 @@ model User {
   role               UserRole  @default(USER)
   storageQuotaBytes  BigInt    @default(1073741824)
   upgradeRequestedAt DateTime?
+  disabledAt         DateTime?
 
   rootFolderId String?  @unique
   rootFolder   Folder?  @relation("UserRoot", fields: [rootFolderId], references: [id])
@@ -34,6 +35,7 @@ model User {
   memberships  SpaceMember[]
   shares       Share[]
   fileAccesses FileAccess[]
+  loginEvents  LoginEvent[]
 }
 
 model FileAccess {
@@ -47,6 +49,18 @@ model FileAccess {
 
   @@index([userId, accessedAt])
   @@index([userId, fileId])
+}
+
+model LoginEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
 }
 
 model Folder {
@@ -70,6 +84,7 @@ model Folder {
   rootOf    User?    @relation("UserRoot")
   spaceRootOf Space? @relation("SpaceRoot")
   shares    Share[]
+  shortcuts FileShortcut[] @relation("FolderShortcuts")
 
   @@index([ownerId, parentId])
   @@index([spaceId, parentId])
@@ -95,6 +110,7 @@ model File {
 
   shares     Share[]
   accesses   FileAccess[]
+  shortcuts  FileShortcut[]
 
   @@index([ownerId, folderId])
   @@index([spaceId, folderId])
@@ -158,4 +174,19 @@ model Share {
   createdAt    DateTime           @default(now())
 
   @@index([createdById])
+}
+
+// A "link" of a file into another folder. Uploads into a shared space go into
+// the uploader's drive and surface in the space folder via a shortcut, so the
+// file's primary home is always the uploader's drive.
+model FileShortcut {
+  id        String   @id @default(cuid())
+  fileId    String
+  file      File     @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  folderId  String
+  folder    Folder   @relation("FolderShortcuts", fields: [folderId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([fileId, folderId])
+  @@index([folderId])
 }

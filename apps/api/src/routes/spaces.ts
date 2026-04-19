@@ -72,6 +72,27 @@ spacesRouter.post("/:id/members", async (req, res) => {
   res.status(201).json(member)
 })
 
+spacesRouter.patch("/:id/members/:userId", async (req, res) => {
+  const user = currentUser(req)
+  const { role } = z
+    .object({ role: z.enum(["VIEWER", "EDITOR", "ADMIN"]) })
+    .parse(req.body)
+  const space = await prisma.space.findUnique({
+    where: { id: req.params.id },
+    include: { members: true },
+  })
+  if (!space) return res.status(404).json({ error: "not_found" })
+  const me = space.members.find((m) => m.userId === user.id)
+  if (!me || me.role !== "ADMIN") return res.status(403).json({ error: "forbidden" })
+  if (req.params.userId === space.ownerId && role !== "ADMIN")
+    return res.status(400).json({ error: "cannot_demote_owner" })
+  const m = await prisma.spaceMember.update({
+    where: { spaceId_userId: { spaceId: space.id, userId: req.params.userId } },
+    data: { role },
+  })
+  res.json(m)
+})
+
 spacesRouter.delete("/:id/members/:userId", async (req, res) => {
   const user = currentUser(req)
   const space = await prisma.space.findUnique({

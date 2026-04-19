@@ -7,16 +7,8 @@ import { Sidebar } from "@/components/Sidebar"
 import { FilePreview } from "@/components/FilePreview"
 import { formatBytes, formatDate } from "@/lib/format"
 import { apiUrl } from "@/lib/config"
+import { iconFor } from "@/lib/fileIcon"
 import type { FileItem } from "@/lib/types"
-import {
-  FileIcon,
-  ImageIcon,
-  FileVideoIcon,
-  FileAudioIcon,
-  FilePdfIcon,
-  FileZipIcon,
-  FileTextIcon,
-} from "@phosphor-icons/react"
 
 function greeting() {
   const h = new Date().getHours()
@@ -24,17 +16,6 @@ function greeting() {
   if (h < 12) return "Good morning"
   if (h < 17) return "Good afternoon"
   return "Good evening"
-}
-
-function iconFor(mime: string, size = 28) {
-  if (mime.startsWith("image/")) return <ImageIcon size={size} weight="fill" />
-  if (mime.startsWith("video/")) return <FileVideoIcon size={size} weight="fill" />
-  if (mime.startsWith("audio/")) return <FileAudioIcon size={size} weight="fill" />
-  if (mime === "application/pdf") return <FilePdfIcon size={size} weight="fill" />
-  if (mime.includes("zip") || mime.includes("tar") || mime.includes("rar"))
-    return <FileZipIcon size={size} weight="fill" />
-  if (mime.startsWith("text/")) return <FileTextIcon size={size} weight="fill" />
-  return <FileIcon size={size} weight="fill" />
 }
 
 export function HomePage() {

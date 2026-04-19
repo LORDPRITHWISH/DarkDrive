@@ -9,25 +9,12 @@ import {
   FileIcon,
   ImageIcon,
   FileVideoIcon,
-  FileAudioIcon,
-  FilePdfIcon,
-  FileZipIcon,
   FileTextIcon,
   SquaresFourIcon,
   ListBulletsIcon,
 } from "@phosphor-icons/react"
 import { Button } from "@workspace/ui/components/button"
-
-function iconFor(mime: string, size = 20) {
-  if (mime.startsWith("image/")) return <ImageIcon size={size} weight="fill" />
-  if (mime.startsWith("video/")) return <FileVideoIcon size={size} weight="fill" />
-  if (mime.startsWith("audio/")) return <FileAudioIcon size={size} weight="fill" />
-  if (mime === "application/pdf") return <FilePdfIcon size={size} weight="fill" />
-  if (mime.includes("zip") || mime.includes("tar") || mime.includes("rar"))
-    return <FileZipIcon size={size} weight="fill" />
-  if (mime.startsWith("text/")) return <FileTextIcon size={size} weight="fill" />
-  return <FileIcon size={size} weight="fill" />
-}
+import { iconFor } from "@/lib/fileIcon"
 
 type Bucket = { key: string; label: string; order: number }
 

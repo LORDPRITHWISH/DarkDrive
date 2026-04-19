@@ -14,7 +14,11 @@ import {
   removeFile,
   STORAGE_ROOT,
 } from "../storage/local.js"
-import { getFileWithAccess, getFolderWithAccess } from "../lib/access.js"
+import {
+  assertUserRootFolderId,
+  getFileWithAccess,
+  getFolderWithAccess,
+} from "../lib/access.js"
 
 export const filesRouter = Router()
 
@@ -43,38 +47,90 @@ filesRouter.post("/upload", upload.array("files", 100), async (req, res) => {
     return res.status(403).json({ error: "forbidden" })
   }
 
-  // Quota check — against the owner of the target folder
+  // Quota check — always against the uploader, even when uploading into a
+  // shared space. Space owners don't pay for other members' uploads.
   const incoming = files.reduce((n, f) => n + f.size, 0)
   const used = await prisma.file.aggregate({
     _sum: { size: true },
-    where: { ownerId: folder.ownerId, isTrashed: false },
+    where: { ownerId: user.id, isTrashed: false },
   })
-  const owner = await prisma.user.findUnique({ where: { id: folder.ownerId } })
-  const quota = owner?.storageQuotaBytes ?? BigInt(0)
+  const quota = user.storageQuotaBytes ?? BigInt(0)
   if (BigInt(used._sum.size ?? BigInt(0)) + BigInt(incoming) > quota) {
     for (const f of files) fs.unlinkSync(f.path)
     return res.status(413).json({ error: "quota_exceeded" })
   }
+
+  // Uploads into a shared space store the primary file in the uploader's own
+  // drive and drop a shortcut in the destination space folder. The uploader's
+  // drive is always the canonical home for their files.
+  const intoSharedSpace = !!folder.spaceId
+  const primaryFolderId = intoSharedSpace
+    ? await assertUserRootFolderId(user)
+    : folder.id
+  const primarySpaceId = intoSharedSpace ? null : folder.spaceId
 
   const created = []
   for (const f of files) {
     const key = newStorageKey(f.originalname)
     const dest = ensureDirFor(key)
     fs.renameSync(f.path, dest)
-    const rec = await prisma.file.create({
-      data: {
-        name: f.originalname,
-        folderId: folder.id,
-        ownerId: folder.ownerId,
-        spaceId: folder.spaceId,
-        size: BigInt(f.size),
-        mimeType: f.mimetype || mime.lookup(f.originalname) || "application/octet-stream",
-        storageKey: key,
-      },
+    const rec = await prisma.$transaction(async (tx) => {
+      const file = await tx.file.create({
+        data: {
+          name: f.originalname,
+          folderId: primaryFolderId,
+          ownerId: user.id,
+          spaceId: primarySpaceId,
+          size: BigInt(f.size),
+          mimeType:
+            f.mimetype || mime.lookup(f.originalname) || "application/octet-stream",
+          storageKey: key,
+        },
+      })
+      if (intoSharedSpace) {
+        await tx.fileShortcut.create({
+          data: { fileId: file.id, folderId: folder.id },
+        })
+      }
+      return file
     })
     created.push({ ...rec, size: Number(rec.size) })
   }
   res.status(201).json({ files: created })
+})
+
+// Create a shortcut of a file into another folder (e.g. add to space).
+// Requires read access on the file and write access on the target folder.
+filesRouter.post("/:id/shortcut", async (req, res) => {
+  const user = currentUser(req)
+  const { targetFolderId } = z
+    .object({ targetFolderId: z.string() })
+    .parse(req.body)
+  const file = await getFileWithAccess(user.id, req.params.id, "read")
+  if (!file) return res.status(404).json({ error: "not_found" })
+  const target = await getFolderWithAccess(user.id, targetFolderId, "write")
+  if (!target) return res.status(403).json({ error: "forbidden_target" })
+  const sc = await prisma.fileShortcut.upsert({
+    where: { fileId_folderId: { fileId: file.id, folderId: target.id } },
+    update: {},
+    create: { fileId: file.id, folderId: target.id },
+  })
+  res.status(201).json(sc)
+})
+
+// Remove a shortcut (unlink a file from a folder it was linked into).
+// Requires write access on the folder containing the shortcut.
+filesRouter.delete("/shortcuts/:id", async (req, res) => {
+  const user = currentUser(req)
+  const sc = await prisma.fileShortcut.findUnique({
+    where: { id: req.params.id },
+    include: { folder: true },
+  })
+  if (!sc) return res.status(404).json({ error: "not_found" })
+  const folder = await getFolderWithAccess(user.id, sc.folderId, "write")
+  if (!folder) return res.status(403).json({ error: "forbidden" })
+  await prisma.fileShortcut.delete({ where: { id: sc.id } })
+  res.json({ ok: true })
 })
 
 filesRouter.get("/:id/download", async (req, res) => {

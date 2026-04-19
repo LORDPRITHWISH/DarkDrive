@@ -42,6 +42,23 @@ export async function getFileWithAccess(
     if (mode === "write" && (m.role === "EDITOR" || m.role === "ADMIN")) return file
     if (mode === "admin" && m.role === "ADMIN") return file
   }
+  // Read access via a shortcut: file is surfaced in a folder the user can reach.
+  // Shortcuts only grant read — not write/admin — since the file's home is the
+  // uploader's drive.
+  if (mode === "read") {
+    const linked = await prisma.fileShortcut.findFirst({
+      where: {
+        fileId: file.id,
+        folder: {
+          OR: [
+            { ownerId: userId },
+            { space: { members: { some: { userId } } } },
+          ],
+        },
+      },
+    })
+    if (linked) return file
+  }
   return null
 }
 

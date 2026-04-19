@@ -8,7 +8,11 @@ passport.serializeUser((user: any, done) => done(null, user.id))
 passport.deserializeUser(async (id: string, done) => {
   try {
     const user = await prisma.user.findUnique({ where: { id } })
-    done(null, user ?? false)
+    // Disabled accounts get treated as logged-out on every request so their
+    // active sessions effectively stop working the moment the admin flips the
+    // flag.
+    if (!user || user.disabledAt) return done(null, false)
+    done(null, user)
   } catch (e) {
     done(e as Error)
   }

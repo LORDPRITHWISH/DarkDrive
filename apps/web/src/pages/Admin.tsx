@@ -1,30 +1,44 @@
 import { useEffect, useState } from "react"
+import {
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+} from "@workspace/ui/components/tabs"
 import { Sidebar } from "@/components/Sidebar"
-import { Button } from "@workspace/ui/components/button"
 import { apiGet, apiJson } from "@/lib/api"
-import { formatBytes, formatDate } from "@/lib/format"
-import type { AdminUser } from "@/lib/types"
-
-const PRESETS = [
-  { label: "1 GB", bytes: 1 * 1024 ** 3 },
-  { label: "5 GB", bytes: 5 * 1024 ** 3 },
-  { label: "15 GB", bytes: 15 * 1024 ** 3 },
-  { label: "50 GB", bytes: 50 * 1024 ** 3 },
-  { label: "100 GB", bytes: 100 * 1024 ** 3 },
-]
+import { useAuth } from "@/store/auth"
+import type { AdminStats, AdminUser } from "@/lib/types"
+import { StatCards } from "./admin/StatCards"
+import { UserGrowth } from "./admin/UserGrowth"
+import { StoragePanel } from "./admin/StoragePanel"
+import { FileTypesPanel } from "./admin/FileTypesPanel"
+import { LargestFiles } from "./admin/LargestFiles"
+import { DuplicatesList } from "./admin/DuplicatesList"
+import { TrashPanel } from "./admin/TrashPanel"
+import { HourlyChart } from "./admin/HourlyChart"
+import { RecentActivity } from "./admin/RecentActivity"
+import { RecentLogins } from "./admin/RecentLogins"
+import { UsersTable } from "./admin/UsersTable"
 
 export function AdminPage() {
+  const me = useAuth((s) => s.user)
   const [users, setUsers] = useState<AdminUser[]>([])
+  const [stats, setStats] = useState<AdminStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
 
   async function reload() {
     try {
-      const r = await apiGet<{ users: AdminUser[] }>("/api/admin/users")
-      setUsers(r.users)
+      const [s, u] = await Promise.all([
+        apiGet<AdminStats>("/api/admin/stats"),
+        apiGet<{ users: AdminUser[] }>("/api/admin/users"),
+      ])
+      setStats(s)
+      setUsers(u.users)
       setErr(null)
-    } catch (e: any) {
-      setErr(e.message)
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : "failed")
     } finally {
       setLoading(false)
     }
@@ -43,114 +57,97 @@ export function AdminPage() {
     <div className="flex h-screen">
       <Sidebar />
       <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center gap-3 border-b px-4 py-3">
-          <div className="text-sm font-semibold">Admin</div>
+        <header className="flex items-center justify-between gap-3 border-b px-4 py-3">
+          <div>
+            <div className="text-sm font-semibold">Admin</div>
+            <div className="text-muted-foreground text-xs">
+              Operational dashboard
+            </div>
+          </div>
+          {stats && (
+            <div className="text-muted-foreground text-xs">
+              {stats.sharing.spaces} spaces · {stats.sharing.shareLinks} share links ·{" "}
+              {stats.sharing.filesInSpaces} shared files ·{" "}
+              {stats.sharing.shortcuts} shortcuts
+            </div>
+          )}
         </header>
+
         <div className="flex-1 overflow-auto p-4">
           {loading ? (
             <div className="text-muted-foreground text-sm">Loading…</div>
           ) : err ? (
             <div className="text-destructive text-sm">{err}</div>
-          ) : (
-            <table className="w-full text-sm">
-              <thead className="text-muted-foreground border-b text-xs uppercase">
-                <tr>
-                  <th className="py-2 pl-2 text-left font-medium">User</th>
-                  <th className="py-2 text-left font-medium">Role</th>
-                  <th className="py-2 text-left font-medium">Usage</th>
-                  <th className="py-2 text-left font-medium">Quota</th>
-                  <th className="py-2 text-left font-medium">Upgrade requested</th>
-                  <th className="py-2 text-left font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((u) => {
-                  const pct =
-                    u.storageQuotaBytes > 0
-                      ? Math.min(100, (u.usedBytes / u.storageQuotaBytes) * 100)
-                      : 0
-                  return (
-                    <tr key={u.id} className="border-b align-top">
-                      <td className="py-3 pl-2">
-                        <div className="flex items-center gap-2">
-                          {u.avatarUrl && (
-                            <img src={u.avatarUrl} alt="" className="h-6 w-6 rounded-full" />
-                          )}
-                          <div>
-                            <div className="font-medium">{u.name}</div>
-                            <div className="text-muted-foreground text-xs">{u.email}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-3">
-                        <select
-                          className="bg-background rounded border px-2 py-1 text-sm"
-                          value={u.role}
-                          onChange={(e) =>
-                            updateUser(u.id, { role: e.target.value as "USER" | "ADMIN" })
-                          }
-                        >
-                          <option value="USER">USER</option>
-                          <option value="ADMIN">ADMIN</option>
-                        </select>
-                      </td>
-                      <td className="py-3">
-                        <div className="text-xs">
-                          {formatBytes(u.usedBytes)} ({pct.toFixed(0)}%)
-                        </div>
-                        <div className="bg-muted mt-1 h-1 w-32 overflow-hidden rounded-full">
-                          <div
-                            className={`h-full ${pct >= 80 ? "bg-destructive" : "bg-primary"}`}
-                            style={{ width: `${pct}%` }}
-                          />
-                        </div>
-                      </td>
-                      <td className="py-3">{formatBytes(u.storageQuotaBytes)}</td>
-                      <td className="py-3 text-xs">
-                        {u.upgradeRequestedAt ? (
-                          <span className="text-primary">
-                            {formatDate(u.upgradeRequestedAt)}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </td>
-                      <td className="py-3">
-                        <div className="flex flex-wrap gap-1">
-                          {PRESETS.map((p) => (
-                            <Button
-                              key={p.label}
-                              size="sm"
-                              variant={u.storageQuotaBytes === p.bytes ? "default" : "outline"}
-                              onClick={() =>
-                                updateUser(u.id, {
-                                  storageQuotaBytes: p.bytes,
-                                  clearUpgradeRequest: true,
-                                })
-                              }
-                            >
-                              {p.label}
-                            </Button>
-                          ))}
-                          {u.upgradeRequestedAt && (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => updateUser(u.id, { clearUpgradeRequest: true })}
-                            >
-                              Dismiss
-                            </Button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          )}
+          ) : stats ? (
+            <Dashboard stats={stats} users={users} meId={me?.id} onUpdate={updateUser} />
+          ) : null}
         </div>
       </main>
+    </div>
+  )
+}
+
+function Dashboard({
+  stats,
+  users,
+  meId,
+  onUpdate,
+}: {
+  stats: AdminStats
+  users: AdminUser[]
+  meId?: string
+  onUpdate: (id: string, patch: Record<string, unknown>) => void | Promise<void>
+}) {
+  return (
+    <div className="flex flex-col gap-4">
+      <StatCards stats={stats} />
+
+      <Tabs defaultValue="overview">
+        <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="files">Files</TabsTrigger>
+          <TabsTrigger value="activity">Activity</TabsTrigger>
+          <TabsTrigger value="users">Users</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="flex flex-col gap-4">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <div className="lg:col-span-2">
+              <UserGrowth stats={stats} />
+            </div>
+            <StoragePanel stats={stats} />
+          </div>
+          <HourlyChart stats={stats} />
+          <div className="bg-muted/40 text-muted-foreground rounded-lg border p-3 text-xs">
+            <strong>Note:</strong> infra metrics (CPU/RAM, disk I/O, DB latency,
+            Redis cache hit ratio, API latency) live in the host environment,
+            not the app DB.
+          </div>
+        </TabsContent>
+
+        <TabsContent value="files" className="flex flex-col gap-4">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[2fr_1fr]">
+            <FileTypesPanel stats={stats} />
+            <TrashPanel stats={stats} />
+          </div>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <LargestFiles stats={stats} />
+            <DuplicatesList stats={stats} />
+          </div>
+        </TabsContent>
+
+        <TabsContent
+          value="activity"
+          className="grid grid-cols-1 gap-4 lg:grid-cols-2"
+        >
+          <RecentActivity stats={stats} />
+          <RecentLogins stats={stats} />
+        </TabsContent>
+
+        <TabsContent value="users">
+          <UsersTable users={users} meId={meId} onUpdate={onUpdate} />
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

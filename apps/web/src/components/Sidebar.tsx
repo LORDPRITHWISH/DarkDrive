@@ -7,7 +7,10 @@ import {
   ClockCounterClockwiseIcon,
   ShieldCheckIcon,
   TrashIcon,
+  GearSixIcon,
 } from "@phosphor-icons/react"
+import type { Space } from "@/lib/types"
+import { SpaceManageDialog } from "@/components/SpaceManageDialog"
 import { useEffect, useState } from "react"
 import { useAuth } from "@/store/auth"
 import { useDrive } from "@/store/drive"
@@ -23,6 +26,7 @@ export function Sidebar() {
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState("")
   const [upgrading, setUpgrading] = useState(false)
+  const [manageSpace, setManageSpace] = useState<Space | null>(null)
   const loc = useLocation()
 
   useEffect(() => {
@@ -99,18 +103,36 @@ export function Sidebar() {
 
         <div className="mt-1 flex flex-col">
           {spaces.map((s) => (
-            <Link
+            <div
               key={s.id}
-              to={`/drive/${s.rootFolderId}`}
-              className="hover:bg-accent/60 text-muted-foreground hover:text-foreground truncate rounded-md px-3 py-1.5 text-sm"
-              title={s.name}
+              className="hover:bg-accent/60 group/space flex items-center rounded-md"
             >
-              {s.name}{" "}
-              <span className="text-muted-foreground text-xs">({s.members.length})</span>
-            </Link>
+              <Link
+                to={`/drive/${s.rootFolderId}`}
+                className="text-muted-foreground hover:text-foreground min-w-0 flex-1 truncate px-3 py-1.5 text-sm"
+                title={s.name}
+              >
+                {s.name}{" "}
+                <span className="text-muted-foreground text-xs">({s.members.length})</span>
+              </Link>
+              <button
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  setManageSpace(s)
+                }}
+                className="hover:bg-accent text-muted-foreground hover:text-foreground mr-1 rounded p-1 opacity-0 group-hover/space:opacity-100 focus:opacity-100"
+                title="Manage members"
+                aria-label="Manage members"
+              >
+                <GearSixIcon size={14} />
+              </button>
+            </div>
           ))}
         </div>
       </div>
+
+      <SpaceManageDialog space={manageSpace} onClose={() => setManageSpace(null)} />
 
       {quota && (
         <div className="mt-auto border-t pt-3">

@@ -17,7 +17,7 @@ foldersRouter.get("/:id/contents", async (req, res) => {
   const includeHidden = req.query.includeHidden === "1"
   const includeTrashed = req.query.includeTrashed === "1"
 
-  const [folders, files, path] = await Promise.all([
+  const [folders, realFiles, shortcuts, path] = await Promise.all([
     prisma.folder.findMany({
       where: {
         parentId: folder.id,
@@ -34,15 +34,30 @@ foldersRouter.get("/:id/contents", async (req, res) => {
       },
       orderBy: { name: "asc" },
     }),
+    prisma.fileShortcut.findMany({
+      where: {
+        folderId: folder.id,
+        file: {
+          ...(includeTrashed ? {} : { isTrashed: false }),
+          ...(includeHidden ? {} : { isHidden: false }),
+        },
+      },
+      include: { file: true },
+    }),
     breadcrumbs(folder.id),
   ])
 
-  res.json({
-    folder,
-    folders,
-    files: files.map((f) => ({ ...f, size: Number(f.size) })),
-    breadcrumbs: path,
-  })
+  const files = [
+    ...realFiles.map((f) => ({ ...f, size: Number(f.size) })),
+    ...shortcuts.map((s) => ({
+      ...s.file,
+      size: Number(s.file.size),
+      shortcutId: s.id,
+      isShortcut: true as const,
+    })),
+  ]
+
+  res.json({ folder, folders, files, breadcrumbs: path })
 })
 
 async function breadcrumbs(folderId: string) {
@@ -108,11 +123,89 @@ foldersRouter.patch("/:id", async (req, res) => {
     if (!target) return res.status(403).json({ error: "forbidden_target" })
     if (await isDescendant(folder.id, target.id))
       return res.status(400).json({ error: "cycle" })
+    // Cascade spaceId to the moved subtree so membership follows the hierarchy.
+    if ((target.spaceId ?? null) !== (folder.spaceId ?? null)) {
+      await cascadeSpaceId(folder.id, target.spaceId ?? null)
+    }
   }
 
   const updated = await prisma.folder.update({ where: { id: folder.id }, data: body })
   res.json(updated)
 })
+
+// Mirror a folder tree into a target folder, creating shortcuts for every
+// file found along the way. Used by "Add to space" for folders: the source
+// tree stays in the uploader's drive; a parallel folder structure with
+// file-shortcuts appears in the target (typically a shared space).
+foldersRouter.post("/:id/mirror", async (req, res) => {
+  const user = currentUser(req)
+  const { targetFolderId } = z
+    .object({ targetFolderId: z.string() })
+    .parse(req.body)
+  const source = await getFolderWithAccess(user.id, req.params.id, "read")
+  if (!source) return res.status(404).json({ error: "not_found" })
+  const target = await getFolderWithAccess(user.id, targetFolderId, "write")
+  if (!target) return res.status(403).json({ error: "forbidden_target" })
+  // Block the obvious cycle: can't mirror a folder into itself or a descendant.
+  if (source.id === target.id || (await isDescendant(source.id, target.id)))
+    return res.status(400).json({ error: "cycle" })
+
+  async function walk(sourceId: string, destId: string) {
+    const [files, subFolders] = await Promise.all([
+      prisma.file.findMany({
+        where: { folderId: sourceId, isTrashed: false, isHidden: false },
+        select: { id: true },
+      }),
+      prisma.folder.findMany({
+        where: { parentId: sourceId, isTrashed: false, isHidden: false },
+      }),
+    ])
+    for (const f of files) {
+      await prisma.fileShortcut.upsert({
+        where: { fileId_folderId: { fileId: f.id, folderId: destId } },
+        update: {},
+        create: { fileId: f.id, folderId: destId },
+      })
+    }
+    for (const sub of subFolders) {
+      const mirror = await prisma.folder.create({
+        data: {
+          name: sub.name,
+          color: sub.color,
+          parentId: destId,
+          ownerId: user.id,
+          spaceId: target.spaceId,
+        },
+      })
+      await walk(sub.id, mirror.id)
+    }
+  }
+  await walk(source.id, target.id)
+  res.status(201).json({ ok: true })
+})
+
+async function cascadeSpaceId(rootFolderId: string, spaceId: string | null) {
+  const ids = new Set<string>([rootFolderId])
+  let frontier = [rootFolderId]
+  while (frontier.length) {
+    const kids = await prisma.folder.findMany({
+      where: { parentId: { in: frontier } },
+      select: { id: true },
+    })
+    frontier = []
+    for (const k of kids) {
+      if (!ids.has(k.id)) {
+        ids.add(k.id)
+        frontier.push(k.id)
+      }
+    }
+  }
+  const all = Array.from(ids)
+  await prisma.$transaction([
+    prisma.folder.updateMany({ where: { id: { in: all } }, data: { spaceId } }),
+    prisma.file.updateMany({ where: { folderId: { in: all } }, data: { spaceId } }),
+  ])
+}
 
 async function isDescendant(rootId: string, candidateId: string): Promise<boolean> {
   // true if candidateId is a descendant of rootId

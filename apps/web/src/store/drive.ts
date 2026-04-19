@@ -43,13 +43,18 @@ type DriveState = {
   trashItem: (type: "folder" | "file", id: string) => Promise<void>
   restoreItem: (type: "folder" | "file", id: string) => Promise<void>
   deleteItem: (type: "folder" | "file", id: string) => Promise<void>
+  removeShortcut: (shortcutId: string) => Promise<void>
+  addFileToSpace: (fileId: string, targetFolderId: string) => Promise<void>
+  addFolderToSpace: (folderId: string, targetFolderId: string) => Promise<void>
   moveItem: (type: "folder" | "file", id: string, targetFolderId: string) => Promise<void>
   upload: (files: FileList | File[]) => Promise<void>
 
   loadSpaces: () => Promise<void>
   createSpace: (name: string) => Promise<Space>
   addMember: (spaceId: string, email: string, role?: "VIEWER" | "EDITOR" | "ADMIN") => Promise<void>
+  updateMemberRole: (spaceId: string, userId: string, role: "VIEWER" | "EDITOR" | "ADMIN") => Promise<void>
   removeMember: (spaceId: string, userId: string) => Promise<void>
+  deleteSpace: (spaceId: string) => Promise<void>
 }
 
 export const useDrive = create<DriveState>((set, get) => ({
@@ -162,6 +167,18 @@ export const useDrive = create<DriveState>((set, get) => ({
     await apiJson(`/api/${type === "folder" ? "folders" : "files"}/${id}`, "DELETE")
     await get().refresh()
   },
+  removeShortcut: async (shortcutId) => {
+    await apiJson(`/api/files/shortcuts/${shortcutId}`, "DELETE")
+    await get().refresh()
+  },
+  addFileToSpace: async (fileId, targetFolderId) => {
+    await apiJson(`/api/files/${fileId}/shortcut`, "POST", { targetFolderId })
+    await get().refresh()
+  },
+  addFolderToSpace: async (folderId, targetFolderId) => {
+    await apiJson(`/api/folders/${folderId}/mirror`, "POST", { targetFolderId })
+    await get().refresh()
+  },
   moveItem: async (type, id, targetFolderId) => {
     if (type === "folder") {
       await apiJson(`/api/folders/${id}`, "PATCH", { parentId: targetFolderId })
@@ -224,8 +241,16 @@ export const useDrive = create<DriveState>((set, get) => ({
     await apiJson(`/api/spaces/${spaceId}/members`, "POST", { email, role })
     await get().loadSpaces()
   },
+  updateMemberRole: async (spaceId, userId, role) => {
+    await apiJson(`/api/spaces/${spaceId}/members/${userId}`, "PATCH", { role })
+    await get().loadSpaces()
+  },
   removeMember: async (spaceId, userId) => {
     await apiJson(`/api/spaces/${spaceId}/members/${userId}`, "DELETE")
+    await get().loadSpaces()
+  },
+  deleteSpace: async (spaceId) => {
+    await apiJson(`/api/spaces/${spaceId}`, "DELETE")
     await get().loadSpaces()
   },
 }))

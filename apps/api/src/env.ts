@@ -14,6 +14,9 @@ const schema = z.object({
   GOOGLE_CALLBACK_URL: z.string().url(),
   STORAGE_DIR: z.string().default("./storage"),
   MAX_UPLOAD_MB: z.coerce.number().default(2048),
+  // Optional — set to `.your-domain.tld` in production so the session cookie
+  // is valid across subdomains (e.g. darkdrive.zenux.live + api.darkdrive.zenux.live).
+  COOKIE_DOMAIN: z.string().optional(),
 })
 
 export const env = schema.parse(process.env)

@@ -6,9 +6,30 @@ import { sessionMiddleware } from "../auth/session.js"
 import { passport } from "../auth/passport.js"
 import type { Request, Response, NextFunction } from "express"
 
+const SOCKET_ORIGINS = Array.from(
+  new Set(
+    [env.WEB_URL, ...(env.ALLOWED_ORIGINS?.split(",") ?? [])]
+      .map((s) => s.trim().replace(/\/+$/, ""))
+      .filter(Boolean)
+  )
+)
+console.log("[socket] allowed origins:", SOCKET_ORIGINS)
+
 export function initSocket(httpServer: HttpServer) {
   const io = new Server(httpServer, {
-    cors: { origin: env.WEB_URL, credentials: true },
+    // Function-style origin so we can log rejections and normalize away
+    // trailing slashes — same logic as the Express CORS middleware.
+    cors: {
+      credentials: true,
+      methods: ["GET", "POST"],
+      origin(origin, cb) {
+        if (!origin) return cb(null, true)
+        const normalized = origin.replace(/\/+$/, "")
+        if (SOCKET_ORIGINS.includes(normalized)) return cb(null, normalized)
+        console.warn("[socket cors] rejected origin:", origin)
+        return cb(new Error(`origin_not_allowed:${origin}`))
+      },
+    },
   })
 
   // share express session with socket.io

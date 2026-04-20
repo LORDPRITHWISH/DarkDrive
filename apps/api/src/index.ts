@@ -19,7 +19,35 @@ const app = express()
 
 app.set("trust proxy", 1)
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }))
-app.use(cors({ origin: env.WEB_URL, credentials: true }))
+
+// Build the allowlist from WEB_URL + the optional ALLOWED_ORIGINS env var.
+// Using a function lets us log rejections — easiest way to debug "CORS broke
+// after deploy" scenarios where a trailing slash or stale env slips through.
+const ALLOWED_ORIGINS = Array.from(
+  new Set(
+    [
+      env.WEB_URL,
+      ...(env.ALLOWED_ORIGINS?.split(",") ?? []),
+    ]
+      .map((s) => s.trim().replace(/\/+$/, ""))
+      .filter(Boolean)
+  )
+)
+console.log("[api] allowed origins:", ALLOWED_ORIGINS)
+
+app.use(
+  cors({
+    credentials: true,
+    origin(origin, cb) {
+      // Same-origin / server-to-server / curl: no Origin header — allow.
+      if (!origin) return cb(null, true)
+      const normalized = origin.replace(/\/+$/, "")
+      if (ALLOWED_ORIGINS.includes(normalized)) return cb(null, true)
+      console.warn("[cors] rejected origin:", origin)
+      return cb(new Error(`origin_not_allowed:${origin}`))
+    },
+  })
+)
 app.use(cookieParser())
 app.use(express.json({ limit: "1mb" }))
 app.use(sessionMiddleware)

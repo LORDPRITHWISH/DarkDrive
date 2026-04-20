@@ -17,6 +17,9 @@ const schema = z.object({
   // Optional — set to `.your-domain.tld` in production so the session cookie
   // is valid across subdomains (e.g. darkdrive.zenux.live + api.darkdrive.zenux.live).
   COOKIE_DOMAIN: z.string().optional(),
+  // Extra origins (comma-separated) the API should accept on top of WEB_URL.
+  // Handy for staging + prod on the same box, or www + apex variants.
+  ALLOWED_ORIGINS: z.string().optional(),
 })
 
 export const env = schema.parse(process.env)

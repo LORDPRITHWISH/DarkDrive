@@ -8,8 +8,9 @@ import {
 } from "@phosphor-icons/react"
 import { Sidebar } from "@/components/Sidebar"
 import { Button } from "@workspace/ui/components/button"
-import { apiGet } from "@/lib/api"
+import { apiGet, apiJson } from "@/lib/api"
 import { useDrive } from "@/store/drive"
+import { useMe } from "@/store/me"
 import { formatBytes, formatDate } from "@/lib/format"
 import { iconFor } from "@/lib/fileIcon"
 import { FilePreview } from "@/components/FilePreview"
@@ -32,6 +33,8 @@ export function BinPage() {
   const [preview, setPreview] = useState<FileItem | null>(null)
   const restoreItem = useDrive((s) => s.restoreItem)
   const deleteItem = useDrive((s) => s.deleteItem)
+  const loadQuota = useMe((s) => s.loadQuota)
+  const [clearing, setClearing] = useState(false)
 
   async function reload() {
     setLoading(true)
@@ -57,6 +60,24 @@ export function BinPage() {
     if (!confirm(`Permanently delete "${name}"?`)) return
     await deleteItem(type, id)
     await reload()
+  }
+  async function emptyBin() {
+    const n = folders.length + files.length
+    if (n === 0) return
+    if (
+      !confirm(
+        `Permanently delete everything in the bin? This cannot be undone.`
+      )
+    )
+      return
+    setClearing(true)
+    try {
+      await apiJson("/api/me/trash/empty", "POST")
+      await reload()
+      void loadQuota()
+    } finally {
+      setClearing(false)
+    }
   }
 
   function openMenu(
@@ -86,6 +107,17 @@ export function BinPage() {
             <div className="text-sm font-semibold">Bin</div>
           </div>
           <div className="flex items-center gap-1">
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-destructive mr-1"
+              onClick={emptyBin}
+              disabled={clearing || isEmpty}
+              title="Permanently delete everything in the bin"
+            >
+              <TrashIcon size={14} weight="fill" />
+              {clearing ? "Emptying…" : "Empty bin"}
+            </Button>
             <Button
               size="sm"
               variant={view === "grid" ? "default" : "ghost"}

@@ -2,5 +2,7 @@ node_modules
 dist
 .env
 .env.local
-storage/
-!storage/.gitkeep
+# Runtime uploads directory (at the api package root only) — the bare
+# `storage/` form also matched `src/storage/` and hid our source code.
+/storage/
+!/storage/.gitkeep

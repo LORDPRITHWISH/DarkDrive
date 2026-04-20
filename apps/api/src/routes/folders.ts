@@ -150,6 +150,8 @@ foldersRouter.post("/:id/mirror", async (req, res) => {
   if (source.id === target.id || (await isDescendant(source.id, target.id)))
     return res.status(400).json({ error: "cycle" })
 
+  const targetSpaceId = target.spaceId
+
   async function walk(sourceId: string, destId: string) {
     const [files, subFolders] = await Promise.all([
       prisma.file.findMany({
@@ -174,7 +176,7 @@ foldersRouter.post("/:id/mirror", async (req, res) => {
           color: sub.color,
           parentId: destId,
           ownerId: user.id,
-          spaceId: target.spaceId,
+          spaceId: targetSpaceId,
         },
       })
       await walk(sub.id, mirror.id)

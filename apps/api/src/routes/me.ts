@@ -58,9 +58,40 @@ meRouter.post("/request-upgrade", async (req, res) => {
   res.json({ ok: true })
 })
 
+// Directory search used by the invite autocomplete. Casts a wider net than a
+// strict `contains` so the client's fuzzy matcher has something to work with
+// on typos (e.g. "jhon" still surfaces users whose name starts with "jh").
+// Requires at least 2 chars so we don't hand out the entire user directory.
+meRouter.get("/user-search", async (req, res) => {
+  const user = currentUser(req)
+  const q = String(req.query.q ?? "").trim()
+  const limit = Math.min(
+    parseInt(String(req.query.limit ?? "30"), 10) || 30,
+    50
+  )
+  if (q.length < 2) return res.json({ users: [] })
+  const head = q.slice(0, 2)
+  const users = await prisma.user.findMany({
+    where: {
+      id: { not: user.id },
+      disabledAt: null,
+      OR: [
+        { email: { contains: q, mode: "insensitive" } },
+        { name: { contains: q, mode: "insensitive" } },
+        { email: { startsWith: head, mode: "insensitive" } },
+        { name: { startsWith: head, mode: "insensitive" } },
+      ],
+    },
+    select: { id: true, name: true, email: true, avatarUrl: true },
+    take: limit,
+    orderBy: { name: "asc" },
+  })
+  res.json({ users })
+})
+
 // Distinct users the current user has shared a space with (either spaces
-// they own or spaces they're a member of). Used to power the invite-by-email
-// suggestion dropdown.
+// they own or spaces they're a member of). Used as the default suggestion
+// set when the invite input is empty.
 meRouter.get("/contacts", async (req, res) => {
   const user = currentUser(req)
   const rows = await prisma.spaceMember.findMany({

@@ -14,6 +14,8 @@ import {
 } from "@phosphor-icons/react"
 import type { Space } from "@/lib/types"
 import { SpaceManageDialog } from "@/components/SpaceManageDialog"
+import { SpaceEditorDialog } from "@/components/SpaceEditorDialog"
+import { SpaceLogo } from "@/components/SpaceLogo"
 import { UpgradeRequestDialog } from "@/components/UpgradeRequestDialog"
 import { useEffect, useRef, useState } from "react"
 import { useAuth } from "@/store/auth"
@@ -30,14 +32,12 @@ export function Sidebar() {
     publicSpaces,
     loadSpaces,
     loadPublicSpaces,
-    createSpace,
     upload,
     currentFolderId,
   } = useDrive()
   const { quota, loadQuota, requestUpgrade } = useMe()
   const fileInput = useRef<HTMLInputElement>(null)
-  const [creating, setCreating] = useState(false)
-  const [name, setName] = useState("")
+  const [creatingSpace, setCreatingSpace] = useState(false)
   const [upgradeOpen, setUpgradeOpen] = useState(false)
   const [manageSpace, setManageSpace] = useState<Space | null>(null)
   const loc = useLocation()
@@ -127,32 +127,12 @@ export function Sidebar() {
           </div>
           <button
             className="rounded-md p-1 hover:bg-accent"
-            onClick={() => setCreating((v) => !v)}
+            onClick={() => setCreatingSpace(true)}
             title="New space"
           >
             <PlusIcon size={14} />
           </button>
         </div>
-
-        {creating && (
-          <div className="mt-1 flex gap-1 px-2">
-            <input
-              className="flex-1 rounded-md border border-input bg-background px-2 py-1 text-sm ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-              placeholder="Space name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={async (e) => {
-                if (e.key === "Enter" && name.trim()) {
-                  await createSpace(name.trim())
-                  setName("")
-                  setCreating(false)
-                }
-                if (e.key === "Escape") setCreating(false)
-              }}
-              autoFocus
-            />
-          </div>
-        )}
 
         <div className="mt-1 flex flex-col">
           {spaces.map((s) => (
@@ -162,9 +142,10 @@ export function Sidebar() {
             >
               <Link
                 to={`/drive/${s.rootFolderId}`}
-                className="flex min-w-0 flex-1 items-center gap-1.5 truncate px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground"
+                className="flex min-w-0 flex-1 items-center gap-2 truncate px-2 py-1.5 text-sm text-muted-foreground hover:text-foreground"
                 title={s.name}
               >
+                <SpaceLogo space={s} size={20} className="shrink-0" />
                 <span className="truncate">{s.name}</span>
                 <span className="text-xs text-muted-foreground">
                   ({s.members.length})
@@ -205,13 +186,18 @@ export function Sidebar() {
               <Link
                 key={s.id}
                 to={`/drive/${s.rootFolderId}`}
-                className="flex min-w-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+                className="flex min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent/60 hover:text-foreground"
                 title={
                   s.ownerName ? `${s.name} · by ${s.ownerName}` : s.name
                 }
               >
-                <GlobeIcon size={12} weight="fill" className="text-primary shrink-0" />
+                <SpaceLogo space={s} size={20} className="shrink-0" />
                 <span className="truncate">{s.name}</span>
+                <GlobeIcon
+                  size={10}
+                  weight="fill"
+                  className="text-primary ml-auto shrink-0"
+                />
               </Link>
             ))}
           </div>
@@ -221,6 +207,11 @@ export function Sidebar() {
       <SpaceManageDialog
         space={manageSpace}
         onClose={() => setManageSpace(null)}
+      />
+
+      <SpaceEditorDialog
+        mode={creatingSpace ? { kind: "create" } : null}
+        onClose={() => setCreatingSpace(false)}
       />
 
       {quota && (

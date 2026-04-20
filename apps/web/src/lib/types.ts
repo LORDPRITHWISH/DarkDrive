@@ -192,6 +192,9 @@ export type SpaceMember = {
 export type Space = {
   id: string
   name: string
+  color: string | null
+  logoKey: string | null
+  icon: string | null
   rootFolderId: string
   ownerId: string
   isPublic: boolean
@@ -202,6 +205,9 @@ export type Space = {
 export type PublicSpace = {
   id: string
   name: string
+  color: string | null
+  logoKey: string | null
+  icon: string | null
   rootFolderId: string
   ownerId: string
   isPublic: boolean

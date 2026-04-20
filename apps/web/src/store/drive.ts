@@ -108,8 +108,24 @@ type DriveState = {
 
   loadSpaces: () => Promise<void>
   loadPublicSpaces: () => Promise<void>
-  createSpace: (name: string) => Promise<Space>
-  updateSpace: (spaceId: string, patch: { name?: string; isPublic?: boolean }) => Promise<void>
+  createSpace: (
+    name: string,
+    opts?: {
+      color?: string | null
+      logoKey?: string | null
+      icon?: string | null
+    }
+  ) => Promise<Space>
+  updateSpace: (
+    spaceId: string,
+    patch: {
+      name?: string
+      color?: string | null
+      logoKey?: string | null
+      icon?: string | null
+      isPublic?: boolean
+    }
+  ) => Promise<void>
   addMember: (spaceId: string, email: string, role?: "VIEWER" | "EDITOR") => Promise<void>
   updateMemberRole: (spaceId: string, userId: string, role: "VIEWER" | "EDITOR") => Promise<void>
   removeMember: (spaceId: string, userId: string) => Promise<void>
@@ -313,8 +329,13 @@ export const useDrive = create<DriveState>((set, get) => ({
     const data = await apiGet<{ spaces: PublicSpace[] }>("/api/spaces/public")
     set({ publicSpaces: data.spaces })
   },
-  createSpace: async (name) => {
-    const s = await apiJson<Space>("/api/spaces", "POST", { name })
+  createSpace: async (name, opts) => {
+    const s = await apiJson<Space>("/api/spaces", "POST", {
+      name,
+      color: opts?.color ?? null,
+      logoKey: opts?.logoKey ?? null,
+      icon: opts?.icon ?? null,
+    })
     await get().loadSpaces()
     return s
   },

@@ -183,7 +183,7 @@ export type Breadcrumb = { id: string; name: string }
 
 export type SpaceMember = {
   userId: string
-  role: "VIEWER" | "EDITOR" | "ADMIN"
+  role: "VIEWER" | "EDITOR"
   name: string
   email: string
   avatarUrl?: string | null
@@ -194,8 +194,19 @@ export type Space = {
   name: string
   rootFolderId: string
   ownerId: string
+  isPublic: boolean
   createdAt: string
   members: SpaceMember[]
+}
+
+export type PublicSpace = {
+  id: string
+  name: string
+  rootFolderId: string
+  ownerId: string
+  isPublic: boolean
+  ownerName: string | null
+  createdAt: string
 }
 
 export type Share = {

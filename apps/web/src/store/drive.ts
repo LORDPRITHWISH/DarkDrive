@@ -1,6 +1,12 @@
 import { create } from "zustand"
 import { apiGet, apiJson, apiUpload } from "@/lib/api"
-import type { Breadcrumb, FileItem, Folder, Space } from "@/lib/types"
+import type {
+  Breadcrumb,
+  FileItem,
+  Folder,
+  PublicSpace,
+  Space,
+} from "@/lib/types"
 import { useMe } from "./me"
 
 const DEFAULT_CHUNK_SIZE = 25 * 1024 * 1024
@@ -65,6 +71,7 @@ type DriveState = {
   view: "grid" | "list"
   selection: Set<string>
   spaces: Space[]
+  publicSpaces: PublicSpace[]
   uploads: {
     id: string
     name: string
@@ -100,9 +107,11 @@ type DriveState = {
   upload: (files: FileList | File[], explicitTargetId?: string) => Promise<void>
 
   loadSpaces: () => Promise<void>
+  loadPublicSpaces: () => Promise<void>
   createSpace: (name: string) => Promise<Space>
-  addMember: (spaceId: string, email: string, role?: "VIEWER" | "EDITOR" | "ADMIN") => Promise<void>
-  updateMemberRole: (spaceId: string, userId: string, role: "VIEWER" | "EDITOR" | "ADMIN") => Promise<void>
+  updateSpace: (spaceId: string, patch: { name?: string; isPublic?: boolean }) => Promise<void>
+  addMember: (spaceId: string, email: string, role?: "VIEWER" | "EDITOR") => Promise<void>
+  updateMemberRole: (spaceId: string, userId: string, role: "VIEWER" | "EDITOR") => Promise<void>
   removeMember: (spaceId: string, userId: string) => Promise<void>
   deleteSpace: (spaceId: string) => Promise<void>
 }
@@ -119,6 +128,7 @@ export const useDrive = create<DriveState>((set, get) => ({
   view: "grid",
   selection: new Set(),
   spaces: [],
+  publicSpaces: [],
   uploads: [],
 
   setView: (v) => set({ view: v }),
@@ -299,10 +309,18 @@ export const useDrive = create<DriveState>((set, get) => ({
     const data = await apiGet<{ spaces: Space[] }>("/api/spaces")
     set({ spaces: data.spaces })
   },
+  loadPublicSpaces: async () => {
+    const data = await apiGet<{ spaces: PublicSpace[] }>("/api/spaces/public")
+    set({ publicSpaces: data.spaces })
+  },
   createSpace: async (name) => {
     const s = await apiJson<Space>("/api/spaces", "POST", { name })
     await get().loadSpaces()
     return s
+  },
+  updateSpace: async (spaceId, patch) => {
+    await apiJson(`/api/spaces/${spaceId}`, "PATCH", patch)
+    await get().loadSpaces()
   },
   addMember: async (spaceId, email, role = "EDITOR") => {
     await apiJson(`/api/spaces/${spaceId}/members`, "POST", { email, role })

@@ -15,11 +15,19 @@ export async function getFolderWithAccess(
   if (!folder) return null
   if (folder.ownerId === userId) return folder
   if (folder.spaceId && folder.space) {
+    // The space creator is implicitly admin of the space — no SpaceMember row
+    // required. All other admin-level actions are restricted to the owner.
+    if (folder.space.ownerId === userId) return folder
     const m = folder.space.members.find((mm) => mm.userId === userId)
-    if (!m) return null
-    if (mode === "read") return folder
-    if (mode === "write" && (m.role === "EDITOR" || m.role === "ADMIN")) return folder
-    if (mode === "admin" && m.role === "ADMIN") return folder
+    if (m) {
+      if (mode === "read") return folder
+      // Legacy ADMIN roles are treated as EDITOR — only the owner can do admin.
+      if (mode === "write" && (m.role === "EDITOR" || m.role === "ADMIN"))
+        return folder
+    }
+    // Public spaces grant read access to any authenticated user; writes
+    // still require explicit membership or ownership.
+    if (mode === "read" && folder.space.isPublic) return folder
   }
   return null
 }
@@ -36,11 +44,14 @@ export async function getFileWithAccess(
   if (!file) return null
   if (file.ownerId === userId) return file
   if (file.spaceId && file.space) {
+    if (file.space.ownerId === userId) return file
     const m = file.space.members.find((mm) => mm.userId === userId)
-    if (!m) return null
-    if (mode === "read") return file
-    if (mode === "write" && (m.role === "EDITOR" || m.role === "ADMIN")) return file
-    if (mode === "admin" && m.role === "ADMIN") return file
+    if (m) {
+      if (mode === "read") return file
+      if (mode === "write" && (m.role === "EDITOR" || m.role === "ADMIN"))
+        return file
+    }
+    if (mode === "read" && file.space.isPublic) return file
   }
   // Read access via a shortcut: file is surfaced in a folder the user can reach.
   // Shortcuts only grant read — not write/admin — since the file's home is the

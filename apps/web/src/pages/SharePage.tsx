@@ -18,7 +18,11 @@ function ShareShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-svh flex-col">
       <header className="bg-background/80 sticky top-0 z-10 flex items-center justify-between border-b px-4 py-3 backdrop-blur sm:px-6">
-        <Link to="/" className="flex items-center gap-2">
+        <Link
+          to="/landing"
+          title="About DarkDrive"
+          className="hover:text-primary flex items-center gap-2 transition-colors"
+        >
           <img
             src="/DarkDrive.png"
             alt="DarkDrive"
@@ -39,7 +43,10 @@ function ShareShell({ children }: { children: React.ReactNode }) {
       <main className="flex min-h-0 flex-1 flex-col">{children}</main>
       <footer className="text-muted-foreground border-t px-4 py-3 text-center text-xs sm:px-6">
         Shared via{" "}
-        <Link to="/" className="text-foreground font-medium hover:underline">
+        <Link
+          to="/landing"
+          className="text-foreground font-medium hover:underline"
+        >
           DarkDrive
         </Link>
       </footer>

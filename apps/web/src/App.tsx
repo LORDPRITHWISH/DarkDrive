@@ -56,6 +56,7 @@ export function App() {
       <UploadToaster />
       <Routes>
         <Route path="/" element={<Root />} />
+        <Route path="/landing" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/s/:token" element={<SharePage />} />
         <Route

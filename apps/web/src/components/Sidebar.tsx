@@ -10,6 +10,7 @@ import {
   TrashIcon,
   GearSixIcon,
   UploadIcon,
+  GlobeIcon,
 } from "@phosphor-icons/react"
 import type { Space } from "@/lib/types"
 import { SpaceManageDialog } from "@/components/SpaceManageDialog"
@@ -24,8 +25,15 @@ import { ThemeToggle } from "@/components/ThemeToggle"
 
 export function Sidebar() {
   const user = useAuth((s) => s.user)
-  const { spaces, loadSpaces, createSpace, upload, currentFolderId } =
-    useDrive()
+  const {
+    spaces,
+    publicSpaces,
+    loadSpaces,
+    loadPublicSpaces,
+    createSpace,
+    upload,
+    currentFolderId,
+  } = useDrive()
   const { quota, loadQuota, requestUpgrade } = useMe()
   const fileInput = useRef<HTMLInputElement>(null)
   const [creating, setCreating] = useState(false)
@@ -36,8 +44,9 @@ export function Sidebar() {
 
   useEffect(() => {
     void loadSpaces()
+    void loadPublicSpaces()
     void loadQuota()
-  }, [loadSpaces, loadQuota])
+  }, [loadSpaces, loadPublicSpaces, loadQuota])
 
   const pct =
     quota && quota.total > 0
@@ -62,7 +71,11 @@ export function Sidebar() {
   return (
     <aside className="flex h-screen w-64 shrink-0 flex-col gap-4 border-r bg-card p-3">
       <div className="flex items-center gap-2 px-1 py-3">
-        <Link to="/" className="flex items-center gap-2" title="Home">
+        <Link
+          to="/landing"
+          className="hover:text-primary flex items-center gap-2 transition-colors"
+          title="About DarkDrive"
+        >
           <img
             src="/DarkDrive.png"
             alt="DarkDrive"
@@ -149,13 +162,21 @@ export function Sidebar() {
             >
               <Link
                 to={`/drive/${s.rootFolderId}`}
-                className="min-w-0 flex-1 truncate px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground"
+                className="flex min-w-0 flex-1 items-center gap-1.5 truncate px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground"
                 title={s.name}
               >
-                {s.name}{" "}
+                <span className="truncate">{s.name}</span>
                 <span className="text-xs text-muted-foreground">
                   ({s.members.length})
                 </span>
+                {s.isPublic && (
+                  <GlobeIcon
+                    size={12}
+                    weight="fill"
+                    className="text-primary ml-auto shrink-0"
+                    aria-label="Public space"
+                  />
+                )}
               </Link>
               <button
                 onClick={(e) => {
@@ -173,6 +194,29 @@ export function Sidebar() {
           ))}
         </div>
       </div>
+
+      {publicSpaces.length > 0 && (
+        <div>
+          <div className="flex items-center gap-1.5 px-2 text-xs font-medium tracking-wider text-muted-foreground uppercase">
+            <GlobeIcon size={14} /> Public
+          </div>
+          <div className="mt-1 flex flex-col">
+            {publicSpaces.map((s) => (
+              <Link
+                key={s.id}
+                to={`/drive/${s.rootFolderId}`}
+                className="flex min-w-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+                title={
+                  s.ownerName ? `${s.name} · by ${s.ownerName}` : s.name
+                }
+              >
+                <GlobeIcon size={12} weight="fill" className="text-primary shrink-0" />
+                <span className="truncate">{s.name}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       <SpaceManageDialog
         space={manageSpace}

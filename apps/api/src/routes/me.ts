@@ -58,6 +58,57 @@ meRouter.post("/request-upgrade", async (req, res) => {
   res.json({ ok: true })
 })
 
+// Distinct users the current user has shared a space with (either spaces
+// they own or spaces they're a member of). Used to power the invite-by-email
+// suggestion dropdown.
+meRouter.get("/contacts", async (req, res) => {
+  const user = currentUser(req)
+  const rows = await prisma.spaceMember.findMany({
+    where: {
+      userId: { not: user.id },
+      space: {
+        OR: [
+          { ownerId: user.id },
+          { members: { some: { userId: user.id } } },
+        ],
+      },
+    },
+    include: { user: true },
+  })
+  // Also include space owners of spaces I'm a member of (they're on
+  // Space.ownerId, not necessarily in SpaceMember rows).
+  const ownedBy = await prisma.space.findMany({
+    where: {
+      ownerId: { not: user.id },
+      members: { some: { userId: user.id } },
+    },
+    include: { owner: true },
+  })
+
+  const byId = new Map<
+    string,
+    { id: string; name: string; email: string; avatarUrl: string | null }
+  >()
+  for (const m of rows) {
+    byId.set(m.userId, {
+      id: m.userId,
+      name: m.user.name,
+      email: m.user.email,
+      avatarUrl: m.user.avatarUrl,
+    })
+  }
+  for (const s of ownedBy) {
+    if (s.owner)
+      byId.set(s.owner.id, {
+        id: s.owner.id,
+        name: s.owner.name,
+        email: s.owner.email,
+        avatarUrl: s.owner.avatarUrl,
+      })
+  }
+  res.json({ contacts: Array.from(byId.values()) })
+})
+
 meRouter.get("/starred", async (req, res) => {
   const user = currentUser(req)
   const spaceIds = (

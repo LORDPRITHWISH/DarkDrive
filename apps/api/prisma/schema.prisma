@@ -124,6 +124,9 @@ model Space {
   owner        User     @relation("SpaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   rootFolderId String   @unique
   rootFolder   Folder   @relation("SpaceRoot", fields: [rootFolderId], references: [id])
+  // When true, any authenticated DarkDrive user can read the space's contents.
+  // Writes are still restricted to the owner and explicit EDITOR members.
+  isPublic     Boolean  @default(false)
   createdAt    DateTime @default(now())
 
   members      SpaceMember[]

@@ -234,9 +234,9 @@ export function LoginPage() {
              so the entire left side stays draggable. */}
         <div className="pointer-events-none relative z-30 flex h-full flex-col justify-between p-10">
           <Link
-            to="/"
+            to="/landing"
             className="hover:text-primary pointer-events-auto inline-flex w-fit items-center gap-2 transition-colors"
-            title="Back to home"
+            title="About DarkDrive"
           >
             <img
               src="/DarkDrive.png"
@@ -333,7 +333,11 @@ export function LoginPage() {
               <div className="text-muted-foreground text-sm font-medium">
                 Welcome to
               </div>
-              <div className="mt-2 flex items-center gap-3">
+              <Link
+                to="/landing"
+                title="About DarkDrive"
+                className="hover:text-primary mt-4 flex w-fit items-center gap-3 transition-colors"
+              >
                 <img
                   src="/DarkDrive.png"
                   alt=""
@@ -342,7 +346,7 @@ export function LoginPage() {
                 <span className="text-[2.75rem] font-semibold leading-none tracking-tight">
                   DarkDrive
                 </span>
-              </div>
+              </Link>
               <p className="text-muted-foreground mt-5 text-sm leading-relaxed">
                 Use your Google account to continue. New users start with 1 GB
                 of storage — request more from your admin any time.

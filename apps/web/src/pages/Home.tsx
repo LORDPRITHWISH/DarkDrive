@@ -24,9 +24,12 @@ export function HomePage() {
     suggestions,
     folderSuggestions,
     recent,
+    recentlyAdded,
     loadSuggestions,
     loadFolderSuggestions,
     loadRecent,
+    loadRecentlyAdded,
+    dismissRecentlyAdded,
     pushNav,
   } = useMe()
   const [preview, setPreview] = useState<FileItem | null>(null)
@@ -45,7 +48,16 @@ export function HomePage() {
     void loadSuggestions(12)
     void loadFolderSuggestions(8)
     void loadRecent(8)
-  }, [loadSuggestions, loadFolderSuggestions, loadRecent])
+    void loadRecentlyAdded(12)
+  }, [loadSuggestions, loadFolderSuggestions, loadRecent, loadRecentlyAdded])
+
+  function openFile(f: FileItem) {
+    // Optimistically remove from "Recently added" — opening hits
+    // /download?inline=1 which writes a FileAccess row, so subsequent
+    // loads will also exclude it.
+    dismissRecentlyAdded(f.id)
+    setPreview(f)
+  }
 
   const firstName = user?.name?.split(" ")[0] ?? ""
 
@@ -65,6 +77,51 @@ export function HomePage() {
             <p className="text-muted-foreground mt-1 text-sm">
               Welcome back to DarkDrive.
             </p>
+
+            {recentlyAdded.length > 0 && (
+              <section className="mt-8">
+                <div className="text-muted-foreground mb-3 text-xs font-medium uppercase tracking-wider">
+                  Recently added
+                </div>
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3">
+                  {recentlyAdded.map((f) => {
+                    const isImg = f.mimeType.startsWith("image/")
+                    return (
+                      <button
+                        key={f.id}
+                        onClick={() => openFile(f)}
+                        className="bg-card hover:border-primary/60 group relative overflow-hidden rounded-lg border text-left transition-colors"
+                      >
+                        <span className="bg-primary text-primary-foreground absolute top-2 left-2 z-10 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider">
+                          New
+                        </span>
+                        <div className="bg-muted grid aspect-4/3 place-items-center overflow-hidden">
+                          {isImg ? (
+                            <img
+                              src={apiUrl(`/api/files/${f.id}/download?inline=1`)}
+                              alt=""
+                              className="h-full w-full object-cover"
+                              loading="lazy"
+                            />
+                          ) : (
+                            iconFor(f.mimeType, 56, f.name)
+                          )}
+                        </div>
+                        <div className="p-2">
+                          <div className="truncate text-sm font-medium" title={f.name}>
+                            {f.name}
+                          </div>
+                          <div className="text-muted-foreground flex items-center justify-between text-xs">
+                            <span>{formatBytes(f.size)}</span>
+                            <span>{formatDate(f.createdAt)}</span>
+                          </div>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </section>
+            )}
 
             {folderSuggestions.length > 0 && (
               <section className="mt-8">
@@ -183,7 +240,8 @@ export function HomePage() {
 
             {folderSuggestions.length === 0 &&
               suggestions.length === 0 &&
-              recent.length === 0 && (
+              recent.length === 0 &&
+              recentlyAdded.length === 0 && (
                 <div className="text-muted-foreground mt-10 rounded-lg border border-dashed p-10 text-center text-sm">
                   Your home is empty. Head to{" "}
                   {user && (

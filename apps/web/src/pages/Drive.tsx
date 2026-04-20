@@ -5,7 +5,6 @@ import { Sidebar } from "@/components/Sidebar"
 import { Toolbar } from "@/components/Toolbar"
 import { Breadcrumbs } from "@/components/Breadcrumbs"
 import { FileGrid } from "@/components/FileGrid"
-import { UploadToaster } from "@/components/UploadToaster"
 import { NavButtons } from "@/components/NavButtons"
 
 export function DrivePage() {
@@ -45,7 +44,6 @@ export function DrivePage() {
         <div className="flex-1 overflow-auto">
           <FileGrid />
         </div>
-        <UploadToaster />
       </main>
     </div>
   )

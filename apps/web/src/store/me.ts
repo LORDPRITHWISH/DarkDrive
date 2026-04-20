@@ -5,12 +5,15 @@ import type { NavState, QuotaInfo, RecentFile, FileItem, Folder } from "@/lib/ty
 type MeState = {
   quota: QuotaInfo | null
   recent: RecentFile[]
+  recentlyAdded: FileItem[]
   suggestions: FileItem[]
   folderSuggestions: Folder[]
   nav: NavState | null
 
   loadQuota: () => Promise<void>
   loadRecent: (limit?: number) => Promise<void>
+  loadRecentlyAdded: (limit?: number) => Promise<void>
+  dismissRecentlyAdded: (fileId: string) => void
   loadSuggestions: (limit?: number) => Promise<void>
   loadFolderSuggestions: (limit?: number) => Promise<void>
   requestUpgrade: (bytes: number) => Promise<void>
@@ -21,9 +24,10 @@ type MeState = {
   forwardNav: () => Promise<NavState>
 }
 
-export const useMe = create<MeState>((set) => ({
+export const useMe = create<MeState>((set, get) => ({
   quota: null,
   recent: [],
+  recentlyAdded: [],
   suggestions: [],
   folderSuggestions: [],
   nav: null,
@@ -35,6 +39,15 @@ export const useMe = create<MeState>((set) => ({
   loadRecent: async (limit = 24) => {
     const r = await apiGet<{ files: RecentFile[] }>(`/api/me/recent?limit=${limit}`)
     set({ recent: r.files })
+  },
+  loadRecentlyAdded: async (limit = 12) => {
+    const r = await apiGet<{ files: FileItem[] }>(
+      `/api/me/recently-added?limit=${limit}`
+    )
+    set({ recentlyAdded: r.files })
+  },
+  dismissRecentlyAdded: (fileId) => {
+    set({ recentlyAdded: get().recentlyAdded.filter((f) => f.id !== fileId) })
   },
   loadSuggestions: async (limit = 12) => {
     const r = await apiGet<{ files: FileItem[] }>(`/api/me/suggestions?limit=${limit}`)

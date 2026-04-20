@@ -11,30 +11,67 @@ function humanize(err: string) {
   return ERROR_COPY[err] ?? err
 }
 
+function formatBytes(n: number) {
+  if (!Number.isFinite(n) || n <= 0) return "0 B"
+  const units = ["B", "KB", "MB", "GB", "TB"]
+  let i = 0
+  let v = n
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024
+    i++
+  }
+  const digits = v >= 100 || i === 0 ? 0 : v >= 10 ? 1 : 2
+  return `${v.toFixed(digits)} ${units[i]}`
+}
+
+function formatSpeed(bps: number) {
+  if (!Number.isFinite(bps) || bps <= 0) return "—"
+  return `${formatBytes(bps)}/s`
+}
+
 export function UploadToaster() {
   const uploads = useDrive((s) => s.uploads)
   if (uploads.length === 0) return null
   return (
-    <div className="fixed bottom-4 right-4 z-40 w-80 space-y-2">
-      {uploads.map((u) => (
-        <div key={u.id} className="bg-card border rounded-lg p-3 shadow-lg">
-          <div className="mb-1 flex items-center justify-between text-xs">
-            <span className="truncate font-medium">{u.name}</span>
-            <span className="text-muted-foreground">{Math.round(u.progress)}%</span>
+    <div className="fixed right-4 bottom-4 z-50 w-80 space-y-2">
+      {uploads.map((u) => {
+        const pct = Math.min(100, Math.max(0, u.progress))
+        return (
+          <div key={u.id} className="bg-card rounded-lg border p-3 shadow-lg">
+            <div className="mb-1 flex items-center justify-between gap-2 text-xs">
+              <span className="truncate font-medium">{u.name}</span>
+              <span className="text-muted-foreground shrink-0">
+                {Math.round(pct)}%
+              </span>
+            </div>
+            <div className="bg-muted mb-1.5 h-1.5 w-full overflow-hidden rounded-full">
+              <div
+                className={`h-full transition-all ${
+                  u.error ? "bg-destructive" : "bg-primary"
+                }`}
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+            <div className="text-muted-foreground flex items-center justify-between gap-2 text-[11px]">
+              <span className="truncate">
+                {formatBytes(u.loaded)} / {formatBytes(u.size)}
+              </span>
+              <span className="shrink-0">
+                {u.done
+                  ? u.error
+                    ? "failed"
+                    : "done"
+                  : formatSpeed(u.speed)}
+              </span>
+            </div>
+            {u.error && (
+              <div className="text-destructive mt-1 text-xs">
+                {humanize(u.error)}
+              </div>
+            )}
           </div>
-          <div className="bg-muted h-1.5 w-full overflow-hidden rounded-full">
-            <div
-              className={`h-full transition-all ${
-                u.error ? "bg-destructive" : "bg-primary"
-              }`}
-              style={{ width: `${u.progress}%` }}
-            />
-          </div>
-          {u.error && (
-            <div className="text-destructive mt-1 text-xs">{humanize(u.error)}</div>
-          )}
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }

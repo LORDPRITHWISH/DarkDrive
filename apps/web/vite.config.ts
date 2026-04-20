@@ -29,9 +29,9 @@ export default defineConfig({
     host: true,
     allowedHosts,
     proxy: {
-      "/api": { target: "http://localhost:4000", changeOrigin: true },
+      "/api": { target: "http://localhost:4400", changeOrigin: true },
       "/socket.io": {
-        target: "http://localhost:4000",
+        target: "http://localhost:4400",
         ws: true,
         changeOrigin: true,
       },

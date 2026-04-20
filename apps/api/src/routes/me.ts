@@ -130,6 +130,34 @@ meRouter.get("/recent", async (req, res) => {
   res.json({ files })
 })
 
+// Files the user can see that were added in the last 30 days and that they
+// haven't viewed or downloaded yet. Opening the file (inline preview or
+// download) writes a FileAccess row, which drops the file from this list.
+meRouter.get("/recently-added", async (req, res) => {
+  const user = currentUser(req)
+  const limit = Math.min(parseInt(String(req.query.limit ?? "12"), 10) || 12, 50)
+  const since = new Date(Date.now() - 1000 * 60 * 60 * 24 * 30)
+  const spaceIds = (
+    await prisma.spaceMember.findMany({
+      where: { userId: user.id },
+      select: { spaceId: true },
+    })
+  ).map((m) => m.spaceId)
+
+  const files = await prisma.file.findMany({
+    where: {
+      isTrashed: false,
+      isHidden: false,
+      createdAt: { gte: since },
+      OR: [{ ownerId: user.id }, { spaceId: { in: spaceIds } }],
+      accesses: { none: { userId: user.id } },
+    },
+    orderBy: { createdAt: "desc" },
+    take: limit,
+  })
+  res.json({ files: files.map((f) => ({ ...f, size: Number(f.size) })) })
+})
+
 meRouter.get("/folder-suggestions", async (req, res) => {
   const user = currentUser(req)
   const limit = Math.min(parseInt(String(req.query.limit ?? "8"), 10) || 8, 30)

@@ -34,7 +34,7 @@ export function FilePreview({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="bg-muted flex min-w-0 items-center justify-center overflow-hidden">
-          <PreviewBody file={file} src={inlineSrc} />
+          <FileViewer file={file} src={inlineSrc} />
         </div>
         <aside className="flex w-80 shrink-0 flex-col gap-3 overflow-auto border-l p-4">
           <div className="flex items-start justify-between gap-2">
@@ -137,21 +137,42 @@ function isOfficeFile(m: string, name: string) {
   )
 }
 
-// side panel is w-80 (20rem) — cap media to viewport minus the panel and the modal's border
-const MEDIA_MAX_W = "max-w-[calc(95vw-20rem-2px)]"
-const MEDIA_MAX_H = "max-h-[calc(90vh-2px)]"
-// documents fill the available inner space and scroll internally
-const DOC_BOX = "w-[calc(95vw-20rem-2px)] h-[calc(90vh-2px)] overflow-auto"
+// "modal" layout caps media to the viewport minus the 20rem side panel and
+// the modal's border. "fill" layout lets the viewer take 100% of its parent
+// (used by callers that already give it a definite height, e.g. share pages).
+const MODAL_MEDIA = {
+  w: "max-w-[calc(95vw-20rem-2px)]",
+  h: "max-h-[calc(90vh-2px)]",
+  doc: "w-[calc(95vw-20rem-2px)] h-[calc(90vh-2px)] overflow-auto",
+}
+const FILL_MEDIA = {
+  w: "max-w-full",
+  h: "max-h-full",
+  doc: "h-full w-full overflow-auto",
+}
 
-function PreviewBody({ file, src }: { file: FileItem; src: string }) {
+export type FileViewerLayout = "modal" | "fill"
+
+// Exported so other surfaces (e.g. public share pages) can render a file
+// inline using a caller-supplied URL without pulling in the full sidebar UI.
+export function FileViewer({
+  file,
+  src,
+  layout = "modal",
+}: {
+  file: FileItem
+  src: string
+  layout?: FileViewerLayout
+}) {
   const mime = file.mimeType
+  const sizing = layout === "fill" ? FILL_MEDIA : MODAL_MEDIA
 
   if (mime.startsWith("image/")) {
     return (
       <img
         src={src}
         alt={file.name}
-        className={`block ${MEDIA_MAX_H} ${MEDIA_MAX_W} object-contain`}
+        className={`block ${sizing.h} ${sizing.w} object-contain`}
       />
     )
   }
@@ -161,7 +182,9 @@ function PreviewBody({ file, src }: { file: FileItem; src: string }) {
         src={src}
         controls
         autoPlay
-        className={`block bg-black ${MEDIA_MAX_H} ${MEDIA_MAX_W}`}
+        className={`block bg-black ${sizing.h} ${sizing.w} ${
+          layout === "fill" ? "h-full w-full" : ""
+        }`}
       />
     )
   }
@@ -174,26 +197,26 @@ function PreviewBody({ file, src }: { file: FileItem; src: string }) {
   }
   if (mime === "application/pdf") {
     return (
-      <iframe src={src} className={`${DOC_BOX} border-0`} title={file.name} />
+      <iframe src={src} className={`${sizing.doc} border-0`} title={file.name} />
     )
   }
   if (isCsvFile(mime, file.name)) {
     return (
-      <div className={DOC_BOX}>
+      <div className={sizing.doc}>
         <CsvPreview src={src} delimiter={/\.tsv$/i.test(file.name) ? "\t" : ","} />
       </div>
     )
   }
   if (isTextFile(mime, file.name)) {
     return (
-      <div className={DOC_BOX}>
+      <div className={sizing.doc}>
         <TextPreview src={src} />
       </div>
     )
   }
   if (isOfficeFile(mime, file.name)) {
     return (
-      <div className={DOC_BOX}>
+      <div className={sizing.doc}>
         <OfficePreview src={src} name={file.name} />
       </div>
     )

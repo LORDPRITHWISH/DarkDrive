@@ -3,6 +3,49 @@ import { apiGet, apiJson, apiUpload } from "@/lib/api"
 import type { Breadcrumb, FileItem, Folder, Space } from "@/lib/types"
 import { useMe } from "./me"
 
+const DEFAULT_CHUNK_SIZE = 25 * 1024 * 1024
+
+async function uploadFileChunked(
+  folderId: string,
+  file: File,
+  onProgress: (loaded: number) => void
+) {
+  const init = await apiJson<{ uploadId: string; chunkSize: number }>(
+    "/api/files/upload/init",
+    "POST",
+    { folderId, name: file.name, size: file.size, mimeType: file.type || undefined }
+  )
+  const chunkSize = init.chunkSize || DEFAULT_CHUNK_SIZE
+  const total = Math.max(1, Math.ceil(file.size / chunkSize))
+  let sent = 0
+  try {
+    for (let i = 0; i < total; i++) {
+      const start = i * chunkSize
+      const end = Math.min(start + chunkSize, file.size)
+      const blob = file.slice(start, end)
+      const form = new FormData()
+      form.append("chunkIndex", String(i))
+      form.append("chunk", blob, `${i}`)
+      const chunkStart = sent
+      await apiUpload(`/api/files/upload/${init.uploadId}/chunk`, form, (pct) => {
+        onProgress(chunkStart + (pct / 100) * (end - start))
+      })
+      sent += end - start
+      onProgress(sent)
+    }
+    await apiJson(`/api/files/upload/${init.uploadId}/complete`, "POST", {
+      totalChunks: total,
+    })
+  } catch (e) {
+    // Best-effort abort so the server can drop tmp chunks immediately rather
+    // than waiting for the TTL sweep.
+    try {
+      await apiJson(`/api/files/upload/${init.uploadId}`, "DELETE")
+    } catch {}
+    throw e
+  }
+}
+
 type ContentsResponse = {
   folder: Folder
   folders: Folder[]
@@ -22,7 +65,16 @@ type DriveState = {
   view: "grid" | "list"
   selection: Set<string>
   spaces: Space[]
-  uploads: { id: string; name: string; progress: number; done: boolean; error?: string }[]
+  uploads: {
+    id: string
+    name: string
+    size: number
+    loaded: number
+    progress: number
+    speed: number
+    done: boolean
+    error?: string
+  }[]
 
   setView: (v: "grid" | "list") => void
   toggleHidden: () => void
@@ -184,32 +236,55 @@ export const useDrive = create<DriveState>((set, get) => ({
     const folderId = explicitTargetId ?? get().currentFolderId
     if (!folderId) return
     const list = Array.from(files)
-    const batches: File[][] = []
-    const BATCH = 8
-    for (let i = 0; i < list.length; i += BATCH) batches.push(list.slice(i, i + BATCH))
 
-    for (const batch of batches) {
-      const form = new FormData()
-      form.append("folderId", folderId)
-      for (const f of batch) form.append("files", f)
+    for (const file of list) {
       const uid = crypto.randomUUID()
-      const name = batch.map((f) => f.name).join(", ")
-      set({ uploads: [...get().uploads, { id: uid, name, progress: 0, done: false }] })
+      set({
+        uploads: [
+          ...get().uploads,
+          {
+            id: uid,
+            name: file.name,
+            size: file.size,
+            loaded: 0,
+            progress: 0,
+            speed: 0,
+            done: false,
+          },
+        ],
+      })
+      // Rolling window for speed estimation — keeps ~2s of samples so bursts
+      // and network jitter don't dominate the reported rate.
+      const samples: { t: number; loaded: number }[] = [
+        { t: performance.now(), loaded: 0 },
+      ]
       try {
-        await apiUpload("/api/files/upload", form, (pct) => {
+        await uploadFileChunked(folderId, file, (loaded) => {
+          const now = performance.now()
+          samples.push({ t: now, loaded })
+          while (samples.length > 2 && now - samples[0].t > 2000) samples.shift()
+          const first = samples[0]
+          const last = samples[samples.length - 1]
+          const dt = (last.t - first.t) / 1000
+          const speed = dt > 0 ? (last.loaded - first.loaded) / dt : 0
+          const progress = file.size > 0 ? (loaded / file.size) * 100 : 100
           set({
-            uploads: get().uploads.map((u) => (u.id === uid ? { ...u, progress: pct } : u)),
+            uploads: get().uploads.map((u) =>
+              u.id === uid ? { ...u, loaded, progress, speed } : u
+            ),
           })
         })
         set({
           uploads: get().uploads.map((u) =>
-            u.id === uid ? { ...u, progress: 100, done: true } : u
+            u.id === uid
+              ? { ...u, loaded: file.size, progress: 100, speed: 0, done: true }
+              : u
           ),
         })
       } catch (e: any) {
         set({
           uploads: get().uploads.map((u) =>
-            u.id === uid ? { ...u, error: e.message, done: true } : u
+            u.id === uid ? { ...u, error: e.message, speed: 0, done: true } : u
           ),
         })
       }

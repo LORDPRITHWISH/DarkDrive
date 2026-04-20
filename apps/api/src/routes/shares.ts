@@ -138,10 +138,11 @@ sharesRouter.get("/:token/download/:fileId?", async (req, res) => {
 
   const abs = absolutePath(file.storageKey)
   if (!fs.existsSync(abs)) return res.status(410).json({ error: "gone" })
+  const inline = req.query.inline === "1"
   res.setHeader("Content-Type", file.mimeType)
   res.setHeader(
     "Content-Disposition",
-    `attachment; filename="${encodeURIComponent(file.name)}"`
+    `${inline ? "inline" : "attachment"}; filename="${encodeURIComponent(file.name)}"`
   )
   fs.createReadStream(abs).pipe(res)
 })

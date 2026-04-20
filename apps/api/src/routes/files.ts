@@ -1,6 +1,7 @@
 import { Router } from "express"
 import { z } from "zod"
 import fs from "node:fs"
+import crypto from "node:crypto"
 import multer from "multer"
 import path from "node:path"
 import mime from "mime-types"
@@ -22,81 +23,257 @@ import {
 
 export const filesRouter = Router()
 
-const upload = multer({
+// Client-visible chunk size. Sits below typical reverse-proxy body limits
+// while keeping round-trips low.
+const CHUNK_SIZE = 25 * 1024 * 1024
+// Hard cap on an individual chunk request body. Gives clients some slack if
+// they pick a slightly larger chunk size, while still keeping each request
+// below proxy limits.
+const MAX_CHUNK_BYTES = 32 * 1024 * 1024
+// Upload sessions past this age are cleaned up; clients must re-init.
+const SESSION_TTL_MS = 60 * 60 * 1000
+
+const UPLOADS_ROOT = path.join(STORAGE_ROOT, ".uploads")
+fs.mkdirSync(UPLOADS_ROOT, { recursive: true })
+
+type UploadSession = {
+  userId: string
+  folderId: string
+  name: string
+  size: number
+  mimeType: string
+  tmpDir: string
+  chunks: Set<number>
+  createdAt: number
+}
+// In-memory session registry. If the API restarts mid-upload the client must
+// restart — acceptable trade-off for the simpler implementation, and matches
+// the pre-chunking behavior (a single POST also fails on restart).
+const sessions = new Map<string, UploadSession>()
+
+setInterval(() => {
+  const now = Date.now()
+  for (const [id, s] of sessions) {
+    if (now - s.createdAt > SESSION_TTL_MS) {
+      try {
+        fs.rmSync(s.tmpDir, { recursive: true, force: true })
+      } catch {}
+      sessions.delete(id)
+    }
+  }
+}, 10 * 60 * 1000).unref()
+
+const chunkUpload = multer({
   storage: multer.diskStorage({
     destination: (_req, _file, cb) => {
       const tmp = path.join(STORAGE_ROOT, ".tmp")
       fs.mkdirSync(tmp, { recursive: true })
       cb(null, tmp)
     },
-    filename: (_req, file, cb) =>
-      cb(null, `${Date.now()}-${Math.random().toString(36).slice(2)}-${file.originalname}`),
+    filename: (_req, _file, cb) =>
+      cb(null, `${Date.now()}-${crypto.randomBytes(8).toString("hex")}`),
   }),
-  limits: { fileSize: env.MAX_UPLOAD_MB * 1024 * 1024 },
+  limits: { fileSize: MAX_CHUNK_BYTES },
 })
 
 filesRouter.use(requireAuth)
 
-filesRouter.post("/upload", upload.array("files", 100), async (req, res) => {
+// Start a chunked upload. Reserves quota and sets up a tmp dir for chunks.
+filesRouter.post("/upload/init", async (req, res) => {
   const user = currentUser(req)
-  const folderId = z.string().parse(req.body.folderId)
-  const folder = await getFolderWithAccess(user.id, folderId, "write")
-  const files = (req.files as Express.Multer.File[]) ?? []
-  if (!folder) {
-    for (const f of files) fs.unlinkSync(f.path)
-    return res.status(403).json({ error: "forbidden" })
-  }
+  const body = z
+    .object({
+      folderId: z.string(),
+      name: z.string().min(1).max(255),
+      size: z.number().int().nonnegative(),
+      mimeType: z.string().max(255).optional(),
+    })
+    .parse(req.body)
 
-  // Quota check — always against the uploader, even when uploading into a
-  // shared space. Space owners don't pay for other members' uploads.
-  const incoming = files.reduce((n, f) => n + f.size, 0)
+  if (body.size > env.MAX_UPLOAD_MB * 1024 * 1024)
+    return res.status(413).json({ error: "too_large" })
+
+  const folder = await getFolderWithAccess(user.id, body.folderId, "write")
+  if (!folder) return res.status(403).json({ error: "forbidden" })
+
+  // Quota always charged to the uploader, even for shared-space uploads.
   const used = await prisma.file.aggregate({
     _sum: { size: true },
     where: { ownerId: user.id, isTrashed: false },
   })
   const quota = user.storageQuotaBytes ?? BigInt(0)
-  if (BigInt(used._sum.size ?? BigInt(0)) + BigInt(incoming) > quota) {
-    for (const f of files) fs.unlinkSync(f.path)
+  if (BigInt(used._sum.size ?? BigInt(0)) + BigInt(body.size) > quota)
     return res.status(413).json({ error: "quota_exceeded" })
+
+  const uploadId = crypto.randomBytes(16).toString("hex")
+  const tmpDir = path.join(UPLOADS_ROOT, uploadId)
+  fs.mkdirSync(tmpDir, { recursive: true })
+  sessions.set(uploadId, {
+    userId: user.id,
+    folderId: body.folderId,
+    name: body.name,
+    size: body.size,
+    mimeType:
+      body.mimeType || mime.lookup(body.name) || "application/octet-stream",
+    tmpDir,
+    chunks: new Set(),
+    createdAt: Date.now(),
+  })
+  res.status(201).json({ uploadId, chunkSize: CHUNK_SIZE })
+})
+
+// Upload a single chunk. Body is multipart with `chunkIndex` + `chunk` file.
+filesRouter.post(
+  "/upload/:uploadId/chunk",
+  chunkUpload.single("chunk"),
+  async (req, res) => {
+    const user = currentUser(req)
+    const s = sessions.get(req.params.uploadId)
+    const cleanup = () => {
+      if (req.file) {
+        try {
+          fs.unlinkSync(req.file.path)
+        } catch {}
+      }
+    }
+    if (!s || s.userId !== user.id) {
+      cleanup()
+      return res.status(404).json({ error: "no_session" })
+    }
+    const chunkIndex = Number(req.body?.chunkIndex)
+    if (!Number.isInteger(chunkIndex) || chunkIndex < 0) {
+      cleanup()
+      return res.status(400).json({ error: "invalid_chunk_index" })
+    }
+    if (!req.file) return res.status(400).json({ error: "no_chunk" })
+
+    const dest = path.join(s.tmpDir, String(chunkIndex))
+    fs.renameSync(req.file.path, dest)
+    s.chunks.add(chunkIndex)
+    res.json({ ok: true, received: s.chunks.size })
+  }
+)
+
+// Finalize: concatenate chunks in order, write the file, create the DB rows.
+filesRouter.post("/upload/:uploadId/complete", async (req, res) => {
+  const user = currentUser(req)
+  const s = sessions.get(req.params.uploadId)
+  if (!s || s.userId !== user.id)
+    return res.status(404).json({ error: "no_session" })
+
+  const { totalChunks } = z
+    .object({ totalChunks: z.number().int().positive() })
+    .parse(req.body)
+
+  for (let i = 0; i < totalChunks; i++) {
+    if (!s.chunks.has(i))
+      return res.status(400).json({ error: "missing_chunk", index: i })
   }
 
-  // Uploads into a shared space store the primary file in the uploader's own
-  // drive and drop a shortcut in the destination space folder. The uploader's
-  // drive is always the canonical home for their files.
+  // Re-check access at completion — membership may have changed mid-upload.
+  const folder = await getFolderWithAccess(user.id, s.folderId, "write")
+  if (!folder) {
+    try {
+      fs.rmSync(s.tmpDir, { recursive: true, force: true })
+    } catch {}
+    sessions.delete(req.params.uploadId)
+    return res.status(403).json({ error: "forbidden" })
+  }
+
+  const key = newStorageKey(s.name)
+  const dest = ensureDirFor(key)
+  const out = fs.createWriteStream(dest)
+  try {
+    for (let i = 0; i < totalChunks; i++) {
+      const src = path.join(s.tmpDir, String(i))
+      await new Promise<void>((resolve, reject) => {
+        const rd = fs.createReadStream(src)
+        rd.on("error", reject)
+        rd.on("end", () => resolve())
+        rd.pipe(out, { end: false })
+      })
+    }
+    await new Promise<void>((resolve, reject) => {
+      out.on("error", reject)
+      out.end(() => resolve())
+    })
+  } catch (err) {
+    try {
+      fs.unlinkSync(dest)
+    } catch {}
+    try {
+      fs.rmSync(s.tmpDir, { recursive: true, force: true })
+    } catch {}
+    sessions.delete(req.params.uploadId)
+    throw err
+  }
+
+  const stat = fs.statSync(dest)
+  const abort = (status: number, error: string) => {
+    try {
+      fs.unlinkSync(dest)
+    } catch {}
+    try {
+      fs.rmSync(s.tmpDir, { recursive: true, force: true })
+    } catch {}
+    sessions.delete(req.params.uploadId)
+    return res.status(status).json({ error })
+  }
+
+  // Re-check quota at commit time (assembled size is authoritative).
+  const used = await prisma.file.aggregate({
+    _sum: { size: true },
+    where: { ownerId: user.id, isTrashed: false },
+  })
+  const quota = user.storageQuotaBytes ?? BigInt(0)
+  if (BigInt(used._sum.size ?? BigInt(0)) + BigInt(stat.size) > quota)
+    return abort(413, "quota_exceeded")
+
   const intoSharedSpace = !!folder.spaceId
   const primaryFolderId = intoSharedSpace
     ? await assertUserRootFolderId(user)
     : folder.id
   const primarySpaceId = intoSharedSpace ? null : folder.spaceId
 
-  const created = []
-  for (const f of files) {
-    const key = newStorageKey(f.originalname)
-    const dest = ensureDirFor(key)
-    fs.renameSync(f.path, dest)
-    const rec = await prisma.$transaction(async (tx) => {
-      const file = await tx.file.create({
-        data: {
-          name: f.originalname,
-          folderId: primaryFolderId,
-          ownerId: user.id,
-          spaceId: primarySpaceId,
-          size: BigInt(f.size),
-          mimeType:
-            f.mimetype || mime.lookup(f.originalname) || "application/octet-stream",
-          storageKey: key,
-        },
-      })
-      if (intoSharedSpace) {
-        await tx.fileShortcut.create({
-          data: { fileId: file.id, folderId: folder.id },
-        })
-      }
-      return file
+  const rec = await prisma.$transaction(async (tx) => {
+    const file = await tx.file.create({
+      data: {
+        name: s.name,
+        folderId: primaryFolderId,
+        ownerId: user.id,
+        spaceId: primarySpaceId,
+        size: BigInt(stat.size),
+        mimeType: s.mimeType,
+        storageKey: key,
+      },
     })
-    created.push({ ...rec, size: Number(rec.size) })
+    if (intoSharedSpace) {
+      await tx.fileShortcut.create({
+        data: { fileId: file.id, folderId: folder.id },
+      })
+    }
+    return file
+  })
+
+  try {
+    fs.rmSync(s.tmpDir, { recursive: true, force: true })
+  } catch {}
+  sessions.delete(req.params.uploadId)
+
+  res.status(201).json({ file: { ...rec, size: Number(rec.size) } })
+})
+
+// Abort / cleanup. Safe to call whether or not the session still exists.
+filesRouter.delete("/upload/:uploadId", async (req, res) => {
+  const user = currentUser(req)
+  const s = sessions.get(req.params.uploadId)
+  if (s && s.userId === user.id) {
+    try {
+      fs.rmSync(s.tmpDir, { recursive: true, force: true })
+    } catch {}
+    sessions.delete(req.params.uploadId)
   }
-  res.status(201).json({ files: created })
+  res.json({ ok: true })
 })
 
 // Create a shortcut of a file into another folder (e.g. add to space).

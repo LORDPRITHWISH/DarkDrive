@@ -1,8 +1,9 @@
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useDrive } from "@/store/drive"
-import type { FileItem, Folder } from "@/lib/types"
+import type { Folder } from "@/lib/types"
 import { apiUrl } from "@/lib/config"
+import { sortFiles, sortFolders } from "@/lib/sort"
 import { ShareDialog } from "./ShareDialog"
 import { FilePreview } from "./FilePreview"
 import { NewFolderDialog } from "./NewFolderDialog"
@@ -19,6 +20,9 @@ export function FileGrid() {
     files,
     view,
     selection,
+    sort,
+    preview,
+    setPreview,
     select,
     trashItem,
     toggleHiddenItem,
@@ -29,6 +33,8 @@ export function FileGrid() {
     moveItem,
     removeShortcut,
   } = useDrive()
+  const sortedFolders = useMemo(() => sortFolders(folders, sort), [folders, sort])
+  const sortedFiles = useMemo(() => sortFiles(files, sort), [files, sort])
 
   async function handleMoveDrop(
     targetFolderId: string,
@@ -46,7 +52,6 @@ export function FileGrid() {
   const [share, setShare] = useState<
     { type: "FILE" | "FOLDER"; id: string; name: string } | null
   >(null)
-  const [preview, setPreview] = useState<FileItem | null>(null)
   const [colorEditFolder, setColorEditFolder] = useState<Folder | null>(null)
   const [moveTarget, setMoveTarget] = useState<
     | {
@@ -96,7 +101,7 @@ export function FileGrid() {
     <div onClick={closeMenu}>
       {view === "grid" ? (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-3 p-2">
-          {folders.map((f) => (
+          {sortedFolders.map((f) => (
             <FolderCard
               key={f.id}
               folder={f}
@@ -112,7 +117,7 @@ export function FileGrid() {
               onRenameCancel={() => setRenaming(null)}
             />
           ))}
-          {files.map((f) => (
+          {sortedFiles.map((f) => (
             <FileCard
               key={f.id}
               file={f}
@@ -130,8 +135,8 @@ export function FileGrid() {
         </div>
       ) : (
         <FileListView
-          folders={folders}
-          files={files}
+          folders={sortedFolders}
+          files={sortedFiles}
           selection={selection}
           onSelect={(id, e) => select(id, e.metaKey || e.ctrlKey || e.shiftKey)}
           onOpenFolder={(id) => nav(`/drive/${id}`)}

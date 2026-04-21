@@ -11,6 +11,7 @@ import { Button } from "@workspace/ui/components/button"
 import { apiGet, apiJson } from "@/lib/api"
 import { useDrive } from "@/store/drive"
 import { useMe } from "@/store/me"
+import { toast } from "@/store/toast"
 import { formatBytes, formatDate } from "@/lib/format"
 import { iconFor } from "@/lib/fileIcon"
 import { FilePreview } from "@/components/FilePreview"
@@ -72,9 +73,18 @@ export function BinPage() {
       return
     setClearing(true)
     try {
-      await apiJson("/api/me/trash/empty", "POST")
+      const r = await apiJson<{ files: number; folders: number }>(
+        "/api/me/trash/empty",
+        "POST"
+      )
       await reload()
       void loadQuota()
+      toast.success(
+        `Bin emptied — ${r.files} file${r.files === 1 ? "" : "s"}` +
+          ` and ${r.folders} folder${r.folders === 1 ? "" : "s"} deleted.`
+      )
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't empty the bin.")
     } finally {
       setClearing(false)
     }

@@ -8,6 +8,7 @@ import type {
   Space,
 } from "@/lib/types"
 import { useMe } from "./me"
+import { toast } from "./toast"
 
 const DEFAULT_CHUNK_SIZE = 25 * 1024 * 1024
 
@@ -59,6 +60,39 @@ type ContentsResponse = {
   breadcrumbs: Breadcrumb[]
 }
 
+export type SortKey = "name" | "size" | "modified" | "type"
+export type SortDir = "asc" | "desc"
+export type SortState = { key: SortKey; dir: SortDir }
+
+const DEFAULT_SORT: SortState = { key: "name", dir: "asc" }
+
+function sortStorageKey(folderId: string) {
+  return `dd.sort.${folderId}`
+}
+
+function readSort(folderId: string): SortState {
+  try {
+    const raw = localStorage.getItem(sortStorageKey(folderId))
+    if (!raw) return DEFAULT_SORT
+    const parsed = JSON.parse(raw) as SortState
+    if (
+      (parsed.key === "name" ||
+        parsed.key === "size" ||
+        parsed.key === "modified" ||
+        parsed.key === "type") &&
+      (parsed.dir === "asc" || parsed.dir === "desc")
+    )
+      return parsed
+  } catch {}
+  return DEFAULT_SORT
+}
+
+function writeSort(folderId: string, sort: SortState) {
+  try {
+    localStorage.setItem(sortStorageKey(folderId), JSON.stringify(sort))
+  } catch {}
+}
+
 type DriveState = {
   currentFolderId: string | null
   folder: Folder | null
@@ -72,6 +106,8 @@ type DriveState = {
   selection: Set<string>
   spaces: Space[]
   publicSpaces: PublicSpace[]
+  sort: SortState
+  preview: FileItem | null
   uploads: {
     id: string
     name: string
@@ -85,6 +121,8 @@ type DriveState = {
 
   setView: (v: "grid" | "list") => void
   toggleHidden: () => void
+  setSort: (sort: SortState) => void
+  setPreview: (file: FileItem | null) => void
   select: (id: string, multi?: boolean) => void
   clearSelection: () => void
 
@@ -145,6 +183,8 @@ export const useDrive = create<DriveState>((set, get) => ({
   selection: new Set(),
   spaces: [],
   publicSpaces: [],
+  sort: DEFAULT_SORT,
+  preview: null,
   uploads: [],
 
   setView: (v) => set({ view: v }),
@@ -152,6 +192,12 @@ export const useDrive = create<DriveState>((set, get) => ({
     set({ showHidden: !get().showHidden })
     void get().refresh()
   },
+  setSort: (sort) => {
+    set({ sort })
+    const id = get().currentFolderId
+    if (id) writeSort(id, sort)
+  },
+  setPreview: (file) => set({ preview: file }),
   select: (id, multi) => {
     const cur = new Set(get().selection)
     if (multi) cur.has(id) ? cur.delete(id) : cur.add(id)
@@ -164,7 +210,15 @@ export const useDrive = create<DriveState>((set, get) => ({
   clearSelection: () => set({ selection: new Set() }),
 
   loadFolder: async (id: string) => {
-    set({ loading: true, error: null, currentFolderId: id, selection: new Set() })
+    set({
+      loading: true,
+      error: null,
+      currentFolderId: id,
+      selection: new Set(),
+      // Pick up the persisted sort for this folder so each folder remembers
+      // its own preferred ordering.
+      sort: readSort(id),
+    })
     try {
       const q = new URLSearchParams()
       if (get().showHidden) q.set("includeHidden", "1")
@@ -222,20 +276,55 @@ export const useDrive = create<DriveState>((set, get) => ({
     await get().refresh()
   },
   trashItem: async (type, id) => {
-    await apiJson(`/api/${type === "folder" ? "folders" : "files"}/${id}`, "PATCH", {
-      isTrashed: true,
-    })
-    await get().refresh()
+    // Capture the item's name before it's refreshed out of the list, so the
+    // undo toast can show a meaningful label.
+    const list = type === "folder" ? get().folders : get().files
+    const name = list.find((x) => x.id === id)?.name
+    try {
+      await apiJson(
+        `/api/${type === "folder" ? "folders" : "files"}/${id}`,
+        "PATCH",
+        { isTrashed: true }
+      )
+      await get().refresh()
+      const label = name ? `"${name}"` : type === "folder" ? "Folder" : "File"
+      toast.action(`${label} moved to bin`, {
+        label: "Undo",
+        onClick: () => get().restoreItem(type, id),
+      })
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : "Couldn't move to bin."
+      )
+      throw e
+    }
   },
   restoreItem: async (type, id) => {
-    await apiJson(`/api/${type === "folder" ? "folders" : "files"}/${id}`, "PATCH", {
-      isTrashed: false,
-    })
-    await get().refresh()
+    try {
+      await apiJson(
+        `/api/${type === "folder" ? "folders" : "files"}/${id}`,
+        "PATCH",
+        { isTrashed: false }
+      )
+      await get().refresh()
+      toast.success("Restored.")
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't restore.")
+      throw e
+    }
   },
   deleteItem: async (type, id) => {
-    await apiJson(`/api/${type === "folder" ? "folders" : "files"}/${id}`, "DELETE")
-    await get().refresh()
+    try {
+      await apiJson(
+        `/api/${type === "folder" ? "folders" : "files"}/${id}`,
+        "DELETE"
+      )
+      await get().refresh()
+      toast.success(`${type === "folder" ? "Folder" : "File"} deleted.`)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't delete.")
+      throw e
+    }
   },
   removeShortcut: async (shortcutId) => {
     await apiJson(`/api/files/shortcuts/${shortcutId}`, "DELETE")
@@ -330,22 +419,40 @@ export const useDrive = create<DriveState>((set, get) => ({
     set({ publicSpaces: data.spaces })
   },
   createSpace: async (name, opts) => {
-    const s = await apiJson<Space>("/api/spaces", "POST", {
-      name,
-      color: opts?.color ?? null,
-      logoKey: opts?.logoKey ?? null,
-      icon: opts?.icon ?? null,
-    })
-    await get().loadSpaces()
-    return s
+    try {
+      const s = await apiJson<Space>("/api/spaces", "POST", {
+        name,
+        color: opts?.color ?? null,
+        logoKey: opts?.logoKey ?? null,
+        icon: opts?.icon ?? null,
+      })
+      await get().loadSpaces()
+      toast.success(`Space "${name}" created.`)
+      return s
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't create space.")
+      throw e
+    }
   },
   updateSpace: async (spaceId, patch) => {
-    await apiJson(`/api/spaces/${spaceId}`, "PATCH", patch)
-    await get().loadSpaces()
+    try {
+      await apiJson(`/api/spaces/${spaceId}`, "PATCH", patch)
+      await get().loadSpaces()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't update space.")
+      throw e
+    }
   },
   addMember: async (spaceId, email, role = "EDITOR") => {
-    await apiJson(`/api/spaces/${spaceId}/members`, "POST", { email, role })
-    await get().loadSpaces()
+    try {
+      await apiJson(`/api/spaces/${spaceId}/members`, "POST", { email, role })
+      await get().loadSpaces()
+      toast.success(`Invited ${email}.`)
+    } catch (e) {
+      // Let the dialog surface field-level errors (user_not_found, etc.) —
+      // rethrow so the caller's catch can decide. No toast on known errors.
+      throw e
+    }
   },
   updateMemberRole: async (spaceId, userId, role) => {
     await apiJson(`/api/spaces/${spaceId}/members/${userId}`, "PATCH", { role })
@@ -356,7 +463,13 @@ export const useDrive = create<DriveState>((set, get) => ({
     await get().loadSpaces()
   },
   deleteSpace: async (spaceId) => {
-    await apiJson(`/api/spaces/${spaceId}`, "DELETE")
-    await get().loadSpaces()
+    try {
+      await apiJson(`/api/spaces/${spaceId}`, "DELETE")
+      await get().loadSpaces()
+      toast.success("Space deleted.")
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't delete space.")
+      throw e
+    }
   },
 }))

@@ -17,6 +17,7 @@ import { BinPage } from "@/pages/Bin"
 import { LandingPage } from "@/pages/Landing"
 import { StarredPage } from "@/pages/Starred"
 import { UploadToaster } from "@/components/UploadToaster"
+import { Toaster } from "@/components/Toaster"
 import { getSocket } from "@/lib/socket"
 
 function Protected({ children }: { children: React.ReactNode }) {
@@ -53,6 +54,7 @@ export function App() {
   }, [])
   return (
     <BrowserRouter>
+      <Toaster />
       <UploadToaster />
       <Routes>
         <Route path="/" element={<Root />} />

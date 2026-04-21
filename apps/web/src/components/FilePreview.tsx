@@ -30,19 +30,22 @@ export function FilePreview({
       onClick={onClose}
     >
       <div
-        className="bg-background flex max-h-[90vh] max-w-[95vw] overflow-hidden rounded-lg border"
+        className="flex max-h-[90vh] max-w-[95vw] overflow-hidden rounded-lg border bg-background"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="bg-muted flex min-w-0 items-center justify-center overflow-hidden">
+        <div className="flex min-w-0 items-center justify-center overflow-hidden bg-muted">
           <FileViewer file={file} src={inlineSrc} />
         </div>
         <aside className="flex w-80 shrink-0 flex-col gap-3 overflow-auto border-l p-4">
           <div className="flex items-start justify-between gap-2">
-            <h3 className="min-w-0 flex-1 truncate font-semibold" title={file.name}>
+            <h3
+              className="min-w-0 flex-1 truncate font-semibold"
+              title={file.name}
+            >
               {file.name}
             </h3>
             <button
-              className="hover:bg-accent shrink-0 rounded p-1"
+              className="shrink-0 rounded p-1 hover:bg-accent"
               onClick={onClose}
               aria-label="Close"
             >
@@ -51,12 +54,12 @@ export function FilePreview({
           </div>
           <a
             href={dlHref}
-            className="text-primary inline-flex items-center gap-1.5 text-sm hover:underline"
+            className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
           >
             <DownloadIcon size={14} /> Download
           </a>
           <div className="border-t pt-3">
-            <div className="text-muted-foreground mb-2 text-xs font-medium uppercase tracking-wider">
+            <div className="mb-2 text-xs font-medium tracking-wider text-muted-foreground uppercase">
               Properties
             </div>
             <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-sm">
@@ -69,22 +72,34 @@ export function FilePreview({
               <Info label="Trashed" value={file.isTrashed ? "Yes" : "No"} />
               <Info
                 label="ID"
-                value={<span className="font-mono text-xs break-all">{file.id}</span>}
+                value={
+                  <span className="font-mono text-xs break-all">{file.id}</span>
+                }
               />
               <Info
                 label="Folder"
-                value={<span className="font-mono text-xs break-all">{file.folderId}</span>}
+                value={
+                  <span className="font-mono text-xs break-all">
+                    {file.folderId}
+                  </span>
+                }
               />
               {file.spaceId && (
                 <Info
                   label="Space"
-                  value={<span className="font-mono text-xs break-all">{file.spaceId}</span>}
+                  value={
+                    <span className="font-mono text-xs break-all">
+                      {file.spaceId}
+                    </span>
+                  }
                 />
               )}
               <Info
                 label="Key"
                 value={
-                  <span className="font-mono text-xs break-all">{file.storageKey}</span>
+                  <span className="font-mono text-xs break-all">
+                    {file.storageKey}
+                  </span>
                 }
               />
             </dl>
@@ -197,13 +212,20 @@ export function FileViewer({
   }
   if (mime === "application/pdf") {
     return (
-      <iframe src={src} className={`${sizing.doc} border-0`} title={file.name} />
+      <iframe
+        src={src}
+        className={`${sizing.doc} border-0`}
+        title={file.name}
+      />
     )
   }
   if (isCsvFile(mime, file.name)) {
     return (
       <div className={sizing.doc}>
-        <CsvPreview src={src} delimiter={/\.tsv$/i.test(file.name) ? "\t" : ","} />
+        <CsvPreview
+          src={src}
+          delimiter={/\.tsv$/i.test(file.name) ? "\t" : ","}
+        />
       </div>
     )
   }
@@ -222,7 +244,7 @@ export function FileViewer({
     )
   }
   return (
-    <div className="text-muted-foreground grid w-md max-w-[80vw] place-items-center p-10 text-center">
+    <div className="grid w-md max-w-[80vw] place-items-center p-10 text-center text-muted-foreground">
       <div>
         <div className="mb-2 text-lg">Preview not available</div>
         <div className="text-sm">Download the file to view it.</div>
@@ -254,12 +276,12 @@ function TextPreview({ src }: { src: string }) {
   }, [src])
 
   if (err)
-    return <div className="text-destructive p-8 text-sm">Failed to load: {err}</div>
+    return (
+      <div className="p-8 text-sm text-destructive">Failed to load: {err}</div>
+    )
   if (text === null)
-    return <div className="text-muted-foreground p-8 text-sm">Loading…</div>
-  return (
-    <pre className="p-4 font-mono text-xs whitespace-pre">{text}</pre>
-  )
+    return <div className="p-8 text-sm text-muted-foreground">Loading…</div>
+  return <pre className="p-4 font-mono text-xs whitespace-pre">{text}</pre>
 }
 
 function parseCsv(text: string, delimiter: string): string[][] {
@@ -328,16 +350,19 @@ function CsvPreview({ src, delimiter }: { src: string; delimiter: string }) {
   }, [src, delimiter])
 
   if (err)
-    return <div className="text-destructive p-8 text-sm">Failed to load: {err}</div>
-  if (!rows) return <div className="text-muted-foreground p-8 text-sm">Loading…</div>
+    return (
+      <div className="p-8 text-sm text-destructive">Failed to load: {err}</div>
+    )
+  if (!rows)
+    return <div className="p-8 text-sm text-muted-foreground">Loading…</div>
   if (rows.length === 0)
-    return <div className="text-muted-foreground p-8 text-sm">Empty</div>
+    return <div className="p-8 text-sm text-muted-foreground">Empty</div>
 
   const [head, ...body] = rows
   return (
     <div className="overflow-auto p-2">
       <table className="border-collapse text-sm">
-        <thead className="bg-accent sticky top-0">
+        <thead className="sticky top-0 bg-accent">
           <tr>
             {head.map((h, i) => (
               <th key={i} className="border px-2 py-1 text-left font-medium">
@@ -369,7 +394,38 @@ function OfficePreview({ src, name }: { src: string; name: string }) {
 
   if (isLocal) {
     return (
-      <div className="text-muted-foreground grid h-full place-items-center p-8 text-center">
+      <div className="grid h-full place-items-center p-8 text-center text-muted-foreground">
+        <div className="mb-4 w-full max-w-2xl rounded border bg-muted p-4 text-left">
+          <div className="mb-3 text-xs font-medium tracking-wider uppercase">
+            Preview URLs
+          </div>
+          <dl className="space-y-3 text-sm">
+            <div>
+              <dt className="mb-1 text-xs font-medium text-muted-foreground">
+                Viewer URL
+              </dt>
+              <dd className="rounded bg-background px-3 py-2 font-mono text-xs break-all text-foreground">
+                {viewer}
+              </dd>
+            </div>
+            <div>
+              <dt className="mb-1 text-xs font-medium text-muted-foreground">
+                Resolved Source
+              </dt>
+              <dd className="rounded bg-background px-3 py-2 font-mono text-xs break-all text-foreground">
+                {full}
+              </dd>
+            </div>
+            <div>
+              <dt className="mb-1 text-xs font-medium text-muted-foreground">
+                Original Source
+              </dt>
+              <dd className="rounded bg-background px-3 py-2 font-mono text-xs break-all text-foreground">
+                {src}
+              </dd>
+            </div>
+          </dl>
+        </div>
         <div>
           <div className="mb-2 text-lg">Office preview needs a public URL</div>
           <div className="text-sm">
@@ -382,11 +438,44 @@ function OfficePreview({ src, name }: { src: string; name: string }) {
     )
   }
   return (
-    <iframe
-      src={viewer}
-      className="h-full w-full border-0"
-      title={name}
-      allowFullScreen
-    />
+    <>
+      <div className="mb-4 w-full max-w-2xl rounded border bg-muted p-4 text-left">
+        <div className="mb-3 text-xs font-medium tracking-wider uppercase">
+          Preview URLs
+        </div>
+        <dl className="space-y-3 text-sm">
+          <div>
+            <dt className="mb-1 text-xs font-medium text-muted-foreground">
+              Viewer URL
+            </dt>
+            <dd className="rounded bg-background px-3 py-2 font-mono text-xs break-all text-foreground">
+              {viewer}
+            </dd>
+          </div>
+          <div>
+            <dt className="mb-1 text-xs font-medium text-muted-foreground">
+              Resolved Source
+            </dt>
+            <dd className="rounded bg-background px-3 py-2 font-mono text-xs break-all text-foreground">
+              {full}
+            </dd>
+          </div>
+          <div>
+            <dt className="mb-1 text-xs font-medium text-muted-foreground">
+              Original Source
+            </dt>
+            <dd className="rounded bg-background px-3 py-2 font-mono text-xs break-all text-foreground">
+              {src}
+            </dd>
+          </div>
+        </dl>
+      </div>
+      <iframe
+        src={viewer}
+        className="h-full w-full border-0"
+        title={name}
+        allowFullScreen
+      />
+    </>
   )
 }

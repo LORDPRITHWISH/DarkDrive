@@ -1,4 +1,4 @@
-import { Router } from "express"
+import { Router, type Response } from "express"
 import { z } from "zod"
 import fs from "node:fs"
 import crypto from "node:crypto"
@@ -50,6 +50,7 @@ type UploadSession = {
 // restart — acceptable trade-off for the simpler implementation, and matches
 // the pre-chunking behavior (a single POST also fails on restart).
 const sessions = new Map<string, UploadSession>()
+const OFFICE_PREVIEW_TTL_MS = 60 * 60 * 1000
 
 setInterval(() => {
   const now = Date.now()
@@ -74,6 +75,120 @@ const chunkUpload = multer({
       cb(null, `${Date.now()}-${crypto.randomBytes(8).toString("hex")}`),
   }),
   limits: { fileSize: MAX_CHUNK_BYTES },
+})
+
+function isOfficeFile(file: { mimeType: string; name: string }) {
+  return (
+    /\.(pptx?|docx?|xlsx?)$/i.test(file.name) ||
+    file.mimeType.includes("officedocument") ||
+    file.mimeType.includes("ms-powerpoint") ||
+    file.mimeType === "application/msword" ||
+    file.mimeType === "application/vnd.ms-excel"
+  )
+}
+
+function previewSignature(
+  file: { id: string; storageKey: string },
+  expiresAt: number
+) {
+  return crypto
+    .createHmac("sha256", env.SESSION_SECRET)
+    .update(`${file.id}:${file.storageKey}:${expiresAt}`)
+    .digest("base64url")
+}
+
+function safeEqual(a: string, b: string) {
+  const aBuf = Buffer.from(a)
+  const bBuf = Buffer.from(b)
+  return aBuf.length === bBuf.length && crypto.timingSafeEqual(aBuf, bBuf)
+}
+
+function streamFile(
+  res: Response,
+  file: { name: string; mimeType: string; storageKey: string },
+  disposition: "inline" | "attachment"
+) {
+  const abs = absolutePath(file.storageKey)
+  if (!fs.existsSync(abs)) {
+    res.status(410).json({ error: "gone" })
+    return
+  }
+  res.setHeader("Cache-Control", "no-store")
+  res.setHeader("Content-Type", file.mimeType)
+  res.setHeader(
+    "Content-Disposition",
+    `${disposition}; filename="${encodeURIComponent(file.name)}"`
+  )
+  fs.createReadStream(abs).pipe(res)
+}
+
+filesRouter.get("/:id/preview", async (req, res) => {
+  const sig = Array.isArray(req.query.sig) ? req.query.sig[0] : req.query.sig
+  const expires = Array.isArray(req.query.expires)
+    ? req.query.expires[0]
+    : req.query.expires
+
+  if (typeof sig === "string" || typeof expires === "string") {
+    if (typeof sig !== "string" || typeof expires !== "string") {
+      return res.status(400).json({ error: "invalid_preview_token" })
+    }
+    const expiresAt = Number(expires)
+    if (!Number.isInteger(expiresAt) || expiresAt <= 0) {
+      return res.status(400).json({ error: "invalid_preview_token" })
+    }
+    if (Date.now() > expiresAt) {
+      return res.status(410).json({ error: "expired" })
+    }
+
+    const file = await prisma.file.findUnique({ where: { id: req.params.id } })
+    if (!file) return res.status(404).json({ error: "not_found" })
+    if (!isOfficeFile(file)) {
+      return res.status(415).json({ error: "unsupported_preview" })
+    }
+    if (!safeEqual(sig, previewSignature(file, expiresAt))) {
+      return res.status(403).json({ error: "forbidden" })
+    }
+
+    return streamFile(res, file, "inline")
+  }
+
+  if (!req.user) return res.status(401).json({ error: "unauthorized" })
+
+  const user = currentUser(req)
+  const file = await getFileWithAccess(user.id, req.params.id, "read")
+  if (!file) return res.status(404).json({ error: "not_found" })
+  if (!isOfficeFile(file)) {
+    return res.status(415).json({ error: "unsupported_preview" })
+  }
+
+  prisma.fileAccess
+    .create({
+      data: {
+        userId: user.id,
+        fileId: file.id,
+        action: "view",
+      },
+    })
+    .catch(() => {})
+
+  const expiresAt = Date.now() + OFFICE_PREVIEW_TTL_MS
+  const sourceUrl = new URL(`/api/files/${file.id}/preview`, env.APP_URL)
+  sourceUrl.searchParams.set("expires", String(expiresAt))
+  sourceUrl.searchParams.set("sig", previewSignature(file, expiresAt))
+
+  const viewerUrl = new URL("https://view.officeapps.live.com/op/embed.aspx")
+  viewerUrl.searchParams.set("src", sourceUrl.toString())
+
+  if (req.query.format === "json") {
+    return res.json({
+      sourceUrl: sourceUrl.toString(),
+      viewerUrl: viewerUrl.toString(),
+      expiresAt: new Date(expiresAt).toISOString(),
+    })
+  }
+
+  res.setHeader("Cache-Control", "no-store")
+  res.redirect(viewerUrl.toString())
 })
 
 filesRouter.use(requireAuth)
@@ -314,8 +429,6 @@ filesRouter.get("/:id/download", async (req, res) => {
   const user = currentUser(req)
   const file = await getFileWithAccess(user.id, req.params.id, "read")
   if (!file) return res.status(404).json({ error: "not_found" })
-  const abs = absolutePath(file.storageKey)
-  if (!fs.existsSync(abs)) return res.status(410).json({ error: "gone" })
   // log access for recents / suggestions
   prisma.fileAccess
     .create({
@@ -326,12 +439,7 @@ filesRouter.get("/:id/download", async (req, res) => {
       },
     })
     .catch(() => {})
-  res.setHeader("Content-Type", file.mimeType)
-  res.setHeader(
-    "Content-Disposition",
-    `${req.query.inline === "1" ? "inline" : "attachment"}; filename="${encodeURIComponent(file.name)}"`
-  )
-  fs.createReadStream(abs).pipe(res)
+  streamFile(res, file, req.query.inline === "1" ? "inline" : "attachment")
 })
 
 filesRouter.patch("/:id", async (req, res) => {

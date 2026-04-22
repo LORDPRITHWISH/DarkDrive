@@ -176,19 +176,14 @@ filesRouter.get("/:id/preview", async (req, res) => {
   sourceUrl.searchParams.set("expires", String(expiresAt))
   sourceUrl.searchParams.set("sig", previewSignature(file, expiresAt))
 
-  const viewerUrl = new URL("https://view.officeapps.live.com/op/view.aspx")
-  viewerUrl.searchParams.set("src", sourceUrl.toString())
 
   if (req.query.format === "json") {
     return res.json({
       sourceUrl: sourceUrl.toString(),
-      viewerUrl: viewerUrl.toString(),
       expiresAt: new Date(expiresAt).toISOString(),
     })
   }
 
-  res.setHeader("Cache-Control", "no-store")
-  res.redirect(viewerUrl.toString())
 })
 
 filesRouter.use(requireAuth)

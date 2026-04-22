@@ -11,7 +11,10 @@ export function FilePreview({
   file: FileItem | null
   onClose: () => void
 }) {
-  const [officeProvider, setOfficeProvider] = useState<OfficeProvider>("office")
+  const [officeProviderState, setOfficeProviderState] = useState<{
+    fileId: string | null
+    provider: OfficeProvider
+  }>({ fileId: null, provider: "office" })
 
   useEffect(() => {
     if (!file) return
@@ -22,19 +25,21 @@ export function FilePreview({
     return () => window.removeEventListener("keydown", h)
   }, [file, onClose])
 
-  useEffect(() => {
-    if (file && isOfficeFile(file.mimeType, file.name)) {
-      setOfficeProvider("office")
-    }
-  }, [file])
-
   if (!file) return null
   const officeFile = isOfficeFile(file.mimeType, file.name)
+  const officeProvider =
+    officeFile && officeProviderState.fileId === file.id
+      ? officeProviderState.provider
+      : "office"
   const inlineSrc = apiUrl(`/api/files/${file.id}/download?inline=1`)
-  const viewSrc = officeFile
+  const viewSrc = officeFile 
     ? apiUrl(`/api/files/${file.id}/preview`)
     : inlineSrc
   const dlHref = apiUrl(`/api/files/${file.id}/download`)
+
+  const handleOfficeProviderChange = (provider: OfficeProvider) => {
+    setOfficeProviderState({ fileId: file.id, provider })
+  }
 
   return (
     <div
@@ -81,7 +86,7 @@ export function FilePreview({
               </div>
               <OfficeProviderSwitch
                 provider={officeProvider}
-                onChange={setOfficeProvider}
+                onChange={handleOfficeProviderChange}
               />
             </div>
           )}
@@ -241,11 +246,14 @@ export function FileViewer({
   }
   if (mime === "application/pdf") {
     return (
+      <>
+      {src}
       <iframe
         src={src}
         className={`${sizing.doc} border-0`}
         title={file.name}
-      />
+        />
+        </>
     )
   }
   if (isCsvFile(mime, file.name)) {
@@ -268,11 +276,7 @@ export function FileViewer({
   if (isOfficeFile(mime, file.name)) {
     return (
       <div className={sizing.doc}>
-        <OfficePreview
-          src={src}
-          name={file.name}
-          provider={officeProvider}
-        />
+        <OfficePreview src={src} name={file.name} provider={officeProvider} />
       </div>
     )
   }
@@ -287,34 +291,41 @@ export function FileViewer({
 }
 
 function TextPreview({ src }: { src: string }) {
-  const [text, setText] = useState<string | null>(null)
-  const [err, setErr] = useState<string | null>(null)
+  const [state, setState] = useState<{
+    src: string
+    text: string | null
+    err: string | null
+  }>({ src, text: null, err: null })
 
   useEffect(() => {
     let cancelled = false
-    setText(null)
-    setErr(null)
     fetch(src, { credentials: "include" })
       .then(async (r) => {
         if (!r.ok) throw new Error(`http_${r.status}`)
         const t = await r.text()
-        if (!cancelled) setText(t)
+        if (!cancelled) setState({ src, text: t, err: null })
       })
       .catch((e) => {
-        if (!cancelled) setErr(e.message)
+        if (!cancelled) setState({ src, text: null, err: e.message })
       })
     return () => {
       cancelled = true
     }
   }, [src])
 
-  if (err)
-    return (
-      <div className="p-8 text-sm text-destructive">Failed to load: {err}</div>
-    )
-  if (text === null)
+  if (state.src !== src)
     return <div className="p-8 text-sm text-muted-foreground">Loading…</div>
-  return <pre className="p-4 font-mono text-xs whitespace-pre">{text}</pre>
+  if (state.err)
+    return (
+      <div className="p-8 text-sm text-destructive">
+        Failed to load: {state.err}
+      </div>
+    )
+  if (state.text === null)
+    return <div className="p-8 text-sm text-muted-foreground">Loading…</div>
+  return (
+    <pre className="p-4 font-mono text-xs whitespace-pre">{state.text}</pre>
+  )
 }
 
 function parseCsv(text: string, delimiter: string): string[][] {
@@ -363,24 +374,35 @@ function parseCsv(text: string, delimiter: string): string[][] {
 function CsvPreview({ src, delimiter }: { src: string; delimiter: string }) {
   const [rows, setRows] = useState<string[][] | null>(null)
   const [err, setErr] = useState<string | null>(null)
+  const [loadedKey, setLoadedKey] = useState<string | null>(null)
+  const requestKey = `${src}::${delimiter}`
 
   useEffect(() => {
     let cancelled = false
-    setRows(null)
-    setErr(null)
     fetch(src, { credentials: "include" })
       .then(async (r) => {
         if (!r.ok) throw new Error(`http_${r.status}`)
         const t = await r.text()
-        if (!cancelled) setRows(parseCsv(t, delimiter))
+        if (!cancelled) {
+          setRows(parseCsv(t, delimiter))
+          setErr(null)
+          setLoadedKey(requestKey)
+        }
       })
       .catch((e) => {
-        if (!cancelled) setErr(e.message)
+        if (!cancelled) {
+          setRows(null)
+          setErr(e.message)
+          setLoadedKey(requestKey)
+        }
       })
     return () => {
       cancelled = true
     }
-  }, [src, delimiter])
+  }, [src, delimiter, requestKey])
+
+  if (loadedKey !== requestKey)
+    return <div className="p-8 text-sm text-muted-foreground">Loading…</div>
 
   if (err)
     return (
@@ -475,57 +497,77 @@ function OfficePreview({
   name: string
   provider: OfficeProvider
 }) {
-  const [sourceUrl, setSourceUrl] = useState<string | null>(null)
-  const [expiresAt, setExpiresAt] = useState<string | null>(null)
-  const [err, setErr] = useState<string | null>(null)
+  const [resolved, setResolved] = useState<{
+    src: string
+    sourceUrl: string
+    expiresAt: string | null
+  } | null>(null)
+  const [err, setErr] = useState<{ src: string; message: string } | null>(null)
+
+  const full = new URL(
+    src,
+    typeof window !== "undefined" ? window.location.origin : "http://localhost"
+  )
+  const usesServerPreview = /^\/api\/files\/[^/]+\/preview$/.test(full.pathname)
+  const directSourceUrl = usesServerPreview ? null : full.toString()
 
   useEffect(() => {
     let cancelled = false
-    const full = new URL(src, window.location.origin)
-    const usesServerPreview = /^\/api\/files\/[^/]+\/preview$/.test(full.pathname)
-
-    setSourceUrl(null)
-    setExpiresAt(null)
-    setErr(null)
 
     if (!usesServerPreview) {
-      setSourceUrl(full.toString())
       return () => {
         cancelled = true
       }
     }
 
-    full.searchParams.set("format", "json")
-    fetch(full.toString(), { credentials: "include" })
+    const requestUrl = new URL(src, window.location.origin)
+    requestUrl.searchParams.set("format", "json")
+    fetch(requestUrl.toString(), { credentials: "include" })
       .then(async (r) => {
         if (!r.ok) throw new Error(`http_${r.status}`)
         const data = (await r.json()) as {
           sourceUrl?: string
           expiresAt?: string
         }
+
         if (!data.sourceUrl) throw new Error("missing_source_url")
         if (!cancelled) {
-          setSourceUrl(data.sourceUrl)
-          setExpiresAt(data.expiresAt ?? null)
+          setResolved({
+            src,
+            sourceUrl: data.sourceUrl,
+            expiresAt: data.expiresAt ?? null,
+          })
+          setErr(null)
         }
       })
       .catch((e) => {
-        if (!cancelled) setErr(e.message)
+        if (!cancelled) {
+          setErr({ src, message: e.message })
+        }
       })
 
     return () => {
       cancelled = true
     }
-  }, [src])
+  }, [src, usesServerPreview])
 
-  if (err) {
+  const sourceUrl = usesServerPreview
+    ? resolved?.src === src
+      ? resolved.sourceUrl
+      : null
+    : directSourceUrl
+  const expiresAt =
+    usesServerPreview && resolved?.src === src ? resolved.expiresAt : null
+  const activeErr = err?.src === src ? err.message : null
+
+  if (activeErr) {
     return (
       <div className="grid h-full place-items-center p-8 text-center text-muted-foreground">
         <div>
           <div className="mb-2 text-lg text-foreground">
             Failed to load Office preview
           </div>
-          <div className="text-sm text-destructive">{err}</div>
+          <div className="text-sm text-destructive">{activeErr}</div>
         </div>
       </div>
     )
@@ -536,7 +578,9 @@ function OfficePreview({
   }
 
   const viewer = buildOfficeViewerUrl(provider, sourceUrl)
-  const isLocal = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])/i.test(sourceUrl)
+  const isLocal = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])/i.test(
+    sourceUrl
+  )
 
   const meta = (
     <div className="mb-4 w-full max-w-2xl rounded border bg-muted p-4 text-left">

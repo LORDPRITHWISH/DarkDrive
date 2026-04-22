@@ -20,6 +20,7 @@ import {
   getFileWithAccess,
   getFolderWithAccess,
 } from "../lib/access.js"
+import { allowFrameEmbedding } from "../lib/embed.js"
 
 export const filesRouter = Router()
 
@@ -50,7 +51,7 @@ type UploadSession = {
 // restart — acceptable trade-off for the simpler implementation, and matches
 // the pre-chunking behavior (a single POST also fails on restart).
 const sessions = new Map<string, UploadSession>()
-const OFFICE_PREVIEW_TTL_MS = 60 * 60 * 1000
+const PREVIEW_TTL_MS = 60 * 60 * 1000
 
 setInterval(() => {
   const now = Date.now()
@@ -87,6 +88,14 @@ function isOfficeFile(file: { mimeType: string; name: string }) {
   )
 }
 
+function isPdfFile(file: { mimeType: string; name: string }) {
+  return file.mimeType === "application/pdf" || /\.pdf$/i.test(file.name)
+}
+
+function isPreviewableFile(file: { mimeType: string; name: string }) {
+  return isOfficeFile(file) || isPdfFile(file)
+}
+
 function previewSignature(
   file: { id: string; storageKey: string },
   expiresAt: number
@@ -113,6 +122,7 @@ function streamFile(
     res.status(410).json({ error: "gone" })
     return
   }
+  if (disposition === "inline") allowFrameEmbedding(res)
   res.setHeader("Cache-Control", "no-store")
   res.setHeader("Content-Type", file.mimeType)
   res.setHeader(
@@ -142,7 +152,7 @@ filesRouter.get("/:id/preview", async (req, res) => {
 
     const file = await prisma.file.findUnique({ where: { id: req.params.id } })
     if (!file) return res.status(404).json({ error: "not_found" })
-    if (!isOfficeFile(file)) {
+    if (!isPreviewableFile(file)) {
       return res.status(415).json({ error: "unsupported_preview" })
     }
     if (!safeEqual(sig, previewSignature(file, expiresAt))) {
@@ -157,7 +167,7 @@ filesRouter.get("/:id/preview", async (req, res) => {
   const user = currentUser(req)
   const file = await getFileWithAccess(user.id, req.params.id, "read")
   if (!file) return res.status(404).json({ error: "not_found" })
-  if (!isOfficeFile(file)) {
+  if (!isPreviewableFile(file)) {
     return res.status(415).json({ error: "unsupported_preview" })
   }
 
@@ -171,11 +181,10 @@ filesRouter.get("/:id/preview", async (req, res) => {
     })
     .catch(() => {})
 
-  const expiresAt = Date.now() + OFFICE_PREVIEW_TTL_MS
+  const expiresAt = Date.now() + PREVIEW_TTL_MS
   const sourceUrl = new URL(`/api/files/${file.id}/preview`, env.APP_URL)
   sourceUrl.searchParams.set("expires", String(expiresAt))
   sourceUrl.searchParams.set("sig", previewSignature(file, expiresAt))
-
 
   if (req.query.format === "json") {
     return res.json({
@@ -184,6 +193,9 @@ filesRouter.get("/:id/preview", async (req, res) => {
     })
   }
 
+  allowFrameEmbedding(res)
+  res.setHeader("Cache-Control", "no-store")
+  res.redirect(sourceUrl.toString())
 })
 
 filesRouter.use(requireAuth)

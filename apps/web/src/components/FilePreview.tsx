@@ -27,12 +27,13 @@ export function FilePreview({
 
   if (!file) return null
   const officeFile = isOfficeFile(file.mimeType, file.name)
+  const pdfFile = isPdfFile(file.mimeType, file.name)
   const officeProvider =
     officeFile && officeProviderState.fileId === file.id
       ? officeProviderState.provider
       : "office"
   const inlineSrc = apiUrl(`/api/files/${file.id}/download?inline=1`)
-  const viewSrc = officeFile 
+  const viewSrc = officeFile || pdfFile
     ? apiUrl(`/api/files/${file.id}/preview`)
     : inlineSrc
   const dlHref = apiUrl(`/api/files/${file.id}/download`)
@@ -184,6 +185,10 @@ function isOfficeFile(m: string, name: string) {
   )
 }
 
+function isPdfFile(m: string, name: string) {
+  return m === "application/pdf" || /\.pdf$/i.test(name)
+}
+
 // "modal" layout caps media to the viewport minus the 20rem side panel and
 // the modal's border. "fill" layout lets the viewer take 100% of its parent
 // (used by callers that already give it a definite height, e.g. share pages).
@@ -244,16 +249,13 @@ export function FileViewer({
       </div>
     )
   }
-  if (mime === "application/pdf") {
+  if (isPdfFile(mime, file.name)) {
     return (
-      <>
-      {src}
       <iframe
         src={src}
         className={`${sizing.doc} border-0`}
         title={file.name}
-        />
-        </>
+      />
     )
   }
   if (isCsvFile(mime, file.name)) {

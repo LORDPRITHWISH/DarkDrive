@@ -1,8 +1,13 @@
-import { useEffect, useState } from "react"
+import { Suspense, lazy, useEffect, useEffectEvent, useState } from "react"
 import { XIcon, DownloadIcon } from "@phosphor-icons/react"
 import type { FileItem } from "@/lib/types"
 import { apiUrl } from "@/lib/config"
 import { formatBytes, formatDate } from "@/lib/format"
+
+const LazyPdfViewer = lazy(async () => {
+  const module = await import("@/components/PdfViewer")
+  return { default: module.PdfViewer }
+})
 
 export function FilePreview({
   file,
@@ -15,31 +20,56 @@ export function FilePreview({
     fileId: string | null
     provider: OfficeProvider
   }>({ fileId: null, provider: "office" })
+  const [pdfFocusState, setPdfFocusState] = useState<{
+    fileId: string | null
+    focused: boolean
+  }>({ fileId: null, focused: false })
+
+  const handleEscape = useEffectEvent((e: KeyboardEvent) => {
+    if (!file || e.key !== "Escape") return
+
+    if (
+      isPdfFile(file.mimeType, file.name) &&
+      pdfFocusState.fileId === file.id &&
+      pdfFocusState.focused
+    ) {
+      e.preventDefault()
+      setPdfFocusState({ fileId: file.id, focused: false })
+      return
+    }
+
+    onClose()
+  })
 
   useEffect(() => {
     if (!file) return
-    const h = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose()
+    const onKeyDown = (event: KeyboardEvent) => {
+      handleEscape(event)
     }
-    window.addEventListener("keydown", h)
-    return () => window.removeEventListener("keydown", h)
-  }, [file, onClose])
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [file])
 
   if (!file) return null
   const officeFile = isOfficeFile(file.mimeType, file.name)
   const pdfFile = isPdfFile(file.mimeType, file.name)
+  const pdfFocusMode =
+    pdfFile && pdfFocusState.fileId === file.id && pdfFocusState.focused
   const officeProvider =
     officeFile && officeProviderState.fileId === file.id
       ? officeProviderState.provider
       : "office"
   const inlineSrc = apiUrl(`/api/files/${file.id}/download?inline=1`)
-  const viewSrc = officeFile || pdfFile
-    ? apiUrl(`/api/files/${file.id}/preview`)
-    : inlineSrc
+  const viewSrc =
+    officeFile || pdfFile ? apiUrl(`/api/files/${file.id}/preview`) : inlineSrc
   const dlHref = apiUrl(`/api/files/${file.id}/download`)
 
   const handleOfficeProviderChange = (provider: OfficeProvider) => {
     setOfficeProviderState({ fileId: file.id, provider })
+  }
+
+  const handlePdfFocusModeChange = (focused: boolean) => {
+    setPdfFocusState({ fileId: file.id, focused })
   }
 
   return (
@@ -48,96 +78,110 @@ export function FilePreview({
       onClick={onClose}
     >
       <div
-        className="flex max-h-[90vh] max-w-[95vw] overflow-hidden rounded-lg border bg-background"
+        className={`flex overflow-hidden rounded-lg border bg-background transition-[width,height,max-width,max-height] duration-300 ${
+          pdfFocusMode ? "h-[94vh] w-[96vw]" : "max-h-[90vh] max-w-[95vw]"
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex min-w-0 items-center justify-center overflow-hidden bg-muted">
+        <div
+          className={`flex min-w-0 overflow-hidden ${
+            pdfFocusMode
+              ? "flex-1 bg-transparent"
+              : "items-center justify-center bg-muted"
+          }`}
+        >
           <FileViewer
             file={file}
             src={viewSrc}
+            layout={pdfFocusMode ? "fill" : "modal"}
             officeProvider={officeProvider}
+            onPdfFocusModeChange={handlePdfFocusModeChange}
           />
         </div>
-        <aside className="flex w-80 shrink-0 flex-col gap-3 overflow-auto border-l p-4">
-          <div className="flex items-start justify-between gap-2">
-            <h3
-              className="min-w-0 flex-1 truncate font-semibold"
-              title={file.name}
+        {!pdfFocusMode && (
+          <aside className="flex w-80 shrink-0 flex-col gap-3 overflow-auto border-l p-4">
+            <div className="flex items-start justify-between gap-2">
+              <h3
+                className="min-w-0 flex-1 truncate font-semibold"
+                title={file.name}
+              >
+                {file.name}
+              </h3>
+              <button
+                className="shrink-0 rounded p-1 hover:bg-accent"
+                onClick={onClose}
+                aria-label="Close"
+              >
+                <XIcon size={18} />
+              </button>
+            </div>
+            <a
+              href={dlHref}
+              className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
             >
-              {file.name}
-            </h3>
-            <button
-              className="shrink-0 rounded p-1 hover:bg-accent"
-              onClick={onClose}
-              aria-label="Close"
-            >
-              <XIcon size={18} />
-            </button>
-          </div>
-          <a
-            href={dlHref}
-            className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
-          >
-            <DownloadIcon size={14} /> Download
-          </a>
-          {officeFile && (
+              <DownloadIcon size={14} /> Download
+            </a>
+            {officeFile && (
+              <div className="border-t pt-3">
+                <div className="mb-2 text-xs font-medium tracking-wider text-muted-foreground uppercase">
+                  Preview Provider
+                </div>
+                <OfficeProviderSwitch
+                  provider={officeProvider}
+                  onChange={handleOfficeProviderChange}
+                />
+              </div>
+            )}
             <div className="border-t pt-3">
               <div className="mb-2 text-xs font-medium tracking-wider text-muted-foreground uppercase">
-                Preview Provider
+                Properties
               </div>
-              <OfficeProviderSwitch
-                provider={officeProvider}
-                onChange={handleOfficeProviderChange}
-              />
-            </div>
-          )}
-          <div className="border-t pt-3">
-            <div className="mb-2 text-xs font-medium tracking-wider text-muted-foreground uppercase">
-              Properties
-            </div>
-            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-sm">
-              <Info label="Type" value={file.mimeType || "—"} />
-              <Info label="Size" value={formatBytes(file.size)} />
-              <Info label="Added" value={formatDate(file.createdAt)} />
-              <Info label="Modified" value={formatDate(file.updatedAt)} />
-              <Info label="Starred" value={file.isStarred ? "Yes" : "No"} />
-              <Info label="Hidden" value={file.isHidden ? "Yes" : "No"} />
-              <Info label="Trashed" value={file.isTrashed ? "Yes" : "No"} />
-              <Info
-                label="ID"
-                value={
-                  <span className="font-mono text-xs break-all">{file.id}</span>
-                }
-              />
-              <Info
-                label="Folder"
-                value={
-                  <span className="font-mono text-xs break-all">
-                    {file.folderId}
-                  </span>
-                }
-              />
-              {file.spaceId && (
+              <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-sm">
+                <Info label="Type" value={file.mimeType || "—"} />
+                <Info label="Size" value={formatBytes(file.size)} />
+                <Info label="Added" value={formatDate(file.createdAt)} />
+                <Info label="Modified" value={formatDate(file.updatedAt)} />
+                <Info label="Starred" value={file.isStarred ? "Yes" : "No"} />
+                <Info label="Hidden" value={file.isHidden ? "Yes" : "No"} />
+                <Info label="Trashed" value={file.isTrashed ? "Yes" : "No"} />
                 <Info
-                  label="Space"
+                  label="ID"
                   value={
                     <span className="font-mono text-xs break-all">
-                      {file.spaceId}
+                      {file.id}
                     </span>
                   }
                 />
-              )}
-              <Info
-                label="Key"
-                value={
-                  <span className="font-mono text-xs break-all">
-                    {file.storageKey}
-                  </span>
-                }
-              />
-            </dl>
-          </div>
-        </aside>
+                <Info
+                  label="Folder"
+                  value={
+                    <span className="font-mono text-xs break-all">
+                      {file.folderId}
+                    </span>
+                  }
+                />
+                {file.spaceId && (
+                  <Info
+                    label="Space"
+                    value={
+                      <span className="font-mono text-xs break-all">
+                        {file.spaceId}
+                      </span>
+                    }
+                  />
+                )}
+                <Info
+                  label="Key"
+                  value={
+                    <span className="font-mono text-xs break-all">
+                      {file.storageKey}
+                    </span>
+                  }
+                />
+              </dl>
+            </div>
+          </aside>
+        )}
       </div>
     </div>
   )
@@ -212,11 +256,13 @@ export function FileViewer({
   src,
   layout = "modal",
   officeProvider = "office",
+  onPdfFocusModeChange,
 }: {
   file: FileItem
   src: string
   layout?: FileViewerLayout
   officeProvider?: OfficeProvider
+  onPdfFocusModeChange?: (focused: boolean) => void
 }) {
   const mime = file.mimeType
   const sizing = layout === "fill" ? FILL_MEDIA : MODAL_MEDIA
@@ -251,11 +297,23 @@ export function FileViewer({
   }
   if (isPdfFile(mime, file.name)) {
     return (
-      <iframe
-        src={src}
-        className={`${sizing.doc} border-0`}
-        title={file.name}
-      />
+      <div className={sizing.doc}>
+        <Suspense
+          fallback={
+            <div className="grid h-full w-full place-items-center text-sm text-muted-foreground">
+              Loading PDF viewer…
+            </div>
+          }
+        >
+          <LazyPdfViewer
+            fileId={file.id}
+            name={file.name}
+            src={src}
+            layout={layout}
+            onFocusModeChange={onPdfFocusModeChange}
+          />
+        </Suspense>
+      </div>
     )
   }
   if (isCsvFile(mime, file.name)) {

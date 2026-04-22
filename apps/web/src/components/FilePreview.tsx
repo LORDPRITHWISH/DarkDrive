@@ -11,6 +11,8 @@ export function FilePreview({
   file: FileItem | null
   onClose: () => void
 }) {
+  const [officeProvider, setOfficeProvider] = useState<OfficeProvider>("office")
+
   useEffect(() => {
     if (!file) return
     const h = (e: KeyboardEvent) => {
@@ -20,9 +22,16 @@ export function FilePreview({
     return () => window.removeEventListener("keydown", h)
   }, [file, onClose])
 
+  useEffect(() => {
+    if (file && isOfficeFile(file.mimeType, file.name)) {
+      setOfficeProvider("office")
+    }
+  }, [file])
+
   if (!file) return null
+  const officeFile = isOfficeFile(file.mimeType, file.name)
   const inlineSrc = apiUrl(`/api/files/${file.id}/download?inline=1`)
-  const viewSrc = isOfficeFile(file.mimeType, file.name)
+  const viewSrc = officeFile
     ? apiUrl(`/api/files/${file.id}/preview`)
     : inlineSrc
   const dlHref = apiUrl(`/api/files/${file.id}/download`)
@@ -37,7 +46,11 @@ export function FilePreview({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex min-w-0 items-center justify-center overflow-hidden bg-muted">
-          <FileViewer file={file} src={viewSrc} />
+          <FileViewer
+            file={file}
+            src={viewSrc}
+            officeProvider={officeProvider}
+          />
         </div>
         <aside className="flex w-80 shrink-0 flex-col gap-3 overflow-auto border-l p-4">
           <div className="flex items-start justify-between gap-2">
@@ -61,6 +74,17 @@ export function FilePreview({
           >
             <DownloadIcon size={14} /> Download
           </a>
+          {officeFile && (
+            <div className="border-t pt-3">
+              <div className="mb-2 text-xs font-medium tracking-wider text-muted-foreground uppercase">
+                Preview Provider
+              </div>
+              <OfficeProviderSwitch
+                provider={officeProvider}
+                onChange={setOfficeProvider}
+              />
+            </div>
+          )}
           <div className="border-t pt-3">
             <div className="mb-2 text-xs font-medium tracking-wider text-muted-foreground uppercase">
               Properties
@@ -177,10 +201,12 @@ export function FileViewer({
   file,
   src,
   layout = "modal",
+  officeProvider = "office",
 }: {
   file: FileItem
   src: string
   layout?: FileViewerLayout
+  officeProvider?: OfficeProvider
 }) {
   const mime = file.mimeType
   const sizing = layout === "fill" ? FILL_MEDIA : MODAL_MEDIA
@@ -242,7 +268,11 @@ export function FileViewer({
   if (isOfficeFile(mime, file.name)) {
     return (
       <div className={sizing.doc}>
-        <OfficePreview src={src} name={file.name} />
+        <OfficePreview
+          src={src}
+          name={file.name}
+          provider={officeProvider}
+        />
       </div>
     )
   }
@@ -390,63 +420,176 @@ function CsvPreview({ src, delimiter }: { src: string; delimiter: string }) {
   )
 }
 
-function OfficePreview({ src, name }: { src: string; name: string }) {
-  const full = new URL(src, window.location.origin).toString()
-  const usesServerPreview = /\/api\/files\/[^/]+\/preview(?:[?#]|$)/.test(full)
-  const isLocal = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])/i.test(full)
-  const viewer = usesServerPreview
-    ? full
-    : `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(full)}`
+type OfficeProvider = "office" | "google"
+
+function buildOfficeViewerUrl(provider: OfficeProvider, sourceUrl: string) {
+  if (provider === "google") {
+    return `https://drive.google.com/viewer?embedded=true&url=${encodeURIComponent(sourceUrl)}`
+  }
+  return `https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(sourceUrl)}`
+}
+
+function OfficeProviderSwitch({
+  provider,
+  onChange,
+}: {
+  provider: OfficeProvider
+  onChange: (provider: OfficeProvider) => void
+}) {
+  return (
+    <div className="inline-flex rounded-lg border bg-background p-1">
+      <button
+        type="button"
+        className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${
+          provider === "office"
+            ? "bg-accent text-foreground"
+            : "text-muted-foreground hover:text-foreground"
+        }`}
+        onClick={() => onChange("office")}
+        aria-pressed={provider === "office"}
+      >
+        Office
+      </button>
+      <button
+        type="button"
+        className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${
+          provider === "google"
+            ? "bg-accent text-foreground"
+            : "text-muted-foreground hover:text-foreground"
+        }`}
+        onClick={() => onChange("google")}
+        aria-pressed={provider === "google"}
+      >
+        Google
+      </button>
+    </div>
+  )
+}
+
+function OfficePreview({
+  src,
+  name,
+  provider,
+}: {
+  src: string
+  name: string
+  provider: OfficeProvider
+}) {
+  const [sourceUrl, setSourceUrl] = useState<string | null>(null)
+  const [expiresAt, setExpiresAt] = useState<string | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    const full = new URL(src, window.location.origin)
+    const usesServerPreview = /^\/api\/files\/[^/]+\/preview$/.test(full.pathname)
+
+    setSourceUrl(null)
+    setExpiresAt(null)
+    setErr(null)
+
+    if (!usesServerPreview) {
+      setSourceUrl(full.toString())
+      return () => {
+        cancelled = true
+      }
+    }
+
+    full.searchParams.set("format", "json")
+    fetch(full.toString(), { credentials: "include" })
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`http_${r.status}`)
+        const data = (await r.json()) as {
+          sourceUrl?: string
+          expiresAt?: string
+        }
+        if (!data.sourceUrl) throw new Error("missing_source_url")
+        if (!cancelled) {
+          setSourceUrl(data.sourceUrl)
+          setExpiresAt(data.expiresAt ?? null)
+        }
+      })
+      .catch((e) => {
+        if (!cancelled) setErr(e.message)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [src])
+
+  if (err) {
+    return (
+      <div className="grid h-full place-items-center p-8 text-center text-muted-foreground">
+        <div>
+          <div className="mb-2 text-lg text-foreground">
+            Failed to load Office preview
+          </div>
+          <div className="text-sm text-destructive">{err}</div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!sourceUrl) {
+    return <div className="p-8 text-sm text-muted-foreground">Loading…</div>
+  }
+
+  const viewer = buildOfficeViewerUrl(provider, sourceUrl)
+  const isLocal = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])/i.test(sourceUrl)
+
+  const meta = (
+    <div className="mb-4 w-full max-w-2xl rounded border bg-muted p-4 text-left">
+      <div className="mb-3 text-xs font-medium tracking-wider uppercase">
+        Preview URLs
+      </div>
+      <dl className="space-y-3 text-sm">
+        <div>
+          <dt className="mb-1 text-xs font-medium text-muted-foreground">
+            Viewer URL
+          </dt>
+          <dd className="rounded bg-background px-3 py-2 font-mono text-xs break-all text-foreground">
+            {viewer}
+          </dd>
+        </div>
+        <div>
+          <dt className="mb-1 text-xs font-medium text-muted-foreground">
+            Source URL
+          </dt>
+          <dd className="rounded bg-background px-3 py-2 font-mono text-xs break-all text-foreground">
+            {sourceUrl}
+          </dd>
+        </div>
+        <div>
+          <dt className="mb-1 text-xs font-medium text-muted-foreground">
+            Original Source
+          </dt>
+          <dd className="rounded bg-background px-3 py-2 font-mono text-xs break-all text-foreground">
+            {src}
+          </dd>
+        </div>
+        {expiresAt && (
+          <div>
+            <dt className="mb-1 text-xs font-medium text-muted-foreground">
+              Source Expires
+            </dt>
+            <dd className="rounded bg-background px-3 py-2 text-xs text-foreground">
+              {expiresAt}
+            </dd>
+          </div>
+        )}
+      </dl>
+    </div>
+  )
 
   if (isLocal) {
     return (
       <div className="grid h-full place-items-center p-8 text-center text-muted-foreground">
-        <div className="mb-4 w-full max-w-2xl rounded border bg-muted p-4 text-left">
-          <div className="mb-3 text-xs font-medium tracking-wider uppercase">
-            Preview URLs
-          </div>
-          <dl className="space-y-3 text-sm">
-            <div>
-              <dt className="mb-1 text-xs font-medium text-muted-foreground">
-                {usesServerPreview ? "Preview URL" : "Viewer URL"}
-              </dt>
-              <dd className="rounded bg-background px-3 py-2 font-mono text-xs break-all text-foreground">
-                {viewer}
-              </dd>
-            </div>
-            {usesServerPreview ? (
-              <div>
-                <dt className="mb-1 text-xs font-medium text-muted-foreground">
-                  Source Handling
-                </dt>
-                <dd className="rounded bg-background px-3 py-2 text-xs text-foreground">
-                  Signed Office source URLs are generated by the API.
-                </dd>
-              </div>
-            ) : (
-              <div>
-                <dt className="mb-1 text-xs font-medium text-muted-foreground">
-                  Resolved Source
-                </dt>
-                <dd className="rounded bg-background px-3 py-2 font-mono text-xs break-all text-foreground">
-                  {full}
-                </dd>
-              </div>
-            )}
-            <div>
-              <dt className="mb-1 text-xs font-medium text-muted-foreground">
-                Original Source
-              </dt>
-              <dd className="rounded bg-background px-3 py-2 font-mono text-xs break-all text-foreground">
-                {src}
-              </dd>
-            </div>
-          </dl>
-        </div>
+        {meta}
         <div>
           <div className="mb-2 text-lg">Office preview needs a public URL</div>
           <div className="text-sm">
-            The Office Web Viewer can't reach files served from localhost.
+            Google and Office viewers can't reach files served from localhost.
             <br />
             Download to view, or try again on the deployed site.
           </div>
@@ -456,48 +599,6 @@ function OfficePreview({ src, name }: { src: string; name: string }) {
   }
   return (
     <>
-      <div className="mb-4 w-full max-w-2xl rounded border bg-muted p-4 text-left">
-        <div className="mb-3 text-xs font-medium tracking-wider uppercase">
-          Preview URLs
-        </div>
-        <dl className="space-y-3 text-sm">
-          <div>
-            <dt className="mb-1 text-xs font-medium text-muted-foreground">
-              {usesServerPreview ? "Preview URL" : "Viewer URL"}
-            </dt>
-            <dd className="rounded bg-background px-3 py-2 font-mono text-xs break-all text-foreground">
-              {viewer}
-            </dd>
-          </div>
-          {usesServerPreview ? (
-            <div>
-              <dt className="mb-1 text-xs font-medium text-muted-foreground">
-                Source Handling
-              </dt>
-              <dd className="rounded bg-background px-3 py-2 text-xs text-foreground">
-                Signed Office source URLs are generated by the API.
-              </dd>
-            </div>
-          ) : (
-            <div>
-              <dt className="mb-1 text-xs font-medium text-muted-foreground">
-                Resolved Source
-              </dt>
-              <dd className="rounded bg-background px-3 py-2 font-mono text-xs break-all text-foreground">
-                {full}
-              </dd>
-            </div>
-          )}
-          <div>
-            <dt className="mb-1 text-xs font-medium text-muted-foreground">
-              Original Source
-            </dt>
-            <dd className="rounded bg-background px-3 py-2 font-mono text-xs break-all text-foreground">
-              {src}
-            </dd>
-          </div>
-        </dl>
-      </div>
       <iframe
         src={viewer}
         className="h-full w-full border-0"

@@ -176,7 +176,7 @@ filesRouter.get("/:id/preview", async (req, res) => {
   sourceUrl.searchParams.set("expires", String(expiresAt))
   sourceUrl.searchParams.set("sig", previewSignature(file, expiresAt))
 
-  const viewerUrl = new URL("https://view.officeapps.live.com/op/embed.aspx")
+  const viewerUrl = new URL("https://view.officeapps.live.com/op/view.aspx")
   viewerUrl.searchParams.set("src", sourceUrl.toString())
 
   if (req.query.format === "json") {

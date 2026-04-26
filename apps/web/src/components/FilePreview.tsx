@@ -3,6 +3,7 @@ import { XIcon, DownloadIcon } from "@phosphor-icons/react"
 import type { FileItem } from "@/lib/types"
 import { apiUrl } from "@/lib/config"
 import { formatBytes, formatDate } from "@/lib/format"
+import { DarkPlayer } from "./player"
 
 const LazyPdfViewer = lazy(async () => {
   const module = await import("@/components/PdfViewer")
@@ -278,14 +279,21 @@ export function FileViewer({
   }
   if (mime.startsWith("video/")) {
     return (
-      <video
+      // <video
+      //   src={src}
+      //   controls
+      //   autoPlay
+      //   className={`block bg-black ${sizing.h} ${sizing.w} ${
+      //     layout === "fill" ? "h-full w-full" : ""
+      //   }`}
+      // />
+      <DarkPlayer
         src={src}
-        controls
-        autoPlay
         className={`block bg-black ${sizing.h} ${sizing.w} ${
-          layout === "fill" ? "h-full w-full" : ""
+          layout === "fill" ? "h-full w-full" : "w-[90vw] aspect-video"
         }`}
       />
+      // <DarkPlayer src={src} />
     )
   }
   if (mime.startsWith("audio/")) {

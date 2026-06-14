@@ -64,6 +64,10 @@ export async function getFileWithAccess(
           OR: [
             { ownerId: userId },
             { space: { members: { some: { userId } } } },
+            // A file surfaced via a shortcut inside a public space is readable
+            // by any authenticated user — same rule as content owned directly
+            // by the space (file.spaceId set), just reached through the link.
+            { space: { isPublic: true } },
           ],
         },
       },

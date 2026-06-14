@@ -179,6 +179,15 @@ export type FileItem = {
   shortcutId?: string
 }
 
+// A sidecar subtitle track discovered next to a video file. `src` points at the
+// API endpoint that serves it as WebVTT.
+export type SubtitleTrack = {
+  id: string
+  label: string
+  lang: string | null
+  src: string
+}
+
 export type Breadcrumb = { id: string; name: string }
 
 export type SpaceMember = {

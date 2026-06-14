@@ -1,7 +1,8 @@
 import { Suspense, lazy, useEffect, useEffectEvent, useState } from "react"
 import { XIcon, DownloadIcon } from "@phosphor-icons/react"
-import type { FileItem } from "@/lib/types"
+import type { FileItem, SubtitleTrack } from "@/lib/types"
 import { apiUrl } from "@/lib/config"
+import { apiGet } from "@/lib/api"
 import { formatBytes, formatDate } from "@/lib/format"
 import { DarkPlayer } from "./player"
 
@@ -97,6 +98,7 @@ export function FilePreview({
             layout={pdfFocusMode ? "fill" : "modal"}
             officeProvider={officeProvider}
             onPdfFocusModeChange={handlePdfFocusModeChange}
+            subtitleFileId={file.id}
           />
         </div>
         {!pdfFocusMode && (
@@ -258,12 +260,16 @@ export function FileViewer({
   layout = "modal",
   officeProvider = "office",
   onPdfFocusModeChange,
+  subtitleFileId,
 }: {
   file: FileItem
   src: string
   layout?: FileViewerLayout
   officeProvider?: OfficeProvider
   onPdfFocusModeChange?: (focused: boolean) => void
+  // When set, the video player loads sidecar subtitle tracks for this file id
+  // from the authenticated API. Omitted on public surfaces (e.g. share pages).
+  subtitleFileId?: string | null
 }) {
   const mime = file.mimeType
   const sizing = layout === "fill" ? FILL_MEDIA : MODAL_MEDIA
@@ -279,21 +285,14 @@ export function FileViewer({
   }
   if (mime.startsWith("video/")) {
     return (
-      // <video
-      //   src={src}
-      //   controls
-      //   autoPlay
-      //   className={`block bg-black ${sizing.h} ${sizing.w} ${
-      //     layout === "fill" ? "h-full w-full" : ""
-      //   }`}
-      // />
-      <DarkPlayer
+      <VideoPreview
+        key={src}
         src={src}
+        subtitleFileId={subtitleFileId}
         className={`block bg-black ${sizing.h} ${sizing.w} ${
           layout === "fill" ? "h-full w-full" : "w-[90vw] aspect-video"
         }`}
       />
-      // <DarkPlayer src={src} />
     )
   }
   if (mime.startsWith("audio/")) {
@@ -356,6 +355,43 @@ export function FileViewer({
       </div>
     </div>
   )
+}
+
+// Wraps the player and, when a file id is supplied, loads sidecar subtitle
+// tracks for it. Keyed by the resolved video src so switching files gives the
+// underlying player a clean slate (track/audio selection doesn't leak across).
+function VideoPreview({
+  src,
+  subtitleFileId,
+  className,
+}: {
+  src: string
+  subtitleFileId?: string | null
+  className?: string
+}) {
+  // Starts empty; this component is keyed by src upstream, so a new video gets
+  // a fresh instance rather than carrying over the previous file's tracks.
+  const [tracks, setTracks] = useState<SubtitleTrack[]>([])
+
+  useEffect(() => {
+    if (!subtitleFileId) return
+    let cancelled = false
+    apiGet<{ tracks: SubtitleTrack[] }>(
+      `/api/files/${subtitleFileId}/subtitles`
+    )
+      .then((data) => {
+        if (cancelled) return
+        setTracks(data.tracks.map((t) => ({ ...t, src: apiUrl(t.src) })))
+      })
+      .catch(() => {
+        if (!cancelled) setTracks([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [subtitleFileId])
+
+  return <DarkPlayer src={src} tracks={tracks} className={className} />
 }
 
 function TextPreview({ src }: { src: string }) {

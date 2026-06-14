@@ -1,13 +1,11 @@
 import { Router } from "express"
 import { z } from "zod"
-import fs from "node:fs"
 import bcrypt from "bcryptjs"
 import { nanoid } from "nanoid"
 import { prisma } from "../db/prisma.js"
 import { currentUser, requireAuth } from "../middleware/auth.js"
 import { getFileWithAccess, getFolderWithAccess } from "../lib/access.js"
-import { absolutePath } from "../storage/local.js"
-import { allowFrameEmbedding } from "../lib/embed.js"
+import { streamStoredFile } from "../lib/stream.js"
 
 export const sharesRouter = Router()
 
@@ -137,16 +135,9 @@ sharesRouter.get("/:token/download/:fileId?", async (req, res) => {
       return res.status(403).json({ error: "forbidden" })
   }
 
-  const abs = absolutePath(file.storageKey)
-  if (!fs.existsSync(abs)) return res.status(410).json({ error: "gone" })
-  const inline = req.query.inline === "1"
-  if (inline) allowFrameEmbedding(res)
-  res.setHeader("Content-Type", file.mimeType)
-  res.setHeader(
-    "Content-Disposition",
-    `${inline ? "inline" : "attachment"}; filename="${encodeURIComponent(file.name)}"`
-  )
-  fs.createReadStream(abs).pipe(res)
+  streamStoredFile(req, res, file, {
+    disposition: req.query.inline === "1" ? "inline" : "attachment",
+  })
 })
 
 async function isFileUnderFolder(startFolderId: string, rootFolderId: string): Promise<boolean> {

@@ -1,4 +1,4 @@
-import { Router, type Response } from "express"
+import { Router } from "express"
 import { z } from "zod"
 import fs from "node:fs"
 import crypto from "node:crypto"
@@ -21,6 +21,8 @@ import {
   getFolderWithAccess,
 } from "../lib/access.js"
 import { allowFrameEmbedding } from "../lib/embed.js"
+import { streamStoredFile } from "../lib/stream.js"
+import { listSubtitleSiblings, isSubtitleFile, toVtt } from "../lib/subtitles.js"
 
 export const filesRouter = Router()
 
@@ -112,25 +114,6 @@ function safeEqual(a: string, b: string) {
   return aBuf.length === bBuf.length && crypto.timingSafeEqual(aBuf, bBuf)
 }
 
-function streamFile(
-  res: Response,
-  file: { name: string; mimeType: string; storageKey: string },
-  disposition: "inline" | "attachment"
-) {
-  const abs = absolutePath(file.storageKey)
-  if (!fs.existsSync(abs)) {
-    res.status(410).json({ error: "gone" })
-    return
-  }
-  if (disposition === "inline") allowFrameEmbedding(res)
-  res.setHeader("Cache-Control", "no-store")
-  res.setHeader("Content-Type", file.mimeType)
-  res.setHeader(
-    "Content-Disposition",
-    `${disposition}; filename="${encodeURIComponent(file.name)}"`
-  )
-  fs.createReadStream(abs).pipe(res)
-}
 
 filesRouter.get("/:id/preview", async (req, res) => {
   const sig = Array.isArray(req.query.sig) ? req.query.sig[0] : req.query.sig
@@ -159,7 +142,7 @@ filesRouter.get("/:id/preview", async (req, res) => {
       return res.status(403).json({ error: "forbidden" })
     }
 
-    return streamFile(res, file, "inline")
+    return streamStoredFile(req, res, file, { disposition: "inline" })
   }
 
   if (!req.user) return res.status(401).json({ error: "unauthorized" })
@@ -436,17 +419,67 @@ filesRouter.get("/:id/download", async (req, res) => {
   const user = currentUser(req)
   const file = await getFileWithAccess(user.id, req.params.id, "read")
   if (!file) return res.status(404).json({ error: "not_found" })
-  // log access for recents / suggestions
-  prisma.fileAccess
-    .create({
-      data: {
-        userId: user.id,
-        fileId: file.id,
-        action: req.query.inline === "1" ? "view" : "download",
-      },
-    })
-    .catch(() => {})
-  streamFile(res, file, req.query.inline === "1" ? "inline" : "attachment")
+  // log access for recents / suggestions — but only on the opening request.
+  // Media seeking fires many ranged requests per playback; logging each one
+  // would flood fileAccess, so we skip mid-stream range continuations.
+  const range = req.headers.range
+  const isContinuation = typeof range === "string" && !/^bytes=0?-/.test(range)
+  if (!isContinuation) {
+    prisma.fileAccess
+      .create({
+        data: {
+          userId: user.id,
+          fileId: file.id,
+          action: req.query.inline === "1" ? "view" : "download",
+        },
+      })
+      .catch(() => {})
+  }
+  streamStoredFile(req, res, file, {
+    disposition: req.query.inline === "1" ? "inline" : "attachment",
+  })
+})
+
+// List sidecar subtitle tracks for a video: sibling files in the same folder
+// whose base name matches the video (e.g. Movie.mkv ↔ Movie.en.srt).
+filesRouter.get("/:id/subtitles", async (req, res) => {
+  const user = currentUser(req)
+  const file = await getFileWithAccess(user.id, req.params.id, "read")
+  if (!file) return res.status(404).json({ error: "not_found" })
+
+  const siblings = await prisma.file.findMany({
+    where: { folderId: file.folderId, isTrashed: false, id: { not: file.id } },
+    select: { id: true, name: true },
+  })
+  const tracks = listSubtitleSiblings(file.name, siblings).map((t) => ({
+    id: t.id,
+    label: t.label,
+    lang: t.lang,
+    src: `/api/files/${t.id}/subtitle.vtt`,
+  }))
+  res.json({ tracks })
+})
+
+// Serve a subtitle file as WebVTT (converting SRT on the fly) so it can be
+// attached to a <video> via a <track> element. Browsers only render VTT.
+filesRouter.get("/:id/subtitle.vtt", async (req, res) => {
+  const user = currentUser(req)
+  const file = await getFileWithAccess(user.id, req.params.id, "read")
+  if (!file) return res.status(404).json({ error: "not_found" })
+  if (!isSubtitleFile(file.name)) {
+    return res.status(415).json({ error: "unsupported_subtitle" })
+  }
+  const abs = absolutePath(file.storageKey)
+  let raw: string
+  try {
+    raw = fs.readFileSync(abs, "utf8")
+  } catch {
+    return res.status(410).json({ error: "gone" })
+  }
+  allowFrameEmbedding(res)
+  res.setHeader("Content-Type", "text/vtt; charset=utf-8")
+  res.setHeader("Cache-Control", "no-store")
+  res.send(toVtt(raw, file.name))
 })
 
 filesRouter.patch("/:id", async (req, res) => {

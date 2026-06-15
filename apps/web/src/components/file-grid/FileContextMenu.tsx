@@ -3,7 +3,6 @@ import {
   DownloadIcon,
   EyeIcon as OpenEyeIcon,
   EyeSlashIcon,
-  FolderIcon,
   InfoIcon,
   LinkBreakIcon,
   PencilSimpleIcon,

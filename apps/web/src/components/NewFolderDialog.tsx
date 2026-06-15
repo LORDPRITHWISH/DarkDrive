@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { FolderIcon, ImageIcon, TrashIcon, UploadIcon, XIcon } from "@phosphor-icons/react"
+import { FolderIcon, TrashIcon, UploadIcon, XIcon } from "@phosphor-icons/react"
 import { Button } from "@workspace/ui/components/button"
 
 export const FOLDER_COLORS: { label: string; value: string }[] = [

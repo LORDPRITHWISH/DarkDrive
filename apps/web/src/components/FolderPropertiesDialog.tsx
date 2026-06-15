@@ -75,7 +75,7 @@ export function FolderPropertiesDialog({
   const activeColor = color
 
   async function save() {
-    if (!name.trim() || busy) return
+    if (!folder || !name.trim() || busy) return
     setBusy(true)
     setErr(null)
     try {

@@ -11,6 +11,8 @@ import {
   GearSixIcon,
   UploadIcon,
   GlobeIcon,
+  CaretDoubleLeftIcon,
+  CaretDoubleRightIcon,
 } from "@phosphor-icons/react"
 import type { Space } from "@/lib/types"
 import { SpaceManageDialog } from "@/components/SpaceManageDialog"
@@ -40,6 +42,9 @@ export function Sidebar() {
   const [creatingSpace, setCreatingSpace] = useState(false)
   const [upgradeOpen, setUpgradeOpen] = useState(false)
   const [manageSpace, setManageSpace] = useState<Space | null>(null)
+  const [collapsed, setCollapsed] = useState(
+    () => localStorage.getItem("sidebar-collapsed") === "1"
+  )
   const loc = useLocation()
 
   useEffect(() => {
@@ -47,6 +52,13 @@ export function Sidebar() {
     void loadPublicSpaces()
     void loadQuota()
   }, [loadSpaces, loadPublicSpaces, loadQuota])
+
+  function toggle() {
+    setCollapsed((c) => {
+      localStorage.setItem("sidebar-collapsed", c ? "0" : "1")
+      return !c
+    })
+  }
 
   const pct =
     quota && quota.total > 0
@@ -57,41 +69,80 @@ export function Sidebar() {
   const navItem = (to: string, label: string, icon: React.ReactNode) => (
     <Link
       to={to}
+      title={collapsed ? label : undefined}
       className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors ${
+        collapsed ? "justify-center px-2" : ""
+      } ${
         loc.pathname === to
           ? "bg-accent text-accent-foreground"
           : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
       }`}
     >
       {icon}
-      <span>{label}</span>
+      {!collapsed && <span>{label}</span>}
     </Link>
   )
 
   return (
-    <aside className="flex h-screen w-64 shrink-0 flex-col gap-4 border-r bg-card p-3">
-      <div className="flex items-center gap-2 px-1 py-3">
-        <Link
-          to="/landing"
-          className="hover:text-primary flex items-center gap-2 transition-colors"
-          title="About DarkDrive"
+    <aside
+      className={`flex h-screen shrink-0 flex-col gap-4 border-r bg-card p-3 transition-all duration-200 ${
+        collapsed ? "w-14" : "w-64"
+      }`}
+    >
+      {/* Header: logo + upload + toggle */}
+      <div className={`flex items-center gap-2 px-1 py-3 ${collapsed ? "flex-col" : ""}`}>
+        {!collapsed && (
+          <Link
+            to="/landing"
+            className="hover:text-primary flex items-center gap-2 transition-colors"
+            title="About DarkDrive"
+          >
+            <img src="/DarkDrive.png" alt="DarkDrive" className="h-8 w-8 rounded-md" />
+            <div className="font-semibold tracking-tight">DarkDrive</div>
+          </Link>
+        )}
+        {collapsed && (
+          <Link to="/landing" title="About DarkDrive">
+            <img src="/DarkDrive.png" alt="DarkDrive" className="h-8 w-8 rounded-md" />
+          </Link>
+        )}
+
+        {!collapsed && (
+          <Button
+            size="sm"
+            className="ml-auto"
+            onClick={() => fileInput.current?.click()}
+            title="Upload files"
+          >
+            <UploadIcon size={16} weight="bold" />
+            Upload
+          </Button>
+        )}
+
+        <button
+          onClick={toggle}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          className={`rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors ${
+            collapsed ? "" : "ml-1"
+          }`}
         >
-          <img
-            src="/DarkDrive.png"
-            alt="DarkDrive"
-            className="h-8 w-8 rounded-md"
-          />
-          <div className="font-semibold tracking-tight">DarkDrive</div>
-        </Link>
-        <Button
-          size="sm"
-          className="ml-auto"
-          onClick={() => fileInput.current?.click()}
-          title="Upload files"
-        >
-          <UploadIcon size={16} weight="bold" />
-          Upload
-        </Button>
+          {collapsed ? (
+            <CaretDoubleRightIcon size={14} />
+          ) : (
+            <CaretDoubleLeftIcon size={14} />
+          )}
+        </button>
+
+        {collapsed && (
+          <button
+            onClick={() => fileInput.current?.click()}
+            title="Upload files"
+            className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+          >
+            <UploadIcon size={16} weight="bold" />
+          </button>
+        )}
+
         <input
           ref={fileInput}
           type="file"
@@ -105,6 +156,7 @@ export function Sidebar() {
         />
       </div>
 
+      {/* Nav */}
       <nav className="flex flex-col gap-0.5">
         {navItem("/home", "Home", <HouseIcon size={18} />)}
         {user &&
@@ -120,13 +172,20 @@ export function Sidebar() {
           navItem("/admin", "Admin", <ShieldCheckIcon size={18} />)}
       </nav>
 
+      {/* Spaces */}
       <div className="mt-2">
-        <div className="flex items-center justify-between px-2">
-          <div className="flex items-center gap-1.5 text-xs font-medium tracking-wider text-muted-foreground uppercase">
-            <UsersThreeIcon size={14} /> Spaces
-          </div>
+        <div
+          className={`flex items-center px-2 ${
+            collapsed ? "justify-center" : "justify-between"
+          }`}
+        >
+          {!collapsed && (
+            <div className="flex items-center gap-1.5 text-xs font-medium tracking-wider text-muted-foreground uppercase">
+              <UsersThreeIcon size={14} /> Spaces
+            </div>
+          )}
           <button
-            className="rounded-md p-1 hover:bg-accent"
+            className="rounded-md p-1 hover:bg-accent text-muted-foreground hover:text-foreground"
             onClick={() => setCreatingSpace(true)}
             title="New space"
           >
@@ -135,86 +194,106 @@ export function Sidebar() {
         </div>
 
         <div className="mt-1 flex flex-col">
-          {spaces.map((s) => (
-            <div
-              key={s.id}
-              className="group/space flex items-center rounded-md hover:bg-accent/60"
-            >
-              <Link
-                to={`/drive/${s.rootFolderId}`}
-                className="flex min-w-0 flex-1 items-center gap-2 truncate px-2 py-1.5 text-sm text-muted-foreground hover:text-foreground"
-                title={s.name}
-              >
-                <SpaceLogo space={s} size={20} className="shrink-0" />
-                <span className="truncate">{s.name}</span>
-                <span className="text-xs text-muted-foreground">
-                  ({s.members.length})
-                </span>
-                {s.isPublic && (
-                  <GlobeIcon
-                    size={12}
-                    weight="fill"
-                    className="text-primary ml-auto shrink-0"
-                    aria-label="Public space"
-                  />
-                )}
-              </Link>
-              <button
-                onClick={(e) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  setManageSpace(s)
-                }}
-                className="mr-1 rounded p-1 text-muted-foreground opacity-0 group-hover/space:opacity-100 hover:bg-accent hover:text-foreground focus:opacity-100"
-                title="Manage members"
-                aria-label="Manage members"
-              >
-                <GearSixIcon size={14} />
-              </button>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {publicSpaces.length > 0 && (
-        <div>
-          <div className="flex items-center gap-1.5 px-2 text-xs font-medium tracking-wider text-muted-foreground uppercase">
-            <GlobeIcon size={14} /> Public
-          </div>
-          <div className="mt-1 flex flex-col">
-            {publicSpaces.map((s) => (
+          {spaces.map((s) =>
+            collapsed ? (
               <Link
                 key={s.id}
                 to={`/drive/${s.rootFolderId}`}
-                className="flex min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent/60 hover:text-foreground"
-                title={
-                  s.ownerName ? `${s.name} · by ${s.ownerName}` : s.name
-                }
+                title={s.name}
+                className="flex justify-center rounded-md py-1.5 hover:bg-accent/60"
               >
-                <SpaceLogo space={s} size={20} className="shrink-0" />
-                <span className="truncate">{s.name}</span>
-                <GlobeIcon
-                  size={10}
-                  weight="fill"
-                  className="text-primary ml-auto shrink-0"
-                />
+                <SpaceLogo space={s} size={20} />
               </Link>
-            ))}
+            ) : (
+              <div
+                key={s.id}
+                className="group/space flex items-center rounded-md hover:bg-accent/60"
+              >
+                <Link
+                  to={`/drive/${s.rootFolderId}`}
+                  className="flex min-w-0 flex-1 items-center gap-2 truncate px-2 py-1.5 text-sm text-muted-foreground hover:text-foreground"
+                  title={s.name}
+                >
+                  <SpaceLogo space={s} size={20} className="shrink-0" />
+                  <span className="truncate">{s.name}</span>
+                  <span className="text-xs text-muted-foreground">
+                    ({s.members.length})
+                  </span>
+                  {s.isPublic && (
+                    <GlobeIcon
+                      size={12}
+                      weight="fill"
+                      className="text-primary ml-auto shrink-0"
+                      aria-label="Public space"
+                    />
+                  )}
+                </Link>
+                <button
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    setManageSpace(s)
+                  }}
+                  className="mr-1 rounded p-1 text-muted-foreground opacity-0 group-hover/space:opacity-100 hover:bg-accent hover:text-foreground focus:opacity-100"
+                  title="Manage members"
+                  aria-label="Manage members"
+                >
+                  <GearSixIcon size={14} />
+                </button>
+              </div>
+            )
+          )}
+        </div>
+      </div>
+
+      {/* Public spaces */}
+      {publicSpaces.length > 0 && (
+        <div>
+          {!collapsed && (
+            <div className="flex items-center gap-1.5 px-2 text-xs font-medium tracking-wider text-muted-foreground uppercase">
+              <GlobeIcon size={14} /> Public
+            </div>
+          )}
+          <div className="mt-1 flex flex-col">
+            {publicSpaces.map((s) =>
+              collapsed ? (
+                <Link
+                  key={s.id}
+                  to={`/drive/${s.rootFolderId}`}
+                  title={s.ownerName ? `${s.name} · by ${s.ownerName}` : s.name}
+                  className="flex justify-center rounded-md py-1.5 hover:bg-accent/60"
+                >
+                  <SpaceLogo space={s} size={20} />
+                </Link>
+              ) : (
+                <Link
+                  key={s.id}
+                  to={`/drive/${s.rootFolderId}`}
+                  className="flex min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+                  title={s.ownerName ? `${s.name} · by ${s.ownerName}` : s.name}
+                >
+                  <SpaceLogo space={s} size={20} className="shrink-0" />
+                  <span className="truncate">{s.name}</span>
+                  <GlobeIcon
+                    size={10}
+                    weight="fill"
+                    className="text-primary ml-auto shrink-0"
+                  />
+                </Link>
+              )
+            )}
           </div>
         </div>
       )}
 
-      <SpaceManageDialog
-        space={manageSpace}
-        onClose={() => setManageSpace(null)}
-      />
-
+      <SpaceManageDialog space={manageSpace} onClose={() => setManageSpace(null)} />
       <SpaceEditorDialog
         mode={creatingSpace ? { kind: "create" } : null}
         onClose={() => setCreatingSpace(false)}
       />
 
-      {quota && (
+      {/* Storage quota */}
+      {quota && !collapsed && (
         <div className="mt-auto border-t pt-3">
           <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
             <span>Storage</span>
@@ -248,6 +327,21 @@ export function Sidebar() {
         </div>
       )}
 
+      {/* Collapsed storage indicator: just the bar */}
+      {quota && collapsed && (
+        <div className="mt-auto border-t pt-3">
+          <div
+            className="h-1.5 w-full overflow-hidden rounded-full bg-muted"
+            title={`${formatBytes(quota.used)} / ${formatBytes(quota.total)}`}
+          >
+            <div
+              className={`h-full rounded-full ${nearLimit ? "bg-destructive" : "bg-primary"}`}
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+        </div>
+      )}
+
       {quota && (
         <UpgradeRequestDialog
           open={upgradeOpen}
@@ -258,16 +352,26 @@ export function Sidebar() {
         />
       )}
 
-      <div className="flex items-center gap-2 border-t pt-3">
+      {/* User row */}
+      <div
+        className={`flex items-center gap-2 border-t pt-3 ${
+          collapsed ? "flex-col" : ""
+        }`}
+      >
         {user?.avatarUrl && (
-          <img src={user.avatarUrl} alt="" className="h-8 w-8 rounded-full" />
+          <img
+            src={user.avatarUrl}
+            alt={user.name}
+            title={collapsed ? `${user.name}\n${user.email}` : undefined}
+            className="h-8 w-8 rounded-full shrink-0"
+          />
         )}
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-medium">{user?.name}</div>
-          <div className="truncate text-xs text-muted-foreground">
-            {user?.email}
+        {!collapsed && (
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-medium">{user?.name}</div>
+            <div className="truncate text-xs text-muted-foreground">{user?.email}</div>
           </div>
-        </div>
+        )}
         <ThemeToggle />
         <Button
           size="sm"

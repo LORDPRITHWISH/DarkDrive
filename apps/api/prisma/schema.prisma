@@ -76,6 +76,7 @@ model Folder {
   files     File[]
   spaceId   String?
   space     Space?   @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  thumbnailKey String?
   isHidden  Boolean  @default(false)
   isTrashed Boolean  @default(false)
   isStarred Boolean  @default(false)
@@ -103,6 +104,13 @@ model File {
   size       BigInt
   mimeType   String
   storageKey String   @unique
+  // Storage key of the generated preview thumbnail (a small JPEG), or null if
+  // none exists yet. Populated by the thumbnail pipeline (see lib/thumbnails).
+  thumbnailKey String?
+  // Generation outcome: "ready", "failed", or "unsupported". Null means not yet
+  // attempted. Used to avoid re-running the pipeline on files that can't (or
+  // didn't) produce a thumbnail.
+  thumbnailState String?
   isHidden   Boolean  @default(false)
   isTrashed  Boolean  @default(false)
   isStarred  Boolean  @default(false)

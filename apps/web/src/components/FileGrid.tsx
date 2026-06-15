@@ -1,14 +1,15 @@
 import { useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useDrive } from "@/store/drive"
-import type { Folder } from "@/lib/types"
+import type { FileItem, Folder } from "@/lib/types"
 import { apiUrl } from "@/lib/config"
 import { sortFiles, sortFolders } from "@/lib/sort"
 import { ShareDialog } from "./ShareDialog"
 import { FilePreview } from "./FilePreview"
-import { NewFolderDialog } from "./NewFolderDialog"
 import { MoveDialog } from "./MoveDialog"
 import { AddToSpaceDialog } from "./AddToSpaceDialog"
+import { FolderPropertiesDialog } from "./FolderPropertiesDialog"
+import { FilePropertiesDialog } from "./FilePropertiesDialog"
 import { FolderCard } from "./file-grid/FolderCard"
 import { FileCard } from "./file-grid/FileCard"
 import { FileListView } from "./file-grid/FileListView"
@@ -29,7 +30,6 @@ export function FileGrid() {
     toggleStarred,
     renameFile,
     renameFolder,
-    recolorFolder,
     moveItem,
     removeShortcut,
   } = useDrive()
@@ -52,7 +52,8 @@ export function FileGrid() {
   const [share, setShare] = useState<
     { type: "FILE" | "FOLDER"; id: string; name: string } | null
   >(null)
-  const [colorEditFolder, setColorEditFolder] = useState<Folder | null>(null)
+  const [propertiesFolder, setPropertiesFolder] = useState<Folder | null>(null)
+  const [propertiesFile, setPropertiesFile] = useState<FileItem | null>(null)
   const [moveTarget, setMoveTarget] = useState<
     | {
         type: "folder" | "file"
@@ -78,7 +79,9 @@ export function FileGrid() {
     e.stopPropagation()
     const shortcutId =
       type === "file" ? files.find((x) => x.id === id)?.shortcutId : undefined
-    setMenu({ x: e.clientX, y: e.clientY, type, id, name, shortcutId })
+    const hasThumbnail =
+      type === "folder" ? !!folders.find((x) => x.id === id)?.thumbnailKey : undefined
+    setMenu({ x: e.clientX, y: e.clientY, type, id, name, shortcutId, hasThumbnail })
   }
   const closeMenu = () => setMenu(null)
 
@@ -156,7 +159,7 @@ export function FileGrid() {
           }}
           onProperties={() => {
             const f = files.find((x) => x.id === menu.id)
-            if (f) setPreview(f)
+            if (f) setPropertiesFile(f)
             closeMenu()
           }}
           onDownload={() => {
@@ -190,9 +193,9 @@ export function FileGrid() {
             }
             closeMenu()
           }}
-          onChangeColor={() => {
+          onFolderProperties={() => {
             const f = folders.find((x) => x.id === menu.id)
-            if (f) setColorEditFolder(f)
+            if (f) setPropertiesFolder(f)
             closeMenu()
           }}
           onShare={() => {
@@ -262,20 +265,14 @@ export function FileGrid() {
         />
       )}
 
-      <NewFolderDialog
-        open={!!colorEditFolder}
-        title="Folder color"
-        submitLabel="Save"
-        initialName={colorEditFolder?.name ?? ""}
-        initialColor={colorEditFolder?.color ?? null}
-        onClose={() => setColorEditFolder(null)}
-        onSubmit={async (name, color) => {
-          if (!colorEditFolder) return
-          if (name !== colorEditFolder.name)
-            await renameFolder(colorEditFolder.id, name)
-          if ((color ?? null) !== (colorEditFolder.color ?? null))
-            await recolorFolder(colorEditFolder.id, color)
-        }}
+      <FolderPropertiesDialog
+        folder={propertiesFolder}
+        onClose={() => setPropertiesFolder(null)}
+      />
+
+      <FilePropertiesDialog
+        file={propertiesFile}
+        onClose={() => setPropertiesFile(null)}
       />
     </div>
   )

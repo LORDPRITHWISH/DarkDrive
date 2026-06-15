@@ -149,6 +149,7 @@ export type Folder = {
   id: string
   name: string
   color: string | null
+  thumbnailKey?: string | null
   ownerId: string
   parentId: string | null
   spaceId: string | null
@@ -168,6 +169,8 @@ export type FileItem = {
   size: number
   mimeType: string
   storageKey: string
+  thumbnailKey?: string | null
+  thumbnailState?: string | null
   isHidden: boolean
   isTrashed: boolean
   isStarred: boolean

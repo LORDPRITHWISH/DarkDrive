@@ -23,6 +23,7 @@ import {
 import { allowFrameEmbedding } from "../lib/embed.js"
 import { streamStoredFile } from "../lib/stream.js"
 import { listSubtitleSiblings, isSubtitleFile, toVtt } from "../lib/subtitles.js"
+import { canThumbnail, generateThumbnail, queueThumbnail } from "../lib/thumbnails.js"
 
 export const filesRouter = Router()
 
@@ -365,6 +366,11 @@ filesRouter.post("/upload/:uploadId/complete", async (req, res) => {
   } catch {}
   sessions.delete(req.params.uploadId)
 
+  // Kick off thumbnail generation in the background so the upload response
+  // isn't blocked on ffmpeg/libreoffice. Missing thumbnails are also generated
+  // lazily on first request, so this is just a head start.
+  queueThumbnail(rec.id)
+
   res.status(201).json({ file: { ...rec, size: Number(rec.size) } })
 })
 
@@ -440,6 +446,34 @@ filesRouter.get("/:id/download", async (req, res) => {
   })
 })
 
+// Serve a file's preview thumbnail (a small JPEG). Generated on demand the
+// first time it's requested if the upload-time job hasn't produced it yet, so
+// this transparently backfills thumbnails for files uploaded before the
+// pipeline existed. Returns 404 when no thumbnail can be produced — the client
+// falls back to a type icon.
+filesRouter.get("/:id/thumbnail", async (req, res) => {
+  const user = currentUser(req)
+  const file = await getFileWithAccess(user.id, req.params.id, "read")
+  if (!file) return res.status(404).json({ error: "not_found" })
+  if (!canThumbnail(file)) return res.status(415).json({ error: "unsupported" })
+
+  let key = file.thumbnailKey
+  // Don't keep retrying files we've already determined can't be thumbnailed.
+  if (!key && file.thumbnailState !== "failed" && file.thumbnailState !== "unsupported") {
+    key = await generateThumbnail(file.id)
+  }
+  if (!key) return res.status(404).json({ error: "no_thumbnail" })
+
+  const abs = absolutePath(key)
+  if (!fs.existsSync(abs)) return res.status(404).json({ error: "gone" })
+
+  res.setHeader("Content-Type", "image/jpeg")
+  // Thumbnails are content-addressed by storage key, so a given URL is stable;
+  // private since the file may live in a non-public space.
+  res.setHeader("Cache-Control", "private, max-age=86400")
+  fs.createReadStream(abs).pipe(res)
+})
+
 // List sidecar subtitle tracks for a video: sibling files in the same folder
 // whose base name matches the video (e.g. Movie.mkv ↔ Movie.en.srt).
 filesRouter.get("/:id/subtitles", async (req, res) => {
@@ -482,6 +516,41 @@ filesRouter.get("/:id/subtitle.vtt", async (req, res) => {
   res.send(toVtt(raw, file.name))
 })
 
+// File activity: view/download counts and a recent event log.
+filesRouter.get("/:id/activity", async (req, res) => {
+  const user = currentUser(req)
+  const file = await getFileWithAccess(user.id, req.params.id, "read")
+  if (!file) return res.status(404).json({ error: "not_found" })
+
+  const [views, downloads, recent] = await Promise.all([
+    prisma.fileAccess.count({ where: { fileId: file.id, action: "view" } }),
+    prisma.fileAccess.count({ where: { fileId: file.id, action: "download" } }),
+    prisma.fileAccess.findMany({
+      where: { fileId: file.id },
+      orderBy: { accessedAt: "desc" },
+      take: 30,
+      select: {
+        action: true,
+        accessedAt: true,
+        user: { select: { name: true, avatarUrl: true } },
+      },
+    }),
+  ])
+
+  res.json({
+    stats: {
+      views,
+      downloads,
+      lastAccessed: recent[0]?.accessedAt ?? null,
+    },
+    recent: recent.map((a) => ({
+      action: a.action,
+      accessedAt: a.accessedAt.toISOString(),
+      user: { name: a.user.name, avatarUrl: a.user.avatarUrl ?? null },
+    })),
+  })
+})
+
 filesRouter.patch("/:id", async (req, res) => {
   const user = currentUser(req)
   const body = z
@@ -511,5 +580,10 @@ filesRouter.delete("/:id", async (req, res) => {
   try {
     removeFile(file.storageKey)
   } catch {}
+  if (file.thumbnailKey) {
+    try {
+      removeFile(file.thumbnailKey)
+    } catch {}
+  }
   res.json({ ok: true })
 })

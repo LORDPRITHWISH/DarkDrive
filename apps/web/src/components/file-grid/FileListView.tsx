@@ -7,7 +7,7 @@ import {
 } from "@phosphor-icons/react"
 import type { FileItem, Folder } from "@/lib/types"
 import { formatBytes, formatDate } from "@/lib/format"
-import { iconFor } from "@/lib/fileIcon"
+import { FileThumb } from "./FileThumb"
 import { isInternalDrag, readItemDrag, startItemDrag } from "./dnd"
 
 type ItemType = "folder" | "file"
@@ -116,7 +116,9 @@ export function FileListView({
           >
             <td className="py-2 pl-4">
               <div className="flex items-center gap-2">
-                {iconFor(f.mimeType, 20, f.name)}
+                <span className="grid size-5 shrink-0 place-items-center overflow-hidden rounded">
+                  <FileThumb file={f} iconSize={20} />
+                </span>
                 <span className={f.isHidden ? "opacity-60 italic" : ""}>{f.name}</span>
                 {f.isStarred && (
                   <StarIcon size={14} weight="fill" className="text-yellow-500" />

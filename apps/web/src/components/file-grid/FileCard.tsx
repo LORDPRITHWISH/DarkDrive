@@ -2,9 +2,10 @@ import { useState } from "react"
 import { LinkSimpleIcon } from "@phosphor-icons/react"
 import type { FileItem } from "@/lib/types"
 import { formatBytes } from "@/lib/format"
-import { apiUrl } from "@/lib/config"
 import { iconFor } from "@/lib/fileIcon"
+import { thumbnailable } from "@/lib/thumb"
 import { StarToggle } from "./StarToggle"
+import { FileThumb } from "./FileThumb"
 import { startItemDrag } from "./dnd"
 
 export function FileCard({
@@ -30,7 +31,6 @@ export function FileCard({
   onRenameCommit: () => void
   onRenameCancel: () => void
 }) {
-  const isImg = file.mimeType.startsWith("image/")
   const [dragging, setDragging] = useState(false)
   return (
     <div
@@ -61,16 +61,12 @@ export function FileCard({
           <LinkSimpleIcon size={12} />
         </div>
       )}
-      <div className=" grid aspect-4/3 place-items-center overflow-hidden rounded-lg">
-        {isImg ? (
-          <img
-            src={apiUrl(`/api/files/${file.id}/download?inline=1`)}
-            alt=""
-            className="h-full w-full object-cover"
-            loading="lazy"
-          />
-        ) : (
-          iconFor(file.mimeType, 72, file.name)
+      <div className="relative grid aspect-4/3 place-items-center overflow-hidden rounded-lg">
+        <FileThumb file={file} iconSize={72} />
+        {thumbnailable(file) && (
+          <div className="bg-background/80 absolute right-2 bottom-2 z-10 rounded-md p-1 backdrop-blur-sm">
+            {iconFor(file.mimeType, 16, file.name)}
+          </div>
         )}
       </div>
       <div className="p-2">

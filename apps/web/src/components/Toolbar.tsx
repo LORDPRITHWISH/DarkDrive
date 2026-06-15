@@ -67,7 +67,7 @@ export function Toolbar() {
       <NewFolderDialog
         open={newFolderOpen}
         onClose={() => setNewFolderOpen(false)}
-        onSubmit={(name, color) => createFolder(name, color)}
+        onSubmit={(name, color, thumbnail) => createFolder(name, color, thumbnail)}
       />
 
       <div className="ml-auto flex items-center gap-1">

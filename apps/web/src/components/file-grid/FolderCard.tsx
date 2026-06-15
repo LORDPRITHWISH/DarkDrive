@@ -1,8 +1,23 @@
 import { useState } from "react"
 import { FolderIcon } from "@phosphor-icons/react"
 import type { Folder } from "@/lib/types"
+import { apiUrl } from "@/lib/config"
 import { StarToggle } from "./StarToggle"
 import { isInternalDrag, readItemDrag, startItemDrag } from "./dnd"
+
+function FolderThumb({ folderId }: { folderId: string }) {
+  const [failed, setFailed] = useState(false)
+  if (failed) return null
+  return (
+    <img
+      src={apiUrl(`/api/folders/${folderId}/thumbnail`)}
+      alt=""
+      loading="lazy"
+      className="h-full w-full object-cover"
+      onError={() => setFailed(true)}
+    />
+  )
+}
 
 export function FolderCard({
   folder,
@@ -72,13 +87,27 @@ export function FolderCard({
         starred={folder.isStarred}
         className="absolute top-2 right-2 z-10"
       />
-      <div className="grid aspect-4/3 place-items-center">
-        <FolderIcon
-          size={72}
-          weight="fill"
-          style={{ color: folder.color || undefined }}
-          className={folder.color ? "" : "text-primary"}
-        />
+      <div className="relative grid aspect-4/3 place-items-center overflow-hidden rounded-lg">
+        {folder.thumbnailKey ? (
+          <>
+            <FolderThumb folderId={folder.id} />
+            <div className="bg-background/80 absolute right-2 bottom-2 z-10 rounded-md p-1 backdrop-blur-sm">
+              <FolderIcon
+                size={16}
+                weight="fill"
+                style={{ color: folder.color || undefined }}
+                className={folder.color ? "" : "text-primary"}
+              />
+            </div>
+          </>
+        ) : (
+          <FolderIcon
+            size={72}
+            weight="fill"
+            style={{ color: folder.color || undefined }}
+            className={folder.color ? "" : "text-primary"}
+          />
+        )}
       </div>
       <div className="px-2 pb-2">
         {renaming ? (

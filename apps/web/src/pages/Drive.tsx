@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { useDrive } from "@/store/drive"
 import { Sidebar } from "@/components/Sidebar"
+import { SidebarToggle } from "@/components/SidebarToggle"
 import { Toolbar } from "@/components/Toolbar"
 import { Breadcrumbs } from "@/components/Breadcrumbs"
 import { FileGrid } from "@/components/FileGrid"
@@ -162,7 +163,10 @@ export function DrivePage() {
       <Sidebar />
       <main className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between gap-3 border-b px-4 py-3">
-          <Breadcrumbs />
+          <div className="flex items-center gap-3">
+            <SidebarToggle />
+            <Breadcrumbs />
+          </div>
           {folder?.spaceId && (
             <span className="bg-accent text-accent-foreground rounded-full px-2 py-0.5 text-xs">
               shared space

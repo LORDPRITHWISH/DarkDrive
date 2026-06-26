@@ -11,6 +11,7 @@ import {
 } from "@phosphor-icons/react"
 import { useNavigate } from "react-router-dom"
 import { Sidebar } from "@/components/Sidebar"
+import { SidebarToggle } from "@/components/SidebarToggle"
 import { FilePreview } from "@/components/FilePreview"
 import { Button } from "@workspace/ui/components/button"
 import { apiGet } from "@/lib/api"
@@ -76,6 +77,7 @@ export function StarredPage() {
       <main className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between gap-3 border-b px-4 py-3">
           <div className="flex items-center gap-2">
+            <SidebarToggle />
             <StarIcon size={18} weight="fill" className="text-yellow-500" />
             <div className="text-sm font-semibold">Starred</div>
           </div>

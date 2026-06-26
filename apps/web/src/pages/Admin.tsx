@@ -6,6 +6,7 @@ import {
   TabsContent,
 } from "@workspace/ui/components/tabs"
 import { Sidebar } from "@/components/Sidebar"
+import { SidebarToggle } from "@/components/SidebarToggle"
 import { apiGet, apiJson } from "@/lib/api"
 import { useAuth } from "@/store/auth"
 import type { AdminStats, AdminUser } from "@/lib/types"
@@ -61,10 +62,13 @@ export function AdminPage() {
       <Sidebar />
       <main className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between gap-3 border-b px-4 py-3">
-          <div>
-            <div className="text-sm font-semibold">Admin</div>
-            <div className="text-muted-foreground text-xs">
-              Operational dashboard
+          <div className="flex items-center gap-3">
+            <SidebarToggle />
+            <div>
+              <div className="text-sm font-semibold">Admin</div>
+              <div className="text-muted-foreground text-xs">
+                Operational dashboard
+              </div>
             </div>
           </div>
           {stats && (

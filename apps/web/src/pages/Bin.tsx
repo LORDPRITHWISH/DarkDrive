@@ -7,6 +7,7 @@ import {
   TrashIcon,
 } from "@phosphor-icons/react"
 import { Sidebar } from "@/components/Sidebar"
+import { SidebarToggle } from "@/components/SidebarToggle"
 import { Button } from "@workspace/ui/components/button"
 import { apiGet, apiJson } from "@/lib/api"
 import { useDrive } from "@/store/drive"
@@ -113,6 +114,7 @@ export function BinPage() {
       >
         <header className="flex items-center justify-between gap-3 border-b px-4 py-3">
           <div className="flex items-center gap-2">
+            <SidebarToggle />
             <TrashIcon size={18} />
             <div className="text-sm font-semibold">Bin</div>
           </div>

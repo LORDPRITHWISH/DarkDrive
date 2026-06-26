@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useMe } from "@/store/me"
 import { Sidebar } from "@/components/Sidebar"
+import { SidebarToggle } from "@/components/SidebarToggle"
 import { FilePreview } from "@/components/FilePreview"
 import { formatBytes, formatDate } from "@/lib/format"
 import { apiUrl } from "@/lib/config"
@@ -96,6 +97,7 @@ export function RecentPage() {
       <Sidebar />
       <main className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between gap-3 border-b px-4 py-3">
+          <SidebarToggle />
           <div className="text-sm font-semibold">Recent</div>
           <div className="flex items-center gap-1">
             <Button

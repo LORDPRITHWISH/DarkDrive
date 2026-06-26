@@ -4,6 +4,7 @@ import { FolderIcon, StarIcon } from "@phosphor-icons/react"
 import { useAuth } from "@/store/auth"
 import { useMe } from "@/store/me"
 import { Sidebar } from "@/components/Sidebar"
+import { SidebarToggle } from "@/components/SidebarToggle"
 import { FilePreview } from "@/components/FilePreview"
 import { formatBytes, formatDate } from "@/lib/format"
 import { apiUrl } from "@/lib/config"
@@ -66,6 +67,7 @@ export function HomePage() {
       <Sidebar />
       <main className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center gap-3 border-b px-4 py-3">
+          <SidebarToggle />
           <div className="text-sm font-semibold">Home</div>
         </header>
         <div className="flex-1 overflow-auto px-6 py-5">

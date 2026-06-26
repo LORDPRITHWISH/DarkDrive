@@ -11,8 +11,6 @@ import {
   GearSixIcon,
   UploadIcon,
   GlobeIcon,
-  CaretDoubleLeftIcon,
-  CaretDoubleRightIcon,
 } from "@phosphor-icons/react"
 import type { Space } from "@/lib/types"
 import { SpaceManageDialog } from "@/components/SpaceManageDialog"
@@ -23,6 +21,7 @@ import { useEffect, useRef, useState } from "react"
 import { useAuth } from "@/store/auth"
 import { useDrive } from "@/store/drive"
 import { useMe } from "@/store/me"
+import { useSidebar } from "@/store/sidebar"
 import { formatBytes } from "@/lib/format"
 import { Button } from "@workspace/ui/components/button"
 import { ThemeToggle } from "@/components/ThemeToggle"
@@ -42,9 +41,7 @@ export function Sidebar() {
   const [creatingSpace, setCreatingSpace] = useState(false)
   const [upgradeOpen, setUpgradeOpen] = useState(false)
   const [manageSpace, setManageSpace] = useState<Space | null>(null)
-  const [collapsed, setCollapsed] = useState(
-    () => localStorage.getItem("sidebar-collapsed") === "1"
-  )
+  const collapsed = useSidebar((s) => s.collapsed)
   const loc = useLocation()
 
   useEffect(() => {
@@ -52,13 +49,6 @@ export function Sidebar() {
     void loadPublicSpaces()
     void loadQuota()
   }, [loadSpaces, loadPublicSpaces, loadQuota])
-
-  function toggle() {
-    setCollapsed((c) => {
-      localStorage.setItem("sidebar-collapsed", c ? "0" : "1")
-      return !c
-    })
-  }
 
   const pct =
     quota && quota.total > 0
@@ -70,7 +60,7 @@ export function Sidebar() {
     <Link
       to={to}
       title={collapsed ? label : undefined}
-      className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors ${
+      className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors [&_svg]:shrink-0 ${
         collapsed ? "justify-center px-2" : ""
       } ${
         loc.pathname === to
@@ -89,23 +79,16 @@ export function Sidebar() {
         collapsed ? "w-14" : "w-64"
       }`}
     >
-      {/* Header: logo + upload + toggle */}
+      {/* Header: logo + upload */}
       <div className={`flex items-center gap-2 px-1 py-3 ${collapsed ? "flex-col" : ""}`}>
-        {!collapsed && (
-          <Link
-            to="/landing"
-            className="hover:text-primary flex items-center gap-2 transition-colors"
-            title="About DarkDrive"
-          >
-            <img src="/DarkDrive.png" alt="DarkDrive" className="h-8 w-8 rounded-md" />
-            <div className="font-semibold tracking-tight">DarkDrive</div>
-          </Link>
-        )}
-        {collapsed && (
-          <Link to="/landing" title="About DarkDrive">
-            <img src="/DarkDrive.png" alt="DarkDrive" className="h-8 w-8 rounded-md" />
-          </Link>
-        )}
+        <Link
+          to="/landing"
+          className="hover:text-primary flex shrink-0 items-center gap-2 transition-colors"
+          title="About DarkDrive"
+        >
+          <img src="/DarkDrive.png" alt="DarkDrive" className="h-8 w-8 shrink-0 rounded-md" />
+          {!collapsed && <div className="font-semibold tracking-tight">DarkDrive</div>}
+        </Link>
 
         {!collapsed && (
           <Button
@@ -118,20 +101,6 @@ export function Sidebar() {
             Upload
           </Button>
         )}
-
-        <button
-          onClick={toggle}
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className={`rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors ${
-            collapsed ? "" : "ml-1"
-          }`}
-        >
-          {collapsed ? (
-            <CaretDoubleRightIcon size={14} />
-          ) : (
-            <CaretDoubleLeftIcon size={14} />
-          )}
-        </button>
 
         {collapsed && (
           <button

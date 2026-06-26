@@ -11,6 +11,7 @@ import { startItemDrag } from "./dnd"
 export function FileCard({
   file,
   selected,
+  iconSize = 72,
   onClick,
   onDoubleClick,
   onContextMenu,
@@ -22,6 +23,7 @@ export function FileCard({
 }: {
   file: FileItem
   selected: boolean
+  iconSize?: number
   onClick: (e: React.MouseEvent) => void
   onDoubleClick: () => void
   onContextMenu: (e: React.MouseEvent) => void
@@ -62,7 +64,7 @@ export function FileCard({
         </div>
       )}
       <div className="relative grid aspect-4/3 place-items-center overflow-hidden rounded-lg">
-        <FileThumb file={file} iconSize={72} />
+        <FileThumb file={file} iconSize={iconSize} />
         {thumbnailable(file) && (
           <div className="bg-background/80 absolute right-2 bottom-2 z-10 rounded-md p-1 backdrop-blur-sm">
             {iconFor(file.mimeType, 16, file.name)}

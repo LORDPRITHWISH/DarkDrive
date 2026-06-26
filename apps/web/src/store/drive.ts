@@ -66,6 +66,36 @@ export type SortState = { key: SortKey; dir: SortDir }
 
 const DEFAULT_SORT: SortState = { key: "name", dir: "asc" }
 
+export const ZOOM_MIN = 50
+export const ZOOM_MAX = 200
+export const ZOOM_DEFAULT = 100
+
+const BASE_MIN_WIDTH = 170
+const BASE_ICON_SIZE = 72
+const ZOOM_STORAGE_KEY = "dd.zoom"
+
+export function zoomToGrid(zoom: number) {
+  const scale = zoom / 100
+  return {
+    minWidth: Math.round(BASE_MIN_WIDTH * scale),
+    iconSize: Math.round(BASE_ICON_SIZE * scale),
+  }
+}
+
+function readZoom(): number {
+  try {
+    const v = Number(localStorage.getItem(ZOOM_STORAGE_KEY))
+    if (v >= ZOOM_MIN && v <= ZOOM_MAX) return v
+  } catch {}
+  return ZOOM_DEFAULT
+}
+
+function writeZoom(level: number) {
+  try {
+    localStorage.setItem(ZOOM_STORAGE_KEY, String(level))
+  } catch {}
+}
+
 function sortStorageKey(folderId: string) {
   return `dd.sort.${folderId}`
 }
@@ -107,6 +137,7 @@ type DriveState = {
   spaces: Space[]
   publicSpaces: PublicSpace[]
   sort: SortState
+  zoom: number
   preview: FileItem | null
   uploads: {
     id: string
@@ -122,6 +153,7 @@ type DriveState = {
   setView: (v: "grid" | "list") => void
   toggleHidden: () => void
   setSort: (sort: SortState) => void
+  setZoom: (level: number) => void
   setPreview: (file: FileItem | null) => void
   select: (id: string, multi?: boolean) => void
   clearSelection: () => void
@@ -184,6 +216,7 @@ export const useDrive = create<DriveState>((set, get) => ({
   spaces: [],
   publicSpaces: [],
   sort: DEFAULT_SORT,
+  zoom: readZoom(),
   preview: null,
   uploads: [],
 
@@ -196,6 +229,11 @@ export const useDrive = create<DriveState>((set, get) => ({
     set({ sort })
     const id = get().currentFolderId
     if (id) writeSort(id, sort)
+  },
+  setZoom: (level) => {
+    const clamped = Math.max(ZOOM_MIN, Math.min(level, ZOOM_MAX))
+    set({ zoom: clamped })
+    writeZoom(clamped)
   },
   setPreview: (file) => set({ preview: file }),
   select: (id, multi) => {

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { useDrive } from "@/store/drive"
+import { useDrive, zoomToGrid } from "@/store/drive"
 import type { FileItem, Folder } from "@/lib/types"
 import { apiUrl } from "@/lib/config"
 import { sortFiles, sortFolders } from "@/lib/sort"
@@ -22,6 +22,7 @@ export function FileGrid() {
     view,
     selection,
     sort,
+    zoom,
     preview,
     setPreview,
     select,
@@ -35,6 +36,7 @@ export function FileGrid() {
   } = useDrive()
   const sortedFolders = useMemo(() => sortFolders(folders, sort), [folders, sort])
   const sortedFiles = useMemo(() => sortFiles(files, sort), [files, sort])
+  const { minWidth, iconSize } = useMemo(() => zoomToGrid(zoom), [zoom])
 
   async function handleMoveDrop(
     targetFolderId: string,
@@ -103,12 +105,18 @@ export function FileGrid() {
   return (
     <div onClick={closeMenu}>
       {view === "grid" ? (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-3 p-2">
+        <div
+          className="grid gap-3 p-2"
+          style={{
+            gridTemplateColumns: `repeat(auto-fill, minmax(${minWidth}px, 1fr))`,
+          }}
+        >
           {sortedFolders.map((f) => (
             <FolderCard
               key={f.id}
               folder={f}
               selected={selection.has(f.id)}
+              iconSize={iconSize}
               onClick={(e) => select(f.id, e.metaKey || e.ctrlKey || e.shiftKey)}
               onDoubleClick={() => nav(`/drive/${f.id}`)}
               onContextMenu={(e) => openMenu(e, "folder", f.id, f.name)}
@@ -125,6 +133,7 @@ export function FileGrid() {
               key={f.id}
               file={f}
               selected={selection.has(f.id)}
+              iconSize={iconSize}
               onClick={(e) => select(f.id, e.metaKey || e.ctrlKey || e.shiftKey)}
               onDoubleClick={() => setPreview(f)}
               onContextMenu={(e) => openMenu(e, "file", f.id, f.name)}

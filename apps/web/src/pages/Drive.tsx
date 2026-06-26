@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
+import { ArrowCounterClockwiseIcon, MagnifyingGlassMinusIcon, MagnifyingGlassPlusIcon } from "@phosphor-icons/react"
 import { useNavigate, useParams } from "react-router-dom"
-import { useDrive } from "@/store/drive"
+import { useDrive, ZOOM_MIN, ZOOM_MAX, ZOOM_DEFAULT } from "@/store/drive"
 import { Sidebar } from "@/components/Sidebar"
 import { SidebarToggle } from "@/components/SidebarToggle"
 import { Toolbar } from "@/components/Toolbar"
@@ -46,6 +47,9 @@ export function DrivePage() {
     preview,
     setPreview,
     trashItem,
+    view,
+    zoom,
+    setZoom,
   } = useDrive()
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
 
@@ -167,11 +171,54 @@ export function DrivePage() {
             <SidebarToggle />
             <Breadcrumbs />
           </div>
-          {folder?.spaceId && (
-            <span className="bg-accent text-accent-foreground rounded-full px-2 py-0.5 text-xs">
-              shared space
-            </span>
-          )}
+          <div className="flex items-center gap-3">
+            {folder?.spaceId && (
+              <span className="bg-accent text-accent-foreground rounded-full px-2 py-0.5 text-xs">
+                shared space
+              </span>
+            )}
+            {view === "grid" && (
+              <div className="flex items-center gap-2">
+                {zoom !== ZOOM_DEFAULT && (
+                  <button
+                    onClick={() => setZoom(ZOOM_DEFAULT)}
+                    className="text-muted-foreground hover:text-foreground shrink-0 transition-colors"
+                    title={`Reset zoom to ${ZOOM_DEFAULT}%`}
+                  >
+                    <ArrowCounterClockwiseIcon size={14} />
+                  </button>
+                )}
+                <button
+                  onClick={() => setZoom(Math.max(ZOOM_MIN, zoom - 10))}
+                  disabled={zoom <= ZOOM_MIN}
+                  className="text-muted-foreground hover:text-foreground disabled:opacity-30 shrink-0 transition-colors"
+                  title="Zoom out"
+                >
+                  <MagnifyingGlassMinusIcon size={16} />
+                </button>
+                <input
+                  type="range"
+                  min={ZOOM_MIN}
+                  max={ZOOM_MAX}
+                  value={zoom}
+                  onChange={(e) => setZoom(Number(e.target.value))}
+                  className="accent-primary h-1 w-32 cursor-pointer"
+                  title={`Zoom ${zoom}%`}
+                />
+                <button
+                  onClick={() => setZoom(Math.min(ZOOM_MAX, zoom + 10))}
+                  disabled={zoom >= ZOOM_MAX}
+                  className="text-muted-foreground hover:text-foreground disabled:opacity-30 shrink-0 transition-colors"
+                  title="Zoom in"
+                >
+                  <MagnifyingGlassPlusIcon size={16} />
+                </button>
+                <span className="text-muted-foreground w-[3.5ch] text-right text-xs leading-none tabular-nums">
+                  {zoom}%
+                </span>
+              </div>
+            )}
+          </div>
         </header>
         <div className="flex items-center gap-3 border-b p-3">
           <NavButtons />

@@ -22,6 +22,7 @@ function FolderThumb({ folderId }: { folderId: string }) {
 export function FolderCard({
   folder,
   selected,
+  iconSize = 72,
   onClick,
   onDoubleClick,
   onContextMenu,
@@ -34,6 +35,7 @@ export function FolderCard({
 }: {
   folder: Folder
   selected: boolean
+  iconSize?: number
   onClick: (e: React.MouseEvent) => void
   onDoubleClick: () => void
   onContextMenu: (e: React.MouseEvent) => void
@@ -102,7 +104,7 @@ export function FolderCard({
           </>
         ) : (
           <FolderIcon
-            size={72}
+            size={iconSize}
             weight="fill"
             style={{ color: folder.color || undefined }}
             className={folder.color ? "" : "text-primary"}

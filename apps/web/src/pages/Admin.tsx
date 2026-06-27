@@ -72,7 +72,7 @@ export function AdminPage() {
             </div>
           </div>
           {stats && (
-            <div className="text-muted-foreground text-xs">
+            <div className="hidden text-muted-foreground text-xs md:block">
               {stats.sharing.spaces} spaces · {stats.sharing.shareLinks} share links ·{" "}
               {stats.sharing.filesInSpaces} shared files ·{" "}
               {stats.sharing.shortcuts} shortcuts

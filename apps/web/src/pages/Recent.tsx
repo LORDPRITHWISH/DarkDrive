@@ -97,8 +97,10 @@ export function RecentPage() {
       <Sidebar />
       <main className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between gap-3 border-b px-4 py-3">
-          <SidebarToggle />
-          <div className="text-sm font-semibold">Recent</div>
+          <div className="flex items-center gap-3">
+            <SidebarToggle />
+            <div className="text-sm font-semibold">Recent</div>
+          </div>
           <div className="flex items-center gap-1">
             <Button
               size="sm"
@@ -118,7 +120,7 @@ export function RecentPage() {
             </Button>
           </div>
         </header>
-        <div className="flex items-center gap-2 border-b px-6 py-3">
+        <div className="flex items-center gap-2 overflow-x-auto border-b px-4 py-3 md:px-6">
           <FilterChip active={filter === "all"} onClick={() => setFilter("all")}>
             All
           </FilterChip>
@@ -135,7 +137,7 @@ export function RecentPage() {
             <FileIcon size={14} /> Other
           </FilterChip>
         </div>
-        <div className="flex-1 overflow-auto px-6 py-5">
+        <div className="flex-1 overflow-auto px-4 py-5 md:px-6">
           {grouped.length === 0 ? (
             <div className="text-muted-foreground py-20 text-center text-sm">
               Nothing here yet. Files you open will show up here.
@@ -190,7 +192,12 @@ export function RecentPage() {
             ))
           )}
         </div>
-        <FilePreview file={preview} onClose={() => setPreview(null)} />
+        <FilePreview
+          file={preview}
+          onClose={() => setPreview(null)}
+          items={filtered}
+          onNavigate={setPreview}
+        />
       </main>
     </div>
   )

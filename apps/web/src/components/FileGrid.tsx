@@ -248,7 +248,12 @@ export function FileGrid() {
         />
       )}
 
-      <FilePreview file={preview} onClose={() => setPreview(null)} />
+      <FilePreview
+        file={preview}
+        onClose={() => setPreview(null)}
+        items={sortedFiles}
+        onNavigate={setPreview}
+      />
 
       {addTarget && (
         <AddToSpaceDialog

@@ -1,5 +1,5 @@
-import { Suspense, lazy, useEffect, useEffectEvent, useState } from "react"
-import { XIcon, DownloadIcon } from "@phosphor-icons/react"
+import { Suspense, lazy, useCallback, useEffect, useEffectEvent, useRef, useState } from "react"
+import { XIcon, DownloadIcon, InfoIcon, CaretLeftIcon, CaretRightIcon } from "@phosphor-icons/react"
 import type { FileItem, SubtitleTrack } from "@/lib/types"
 import { apiUrl } from "@/lib/config"
 import { apiGet } from "@/lib/api"
@@ -14,9 +14,13 @@ const LazyPdfViewer = lazy(async () => {
 export function FilePreview({
   file,
   onClose,
+  items,
+  onNavigate,
 }: {
   file: FileItem | null
   onClose: () => void
+  items?: FileItem[]
+  onNavigate?: (file: FileItem) => void
 }) {
   const [officeProviderState, setOfficeProviderState] = useState<{
     fileId: string | null
@@ -26,9 +30,50 @@ export function FilePreview({
     fileId: string | null
     focused: boolean
   }>({ fileId: null, focused: false })
+  const [showInfo, setShowInfo] = useState(false)
+  const [isMobile, setIsMobile] = useState(
+    () => window.matchMedia("(max-width: 767px)").matches
+  )
+  const touchRef = useRef<{ x: number; y: number; t: number } | null>(null)
 
-  const handleEscape = useEffectEvent((e: KeyboardEvent) => {
-    if (!file || e.key !== "Escape") return
+  useEffect(() => {
+    const mql = window.matchMedia("(max-width: 767px)")
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches)
+    mql.addEventListener("change", handler)
+    return () => mql.removeEventListener("change", handler)
+  }, [])
+
+  useEffect(() => {
+    setShowInfo(false)
+  }, [file?.id])
+
+  const handleKeyDown = useEffectEvent((e: KeyboardEvent) => {
+    if (!file) return
+
+    if (e.key === "ArrowLeft" && items && onNavigate) {
+      const idx = items.findIndex((f) => f.id === file.id)
+      if (idx > 0) {
+        e.preventDefault()
+        onNavigate(items[idx - 1])
+      }
+      return
+    }
+    if (e.key === "ArrowRight" && items && onNavigate) {
+      const idx = items.findIndex((f) => f.id === file.id)
+      if (idx >= 0 && idx < items.length - 1) {
+        e.preventDefault()
+        onNavigate(items[idx + 1])
+      }
+      return
+    }
+
+    if (e.key !== "Escape") return
+
+    if (showInfo) {
+      e.preventDefault()
+      setShowInfo(false)
+      return
+    }
 
     if (
       isPdfFile(file.mimeType, file.name) &&
@@ -45,26 +90,71 @@ export function FilePreview({
 
   useEffect(() => {
     if (!file) return
-    const onKeyDown = (event: KeyboardEvent) => {
-      handleEscape(event)
-    }
-    window.addEventListener("keydown", onKeyDown)
-    return () => window.removeEventListener("keydown", onKeyDown)
+    const onKey = (event: KeyboardEvent) => handleKeyDown(event)
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
   }, [file])
 
+  const onTouchStart = useCallback((e: React.TouchEvent) => {
+    const t = e.touches[0]
+    touchRef.current = { x: t.clientX, y: t.clientY, t: Date.now() }
+  }, [])
+
+  const onTouchEnd = useCallback(
+    (e: React.TouchEvent) => {
+      if (!touchRef.current || !items || !onNavigate || !file) return
+      const t = e.changedTouches[0]
+      const dx = t.clientX - touchRef.current.x
+      const dy = t.clientY - touchRef.current.y
+      const dt = Date.now() - touchRef.current.t
+      touchRef.current = null
+      if (dt > 400 || Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5)
+        return
+      const idx = items.findIndex((f) => f.id === file.id)
+      if (dx > 0 && idx > 0) onNavigate(items[idx - 1])
+      else if (dx < 0 && idx >= 0 && idx < items.length - 1)
+        onNavigate(items[idx + 1])
+    },
+    [items, onNavigate, file]
+  )
+
   if (!file) return null
+
   const officeFile = isOfficeFile(file.mimeType, file.name)
   const pdfFile = isPdfFile(file.mimeType, file.name)
   const pdfFocusMode =
-    pdfFile && pdfFocusState.fileId === file.id && pdfFocusState.focused
+    !isMobile &&
+    pdfFile &&
+    pdfFocusState.fileId === file.id &&
+    pdfFocusState.focused
   const officeProvider =
     officeFile && officeProviderState.fileId === file.id
       ? officeProviderState.provider
       : "office"
   const inlineSrc = apiUrl(`/api/files/${file.id}/download?inline=1`)
   const viewSrc =
-    officeFile || pdfFile ? apiUrl(`/api/files/${file.id}/preview`) : inlineSrc
+    officeFile || pdfFile
+      ? apiUrl(`/api/files/${file.id}/preview`)
+      : inlineSrc
   const dlHref = apiUrl(`/api/files/${file.id}/download`)
+  const viewerLayout: FileViewerLayout =
+    isMobile || pdfFocusMode ? "fill" : "modal"
+
+  const currentIndex = items
+    ? items.findIndex((f) => f.id === file.id)
+    : -1
+  const hasPrev = currentIndex > 0
+  const hasNext = items ? currentIndex < items.length - 1 : false
+  const goPrev = () => {
+    if (hasPrev && items && onNavigate) onNavigate(items[currentIndex - 1])
+  }
+  const goNext = () => {
+    if (hasNext && items && onNavigate) onNavigate(items[currentIndex + 1])
+  }
+  const counter =
+    items && items.length > 1 && currentIndex >= 0
+      ? `${currentIndex + 1} / ${items.length}`
+      : null
 
   const handleOfficeProviderChange = (provider: OfficeProvider) => {
     setOfficeProviderState({ fileId: file.id, provider })
@@ -74,6 +164,156 @@ export function FilePreview({
     setPdfFocusState({ fileId: file.id, focused })
   }
 
+  const propertiesContent = (
+    <>
+      <a
+        href={dlHref}
+        className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+      >
+        <DownloadIcon size={14} /> Download
+      </a>
+      {officeFile && (
+        <div className="mt-3 border-t pt-3">
+          <div className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            Preview Provider
+          </div>
+          <OfficeProviderSwitch
+            provider={officeProvider}
+            onChange={handleOfficeProviderChange}
+          />
+        </div>
+      )}
+      <div className="mt-3 border-t pt-3">
+        <div className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          Properties
+        </div>
+        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 text-sm">
+          <Info label="Type" value={file.mimeType || "—"} />
+          <Info label="Size" value={formatBytes(file.size)} />
+          <Info label="Added" value={formatDate(file.createdAt)} />
+          <Info label="Modified" value={formatDate(file.updatedAt)} />
+          <Info label="Starred" value={file.isStarred ? "Yes" : "No"} />
+          <Info label="Hidden" value={file.isHidden ? "Yes" : "No"} />
+          <Info label="Trashed" value={file.isTrashed ? "Yes" : "No"} />
+          <Info
+            label="ID"
+            value={
+              <span className="break-all font-mono text-xs">{file.id}</span>
+            }
+          />
+          <Info
+            label="Folder"
+            value={
+              <span className="break-all font-mono text-xs">
+                {file.folderId}
+              </span>
+            }
+          />
+          {file.spaceId && (
+            <Info
+              label="Space"
+              value={
+                <span className="break-all font-mono text-xs">
+                  {file.spaceId}
+                </span>
+              }
+            />
+          )}
+          <Info
+            label="Key"
+            value={
+              <span className="break-all font-mono text-xs">
+                {file.storageKey}
+              </span>
+            }
+          />
+        </dl>
+      </div>
+    </>
+  )
+
+  /* ── Mobile layout ── */
+  if (isMobile) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col bg-background">
+        <div className="flex shrink-0 items-center gap-1 border-b px-2 py-2">
+          <button
+            onClick={onClose}
+            className="shrink-0 rounded-lg p-2 text-muted-foreground active:bg-accent"
+            aria-label="Close"
+          >
+            <XIcon size={20} />
+          </button>
+          <h3 className="min-w-0 flex-1 truncate px-1 text-sm font-medium">
+            {file.name}
+          </h3>
+          {counter && (
+            <span className="shrink-0 rounded-full bg-muted px-2.5 py-0.5 text-xs tabular-nums text-muted-foreground">
+              {counter}
+            </span>
+          )}
+          <button
+            onClick={() => setShowInfo(true)}
+            className="shrink-0 rounded-lg p-2 text-muted-foreground active:bg-accent"
+            aria-label="File info"
+          >
+            <InfoIcon size={20} />
+          </button>
+          <a
+            href={dlHref}
+            className="shrink-0 rounded-lg p-2 text-muted-foreground active:bg-accent"
+            aria-label="Download"
+          >
+            <DownloadIcon size={20} />
+          </a>
+        </div>
+
+        <div
+          className="flex flex-1 items-center justify-center overflow-hidden bg-muted"
+          onTouchStart={onTouchStart}
+          onTouchEnd={onTouchEnd}
+        >
+          <FileViewer
+            file={file}
+            src={viewSrc}
+            layout="fill"
+            officeProvider={officeProvider}
+            subtitleFileId={file.id}
+          />
+        </div>
+
+        {showInfo && (
+          <>
+            <div
+              className="fixed inset-0 z-60 bg-black/40"
+              onClick={() => setShowInfo(false)}
+            />
+            <div className="animate-in slide-in-from-bottom fixed inset-x-0 bottom-0 z-70 max-h-[75vh] overflow-auto rounded-t-2xl border-t bg-card px-5 pb-8 pt-3 duration-200">
+              <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted-foreground/30" />
+              <div className="mb-3 flex items-start justify-between gap-2">
+                <h3
+                  className="min-w-0 truncate font-semibold"
+                  title={file.name}
+                >
+                  {file.name}
+                </h3>
+                <button
+                  onClick={() => setShowInfo(false)}
+                  className="shrink-0 rounded-lg p-1.5 text-muted-foreground hover:bg-accent"
+                  aria-label="Close details"
+                >
+                  <XIcon size={18} />
+                </button>
+              </div>
+              {propertiesContent}
+            </div>
+          </>
+        )}
+      </div>
+    )
+  }
+
+  /* ── Desktop layout ── */
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
@@ -81,7 +321,9 @@ export function FilePreview({
     >
       <div
         className={`flex overflow-hidden rounded-lg border bg-background transition-[width,height,max-width,max-height] duration-300 ${
-          pdfFocusMode ? "h-[94vh] w-[96vw]" : "max-h-[90vh] max-w-[95vw]"
+          pdfFocusMode
+            ? "h-[94vh] w-[96vw]"
+            : "max-h-[90vh] max-w-[95vw]"
         }`}
         onClick={(e) => e.stopPropagation()}
       >
@@ -95,12 +337,13 @@ export function FilePreview({
           <FileViewer
             file={file}
             src={viewSrc}
-            layout={pdfFocusMode ? "fill" : "modal"}
+            layout={viewerLayout}
             officeProvider={officeProvider}
             onPdfFocusModeChange={handlePdfFocusModeChange}
             subtitleFileId={file.id}
           />
         </div>
+
         {!pdfFocusMode && (
           <aside className="flex w-80 shrink-0 flex-col gap-3 overflow-auto border-l p-4">
             <div className="flex items-start justify-between gap-2">
@@ -118,74 +361,34 @@ export function FilePreview({
                 <XIcon size={18} />
               </button>
             </div>
-            <a
-              href={dlHref}
-              className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
-            >
-              <DownloadIcon size={14} /> Download
-            </a>
-            {officeFile && (
-              <div className="border-t pt-3">
-                <div className="mb-2 text-xs font-medium tracking-wider text-muted-foreground uppercase">
-                  Preview Provider
-                </div>
-                <OfficeProviderSwitch
-                  provider={officeProvider}
-                  onChange={handleOfficeProviderChange}
-                />
-              </div>
-            )}
-            <div className="border-t pt-3">
-              <div className="mb-2 text-xs font-medium tracking-wider text-muted-foreground uppercase">
-                Properties
-              </div>
-              <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-sm">
-                <Info label="Type" value={file.mimeType || "—"} />
-                <Info label="Size" value={formatBytes(file.size)} />
-                <Info label="Added" value={formatDate(file.createdAt)} />
-                <Info label="Modified" value={formatDate(file.updatedAt)} />
-                <Info label="Starred" value={file.isStarred ? "Yes" : "No"} />
-                <Info label="Hidden" value={file.isHidden ? "Yes" : "No"} />
-                <Info label="Trashed" value={file.isTrashed ? "Yes" : "No"} />
-                <Info
-                  label="ID"
-                  value={
-                    <span className="font-mono text-xs break-all">
-                      {file.id}
-                    </span>
-                  }
-                />
-                <Info
-                  label="Folder"
-                  value={
-                    <span className="font-mono text-xs break-all">
-                      {file.folderId}
-                    </span>
-                  }
-                />
-                {file.spaceId && (
-                  <Info
-                    label="Space"
-                    value={
-                      <span className="font-mono text-xs break-all">
-                        {file.spaceId}
-                      </span>
-                    }
-                  />
-                )}
-                <Info
-                  label="Key"
-                  value={
-                    <span className="font-mono text-xs break-all">
-                      {file.storageKey}
-                    </span>
-                  }
-                />
-              </dl>
-            </div>
+            {propertiesContent}
           </aside>
         )}
       </div>
+
+      {hasPrev && (
+        <button
+          onClick={(e) => { e.stopPropagation(); goPrev() }}
+          className="absolute left-4 top-1/2 z-10 -translate-y-1/2 rounded-full bg-white/15 p-2.5 text-white backdrop-blur-sm transition-colors hover:bg-white/30"
+          aria-label="Previous file"
+        >
+          <CaretLeftIcon size={24} weight="bold" />
+        </button>
+      )}
+      {hasNext && (
+        <button
+          onClick={(e) => { e.stopPropagation(); goNext() }}
+          className="absolute right-4 top-1/2 z-10 -translate-y-1/2 rounded-full bg-white/15 p-2.5 text-white backdrop-blur-sm transition-colors hover:bg-white/30"
+          aria-label="Next file"
+        >
+          <CaretRightIcon size={24} weight="bold" />
+        </button>
+      )}
+      {counter && (
+        <div className="absolute bottom-5 left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/60 px-3.5 py-1 text-xs tabular-nums text-white backdrop-blur-sm">
+          {counter}
+        </div>
+      )}
     </div>
   )
 }
@@ -369,9 +572,32 @@ function VideoPreview({
   subtitleFileId?: string | null
   className?: string
 }) {
-  // Starts empty; this component is keyed by src upstream, so a new video gets
-  // a fresh instance rather than carrying over the previous file's tracks.
+  const wrapperRef = useRef<HTMLDivElement>(null)
   const [tracks, setTracks] = useState<SubtitleTrack[]>([])
+
+  useEffect(() => {
+    const handler = () => {
+      const el = wrapperRef.current
+      if (!el) return
+      if (
+        document.fullscreenElement &&
+        el.contains(document.fullscreenElement)
+      ) {
+        screen.orientation?.lock?.("landscape").catch(() => {})
+      } else if (!document.fullscreenElement) {
+        try {
+          screen.orientation?.unlock?.()
+        } catch {}
+      }
+    }
+    document.addEventListener("fullscreenchange", handler)
+    return () => {
+      document.removeEventListener("fullscreenchange", handler)
+      try {
+        screen.orientation?.unlock?.()
+      } catch {}
+    }
+  }, [])
 
   useEffect(() => {
     if (!subtitleFileId) return
@@ -391,7 +617,11 @@ function VideoPreview({
     }
   }, [subtitleFileId])
 
-  return <DarkPlayer src={src} tracks={tracks} className={className} />
+  return (
+    <div ref={wrapperRef} className={className}>
+      <DarkPlayer src={src} tracks={tracks} className="h-full w-full" />
+    </div>
+  )
 }
 
 function TextPreview({ src }: { src: string }) {

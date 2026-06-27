@@ -178,7 +178,7 @@ export function DrivePage() {
               </span>
             )}
             {view === "grid" && (
-              <div className="flex items-center gap-2">
+              <div className="hidden items-center gap-2 sm:flex">
                 {zoom !== ZOOM_DEFAULT && (
                   <button
                     onClick={() => setZoom(ZOOM_DEFAULT)}
@@ -220,9 +220,11 @@ export function DrivePage() {
             )}
           </div>
         </header>
-        <div className="flex items-center gap-3 border-b p-3">
-          <NavButtons />
-          <div className="bg-border h-6 w-px" />
+        <div className="flex items-center gap-2 border-b p-2 md:gap-3 md:p-3">
+          <div className="hidden md:block">
+            <NavButtons />
+          </div>
+          <div className="bg-border hidden h-6 w-px md:block" />
           <Toolbar />
         </div>
         <div className="flex-1 overflow-auto">

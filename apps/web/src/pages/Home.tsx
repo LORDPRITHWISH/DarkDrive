@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { FolderIcon, StarIcon } from "@phosphor-icons/react"
 import { useAuth } from "@/store/auth"
@@ -60,6 +60,18 @@ export function HomePage() {
     setPreview(f)
   }
 
+  const allFiles = useMemo(() => {
+    const seen = new Set<string>()
+    const result: FileItem[] = []
+    for (const f of [...recentlyAdded, ...suggestions]) {
+      if (!seen.has(f.id)) { seen.add(f.id); result.push(f) }
+    }
+    for (const f of recent) {
+      if (!seen.has(f.id)) { seen.add(f.id); result.push(f) }
+    }
+    return result
+  }, [recentlyAdded, suggestions, recent])
+
   const firstName = user?.name?.split(" ")[0] ?? ""
 
   return (
@@ -70,7 +82,7 @@ export function HomePage() {
           <SidebarToggle />
           <div className="text-sm font-semibold">Home</div>
         </header>
-        <div className="flex-1 overflow-auto px-6 py-5">
+        <div className="flex-1 overflow-auto px-4 py-5 md:px-6">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">
               {greeting()}
@@ -259,7 +271,12 @@ export function HomePage() {
               )}
           </div>
         </div>
-        <FilePreview file={preview} onClose={() => setPreview(null)} />
+        <FilePreview
+          file={preview}
+          onClose={() => setPreview(null)}
+          items={allFiles}
+          onNavigate={setPreview}
+        />
       </main>
     </div>
   )

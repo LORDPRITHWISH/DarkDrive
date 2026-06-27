@@ -11,6 +11,7 @@ import {
   GearSixIcon,
   UploadIcon,
   GlobeIcon,
+  XIcon,
 } from "@phosphor-icons/react"
 import type { Space } from "@/lib/types"
 import { SpaceManageDialog } from "@/components/SpaceManageDialog"
@@ -41,8 +42,26 @@ export function Sidebar() {
   const [creatingSpace, setCreatingSpace] = useState(false)
   const [upgradeOpen, setUpgradeOpen] = useState(false)
   const [manageSpace, setManageSpace] = useState<Space | null>(null)
-  const collapsed = useSidebar((s) => s.collapsed)
+  const desktopCollapsed = useSidebar((s) => s.collapsed)
+  const mobileOpen = useSidebar((s) => s.mobileOpen)
+  const setMobileOpen = useSidebar((s) => s.setMobileOpen)
   const loc = useLocation()
+
+  const [isMobile, setIsMobile] = useState(
+    () => window.matchMedia("(max-width: 767px)").matches
+  )
+  useEffect(() => {
+    const mql = window.matchMedia("(max-width: 767px)")
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches)
+    mql.addEventListener("change", handler)
+    return () => mql.removeEventListener("change", handler)
+  }, [])
+
+  useEffect(() => {
+    setMobileOpen(false)
+  }, [loc.pathname, setMobileOpen])
+
+  const collapsed = isMobile ? false : desktopCollapsed
 
   useEffect(() => {
     void loadSpaces()
@@ -60,7 +79,7 @@ export function Sidebar() {
     <Link
       to={to}
       title={collapsed ? label : undefined}
-      className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors [&_svg]:shrink-0 ${
+      className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors [&_svg]:shrink-0 md:gap-2 md:rounded-md md:py-2 ${
         collapsed ? "justify-center px-2" : ""
       } ${
         loc.pathname === to
@@ -74,56 +93,73 @@ export function Sidebar() {
   )
 
   return (
-    <aside
-      className={`flex h-screen shrink-0 flex-col gap-4 border-r bg-card p-3 transition-all duration-200 ${
-        collapsed ? "w-14" : "w-64"
-      }`}
-    >
-      {/* Header: logo + upload */}
-      <div className={`flex items-center gap-2 px-1 py-3 ${collapsed ? "flex-col" : ""}`}>
-        <Link
-          to="/landing"
-          className="hover:text-primary flex shrink-0 items-center gap-2 transition-colors"
-          title="About DarkDrive"
-        >
-          <img src="/DarkDrive.png" alt="DarkDrive" className="h-8 w-8 shrink-0 rounded-md" />
-          {!collapsed && <div className="font-semibold tracking-tight">DarkDrive</div>}
-        </Link>
-
-        {!collapsed && (
-          <Button
-            size="sm"
-            className="ml-auto"
-            onClick={() => fileInput.current?.click()}
-            title="Upload files"
-          >
-            <UploadIcon size={16} weight="bold" />
-            Upload
-          </Button>
-        )}
-
-        {collapsed && (
-          <button
-            onClick={() => fileInput.current?.click()}
-            title="Upload files"
-            className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-          >
-            <UploadIcon size={16} weight="bold" />
-          </button>
-        )}
-
-        <input
-          ref={fileInput}
-          type="file"
-          multiple
-          hidden
-          onChange={(e) => {
-            const target = currentFolderId ?? user?.rootFolderId
-            if (e.target.files && target) void upload(e.target.files, target)
-            e.target.value = ""
-          }}
+    <>
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden"
+          onClick={() => setMobileOpen(false)}
         />
-      </div>
+      )}
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 md:relative md:z-auto ${
+          mobileOpen ? "translate-x-0" : "-translate-x-full"
+        } md:translate-x-0 flex h-screen shrink-0 flex-col gap-4 border-r bg-card p-3 transition-transform duration-200 md:transition-all w-[85vw] max-w-xs md:w-64 md:max-w-none ${
+          desktopCollapsed ? "md:w-14" : ""
+        }`}
+      >
+        {/* Header: logo + upload */}
+        <div className={`flex items-center gap-2 px-1 py-3 ${collapsed ? "flex-col" : ""}`}>
+          <Link
+            to="/landing"
+            className="hover:text-primary flex shrink-0 items-center gap-2 transition-colors"
+            title="About DarkDrive"
+          >
+            <img src="/DarkDrive.png" alt="DarkDrive" className="h-8 w-8 shrink-0 rounded-md" />
+            {!collapsed && <div className="font-semibold tracking-tight">DarkDrive</div>}
+          </Link>
+
+          <div className="ml-auto flex items-center gap-1.5">
+            {!collapsed && (
+              <Button
+                size="sm"
+                onClick={() => fileInput.current?.click()}
+                title="Upload files"
+              >
+                <UploadIcon size={16} weight="bold" />
+                <span className="hidden md:inline">Upload</span>
+              </Button>
+            )}
+
+            {collapsed && (
+              <button
+                onClick={() => fileInput.current?.click()}
+                title="Upload files"
+                className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+              >
+                <UploadIcon size={16} weight="bold" />
+              </button>
+            )}
+
+            <button
+              onClick={() => setMobileOpen(false)}
+              className="shrink-0 rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors md:hidden"
+            >
+              <XIcon size={20} />
+            </button>
+          </div>
+
+          <input
+            ref={fileInput}
+            type="file"
+            multiple
+            hidden
+            onChange={(e) => {
+              const target = currentFolderId ?? user?.rootFolderId
+              if (e.target.files && target) void upload(e.target.files, target)
+              e.target.value = ""
+            }}
+          />
+        </div>
 
       {/* Nav */}
       <nav className="flex flex-col gap-0.5">
@@ -351,6 +387,7 @@ export function Sidebar() {
           ⏻
         </Button>
       </div>
-    </aside>
+      </aside>
+    </>
   )
 }

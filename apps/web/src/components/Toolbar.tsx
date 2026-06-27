@@ -51,7 +51,7 @@ export function Toolbar() {
     <div className="flex flex-1 items-center gap-2">
       <Button size="sm" onClick={() => fileInput.current?.click()}>
         <UploadIcon size={16} />
-        Upload
+        <span className="hidden md:inline">Upload</span>
       </Button>
       <input
         ref={fileInput}
@@ -62,7 +62,7 @@ export function Toolbar() {
       />
       <Button size="sm" variant="outline" onClick={() => setNewFolderOpen(true)}>
         <FolderPlusIcon size={16} />
-        New folder
+        <span className="hidden md:inline">New folder</span>
       </Button>
       <NewFolderDialog
         open={newFolderOpen}
@@ -79,11 +79,11 @@ export function Toolbar() {
             title={`Sort by ${SORT_LABELS[sort.key]} (${sort.dir})`}
           >
             <ArrowsDownUpIcon size={14} />
-            {SORT_LABELS[sort.key]}
+            <span className="hidden md:inline">{SORT_LABELS[sort.key]}</span>
             {sort.dir === "asc" ? (
-              <SortAscendingIcon size={12} className="opacity-70" />
+              <SortAscendingIcon size={12} className="hidden opacity-70 md:inline" />
             ) : (
-              <SortDescendingIcon size={12} className="opacity-70" />
+              <SortDescendingIcon size={12} className="hidden opacity-70 md:inline" />
             )}
           </Button>
           {sortOpen && (
@@ -137,7 +137,7 @@ export function Toolbar() {
         >
           {showHidden ? <EyeIcon size={16} /> : <EyeSlashIcon size={16} />}
         </Button>
-        <div className="bg-border mx-1 h-5 w-px" />
+        <div className="bg-border mx-1 hidden h-5 w-px md:block" />
         <Button
           size="sm"
           variant={view === "grid" ? "default" : "ghost"}

@@ -128,7 +128,7 @@ export function BinPage() {
               title="Permanently delete everything in the bin"
             >
               <TrashIcon size={14} weight="fill" />
-              {clearing ? "Emptying…" : "Empty bin"}
+              <span className="hidden sm:inline">{clearing ? "Emptying…" : "Empty bin"}</span>
             </Button>
             <Button
               size="sm"
@@ -275,7 +275,12 @@ export function BinPage() {
           </ul>
         )}
 
-        <FilePreview file={preview} onClose={() => setPreview(null)} />
+        <FilePreview
+          file={preview}
+          onClose={() => setPreview(null)}
+          items={files}
+          onNavigate={setPreview}
+        />
       </main>
     </div>
   )

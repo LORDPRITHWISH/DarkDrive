@@ -101,7 +101,7 @@ export function StarredPage() {
           </div>
         </header>
 
-        <div className="flex items-center gap-2 border-b px-6 py-3">
+        <div className="flex items-center gap-2 overflow-x-auto border-b px-4 py-3 md:px-6">
           <FilterChip active={filter === "all"} onClick={() => setFilter("all")}>
             All
           </FilterChip>
@@ -119,7 +119,7 @@ export function StarredPage() {
           </FilterChip>
         </div>
 
-        <div className="flex-1 overflow-auto px-6 py-5">
+        <div className="flex-1 overflow-auto px-4 py-5 md:px-6">
           {loading ? (
             <div className="text-muted-foreground py-20 text-center text-sm">
               Loading…
@@ -218,7 +218,12 @@ export function StarredPage() {
             </div>
           )}
         </div>
-        <FilePreview file={preview} onClose={() => setPreview(null)} />
+        <FilePreview
+          file={preview}
+          onClose={() => setPreview(null)}
+          items={filteredFiles}
+          onNavigate={setPreview}
+        />
       </main>
     </div>
   )

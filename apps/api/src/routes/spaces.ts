@@ -5,6 +5,7 @@ import path from "node:path"
 import multer from "multer"
 import { prisma } from "../db/prisma.js"
 import { currentUser, requireAuth } from "../middleware/auth.js"
+import { notify } from "../lib/notify.js"
 import {
   STORAGE_ROOT,
   absolutePath,
@@ -137,6 +138,100 @@ spacesRouter.get("/public", async (req, res) => {
   })
 })
 
+// Space "home" — everything needed to render the overview page: the space
+// itself, its member roster, aggregate stats, and the most recently added
+// content. Readable by owners, members, and (for public spaces) any
+// authenticated user — same visibility rule the drive listing enforces.
+spacesRouter.get("/:id/overview", async (req, res) => {
+  const user = currentUser(req)
+  const space = await prisma.space.findUnique({
+    where: { id: req.params.id },
+    include: { owner: true, members: { include: { user: true } } },
+  })
+  if (!space) return res.status(404).json({ error: "not_found" })
+  const isOwner = space.ownerId === user.id
+  const isMember = space.members.some((m) => m.userId === user.id)
+  if (!isOwner && !isMember && !space.isPublic)
+    return res.status(403).json({ error: "forbidden" })
+
+  // Folders that belong to the space (root included — filtered out of the
+  // count below). Used both for the folder count and to find shortcuts that
+  // surface files into the space.
+  const spaceFolders = await prisma.folder.findMany({
+    where: { spaceId: space.id, isTrashed: false, isHidden: false },
+    select: { id: true, updatedAt: true },
+  })
+  const folderIds = spaceFolders.map((f) => f.id)
+
+  // Content in a space arrives two ways: files whose home is the space
+  // (spaceId set, e.g. a folder moved in) and files surfaced via a shortcut
+  // into one of the space's folders (the common case — see FileShortcut).
+  // Union them, deduped by file id, so a file that is both counts once.
+  const [directFiles, shortcuts] = await Promise.all([
+    prisma.file.findMany({
+      where: { spaceId: space.id, isTrashed: false, isHidden: false },
+      orderBy: { createdAt: "desc" },
+    }),
+    folderIds.length
+      ? prisma.fileShortcut.findMany({
+          where: {
+            folderId: { in: folderIds },
+            file: { isTrashed: false, isHidden: false },
+          },
+          include: { file: true },
+        })
+      : Promise.resolve([]),
+  ])
+
+  const byId = new Map<string, { rec: (typeof directFiles)[number]; shortcutId?: string }>()
+  for (const f of directFiles) byId.set(f.id, { rec: f })
+  for (const s of shortcuts) {
+    if (!byId.has(s.file.id)) byId.set(s.file.id, { rec: s.file, shortcutId: s.id })
+  }
+
+  const files = Array.from(byId.values()).map(({ rec, shortcutId }) => ({
+    ...rec,
+    size: Number(rec.size),
+    ...(shortcutId ? { isShortcut: true as const, shortcutId } : {}),
+  }))
+  files.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+
+  const totalBytes = files.reduce((sum, f) => sum + f.size, 0)
+  const folderCount = folderIds.filter((id) => id !== space.rootFolderId).length
+
+  // Last activity = the newest touch across the space's files and folders,
+  // never earlier than the space's own creation.
+  let lastActivityMs = space.createdAt.getTime()
+  for (const f of files)
+    lastActivityMs = Math.max(lastActivityMs, f.updatedAt.getTime(), f.createdAt.getTime())
+  for (const f of spaceFolders)
+    lastActivityMs = Math.max(lastActivityMs, f.updatedAt.getTime())
+
+  const members = projectMembers(space)
+  res.json({
+    space: {
+      id: space.id,
+      name: space.name,
+      color: space.color,
+      logoKey: space.logoKey,
+      icon: space.icon,
+      rootFolderId: space.rootFolderId,
+      ownerId: space.ownerId,
+      isPublic: space.isPublic,
+      createdAt: space.createdAt,
+      members,
+    },
+    stats: {
+      fileCount: files.length,
+      folderCount,
+      totalBytes,
+      memberCount: members.length,
+      lastActivityAt: new Date(lastActivityMs).toISOString(),
+    },
+    recentFiles: files.slice(0, 12),
+  })
+})
+
 // Upload (or replace) a space logo image. Returns a storage key the client
 // can hand back via PATCH or POST to persist it on the space.
 spacesRouter.post("/logo", logoUpload.single("logo"), async (req, res) => {
@@ -239,11 +334,28 @@ spacesRouter.post("/:id/members", async (req, res) => {
   if (!target) return res.status(404).json({ error: "user_not_found" })
   if (target.id === space.ownerId)
     return res.status(400).json({ error: "cannot_invite_owner" })
+  const existing = await prisma.spaceMember.findUnique({
+    where: { spaceId_userId: { spaceId: space.id, userId: target.id } },
+  })
   const member = await prisma.spaceMember.upsert({
     where: { spaceId_userId: { spaceId: space.id, userId: target.id } },
     update: { role },
     create: { spaceId: space.id, userId: target.id, role },
   })
+  if (!existing) {
+    void notify(target.id, {
+      type: "space_invite",
+      title: `${user.name} added you to "${space.name}"`,
+      body: `Role: ${role}`,
+      link: `/drive/${space.rootFolderId}`,
+    })
+  } else if (existing.role !== role) {
+    void notify(target.id, {
+      type: "space_role_changed",
+      title: `Your role in "${space.name}" changed to ${role}`,
+      link: `/drive/${space.rootFolderId}`,
+    })
+  }
   res.status(201).json(member)
 })
 
@@ -262,6 +374,11 @@ spacesRouter.patch("/:id/members/:userId", async (req, res) => {
     where: { spaceId_userId: { spaceId: space.id, userId: req.params.userId } },
     data: { role },
   })
+  void notify(req.params.userId, {
+    type: "space_role_changed",
+    title: `Your role in "${space.name}" changed to ${role}`,
+    link: `/drive/${space.rootFolderId}`,
+  })
   res.json(m)
 })
 
@@ -277,6 +394,10 @@ spacesRouter.delete("/:id/members/:userId", async (req, res) => {
     return res.status(400).json({ error: "cannot_remove_owner" })
   await prisma.spaceMember.delete({
     where: { spaceId_userId: { spaceId: space.id, userId: req.params.userId } },
+  })
+  void notify(req.params.userId, {
+    type: "space_removed",
+    title: `You were removed from "${space.name}"`,
   })
   res.json({ ok: true })
 })

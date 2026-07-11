@@ -32,7 +32,7 @@ foldersRouter.use(requireAuth)
 foldersRouter.get("/:id/contents", async (req, res) => {
   const user = currentUser(req)
   const id = req.params.id === "root" ? await assertUserRootFolderId(user) : req.params.id
-  const folder = await getFolderWithAccess(user.id, id, "read")
+  const folder = await getFolderWithAccess(user.id, id, "read", { role: user.role })
   if (!folder) return res.status(404).json({ error: "not_found" })
 
   const includeHidden = req.query.includeHidden === "1"
@@ -84,7 +84,7 @@ foldersRouter.get("/:id/contents", async (req, res) => {
 // Serve a folder's custom thumbnail image.
 foldersRouter.get("/:id/thumbnail", async (req, res) => {
   const user = currentUser(req)
-  const folder = await getFolderWithAccess(user.id, req.params.id, "read")
+  const folder = await getFolderWithAccess(user.id, req.params.id, "read", { role: user.role })
   if (!folder) return res.status(404).json({ error: "not_found" })
   if (!folder.thumbnailKey) return res.status(404).json({ error: "no_thumbnail" })
   const abs = absolutePath(folder.thumbnailKey)
@@ -291,17 +291,57 @@ async function isDescendant(rootId: string, candidateId: string): Promise<boolea
   return false
 }
 
-// Delete (hard)
+// "Permanent" delete from the user's point of view. Like files, a folder is not
+// destroyed — the whole subtree (this folder, its descendant folders, and every
+// file within) is soft-deleted into the admin-only recycle bin so an admin can
+// still restore or purge it. Nothing on disk is removed until an admin purges.
+// The entire subtree is stamped isTrashed=true + deletedAt so no descendant can
+// leak into an isTrashed:false listing.
 foldersRouter.delete("/:id", async (req, res) => {
   const user = currentUser(req)
   const folder = await getFolderWithAccess(user.id, req.params.id, "admin")
   if (!folder) return res.status(403).json({ error: "forbidden" })
   if (!folder.parentId) return res.status(400).json({ error: "cannot_delete_root" })
-  const thumbKey = folder.thumbnailKey
-  await prisma.folder.delete({ where: { id: folder.id } })
-  if (thumbKey) { try { removeFile(thumbKey) } catch {} }
+  const folderIds = await collectFolderSubtree(folder.id)
+  const now = new Date()
+  const data = { deletedAt: now, deletedById: user.id, isTrashed: true }
+  await prisma.$transaction([
+    prisma.file.updateMany({
+      where: { folderId: { in: folderIds }, deletedAt: null },
+      data,
+    }),
+    prisma.folder.updateMany({
+      where: { id: { in: folderIds }, deletedAt: null },
+      data,
+    }),
+  ])
   res.json({ ok: true })
 })
+
+// Collect every folder id in the subtree rooted at `rootId` (inclusive),
+// following parent→child links. Used to apply subtree-wide operations
+// (soft-delete / restore) that the DB's FK cascade can't express for a
+// non-destructive update.
+async function collectFolderSubtree(rootId: string): Promise<string[]> {
+  const ids = [rootId]
+  const seen = new Set(ids)
+  let frontier = [rootId]
+  while (frontier.length) {
+    const children = await prisma.folder.findMany({
+      where: { parentId: { in: frontier } },
+      select: { id: true },
+    })
+    frontier = []
+    for (const c of children) {
+      if (!seen.has(c.id)) {
+        seen.add(c.id)
+        ids.push(c.id)
+        frontier.push(c.id)
+      }
+    }
+  }
+  return ids
+}
 
 // Tree (user's own drive + spaces they're in) for sidebar
 foldersRouter.get("/tree/me", async (req, res) => {

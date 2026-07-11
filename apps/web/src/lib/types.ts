@@ -18,6 +18,25 @@ export type QuotaInfo = {
 
 export type RecentFile = FileItem & { accessedAt: string; action: "view" | "download" }
 
+export type NotificationType =
+  | "space_invite"
+  | "space_role_changed"
+  | "space_removed"
+  | "quota_upgrade_approved"
+  | "quota_upgrade_denied"
+  | "quota_changed"
+  | "quota_near_limit"
+
+export type AppNotification = {
+  id: string
+  type: NotificationType
+  title: string
+  body: string | null
+  link: string | null
+  readAt: string | null
+  createdAt: string
+}
+
 export type NavState = {
   current: string | null
   canBack: boolean
@@ -76,6 +95,8 @@ export type AdminStats = {
     totalQuotaBytes: number
     trashedBytes: number
     trashedCount: number
+    recycleBinBytes: number
+    recycleBinCount: number
     topStorage: {
       id: string
       name: string
@@ -98,7 +119,7 @@ export type AdminStats = {
       createdAt: string
       owner: { id: string; name: string; email: string } | null
     }[]
-    duplicates: { name: string; size: number; count: number }[]
+    duplicates: { name: string; size: number; count: number; sampleId: string }[]
   }
   activity: {
     accesses7d: number
@@ -107,6 +128,7 @@ export type AdminStats = {
     peakHour: number
     recent: {
       id: string
+      fileId: string | null
       action: string
       accessedAt: string
       fileName: string
@@ -143,6 +165,124 @@ export type AdminUser = {
   disabledAt: string | null
   createdAt: string
   avatarUrl: string | null
+}
+
+// Full lifecycle of a single user — everything the admin can see about what
+// they've stored and done. Backed by GET /api/admin/users/:id/detail.
+export type UserDetail = {
+  user: {
+    id: string
+    email: string
+    name: string
+    avatarUrl: string | null
+    role: "USER" | "ADMIN"
+    createdAt: string
+    disabledAt: string | null
+    storageQuotaBytes: number
+    upgradeRequestedAt: string | null
+    upgradeRequestedBytes: number | null
+  }
+  storage: {
+    usedBytes: number
+    quotaBytes: number
+    pct: number
+    fileCount: number
+    folderCount: number
+    trashedCount: number
+    trashedBytes: number
+    recycleBinCount: number
+    recycleBinBytes: number
+    byType: Record<string, number>
+    bytesByType: Record<string, number>
+  }
+  largestFiles: {
+    id: string
+    name: string
+    mimeType: string
+    size: number
+    createdAt: string
+  }[]
+  recentFiles: {
+    id: string
+    name: string
+    mimeType: string
+    size: number
+    createdAt: string
+  }[]
+  activity: {
+    views7d: number
+    downloads7d: number
+    views30d: number
+    downloads30d: number
+    total: number
+    lastActiveAt: string | null
+    recent: {
+      id: string
+      action: string
+      accessedAt: string
+      fileId: string | null
+      fileName: string
+      mimeType: string
+    }[]
+  }
+  logins: {
+    total: number
+    lastLoginAt: string | null
+    recent: {
+      id: string
+      ip: string | null
+      userAgent: string | null
+      createdAt: string
+    }[]
+  }
+  sharing: {
+    shareLinks: number
+    shortcuts: number
+    spacesOwned: { id: string; name: string; memberCount: number; isPublic: boolean }[]
+    memberships: { spaceId: string; name: string; role: string }[]
+  }
+}
+
+// Admin recycle bin — items users have permanently deleted, retained for admins.
+export type RecycleBinPerson = {
+  id: string
+  name: string
+  email: string
+  avatarUrl: string | null
+}
+
+export type RecycleBinFolder = {
+  id: string
+  name: string
+  color: string | null
+  owner: RecycleBinPerson | null
+  deletedBy: RecycleBinPerson | null
+  deletedAt: string
+  sizeBytes: number
+  fileCount: number
+  folderCount: number
+}
+
+export type RecycleBinFile = {
+  id: string
+  name: string
+  mimeType: string
+  size: number
+  owner: RecycleBinPerson | null
+  deletedBy: RecycleBinPerson | null
+  deletedAt: string
+}
+
+export type RecycleBinData = {
+  folders: RecycleBinFolder[]
+  files: RecycleBinFile[]
+  totals: { folders: number; files: number; bytes: number }
+}
+
+// A user's folder tree, for the recycle bin's "move to" destination picker.
+export type AdminFolderTree = {
+  rootId: string
+  folders: { id: string; name: string; parentId: string | null }[]
 }
 
 export type Folder = {
@@ -232,6 +372,21 @@ export type Space = {
   isPublic: boolean
   createdAt: string
   members: SpaceMember[]
+}
+
+export type SpaceStats = {
+  fileCount: number
+  folderCount: number
+  totalBytes: number
+  memberCount: number
+  lastActivityAt: string
+}
+
+// Backing payload for the Space Overview page — GET /api/spaces/:id/overview.
+export type SpaceOverview = {
+  space: Space
+  stats: SpaceStats
+  recentFiles: FileItem[]
 }
 
 export type PublicSpace = {

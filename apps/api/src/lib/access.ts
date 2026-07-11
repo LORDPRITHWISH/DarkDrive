@@ -1,18 +1,25 @@
 import { prisma } from "../db/prisma.js"
-import type { Folder, File as FileRec, SpaceRole, User } from "@prisma/client"
+import type { Folder, File as FileRec, SpaceRole, User, UserRole } from "@prisma/client"
 
 export type AccessMode = "read" | "write" | "admin"
+export type AccessOpts = { role?: UserRole }
 
 export async function getFolderWithAccess(
   userId: string,
   folderId: string,
-  mode: AccessMode = "read"
+  mode: AccessMode = "read",
+  opts?: AccessOpts
 ): Promise<Folder | null> {
   const folder = await prisma.folder.findUnique({
     where: { id: folderId },
     include: { space: { include: { members: true } } },
   })
   if (!folder) return null
+  // System admins can view (but not modify) any folder — deliberately scoped
+  // to read-only call sites (folder contents, thumbnails) so admins retain
+  // full visibility without silently gaining write/delete power over other
+  // users' data through the normal endpoints.
+  if (opts?.role === "ADMIN" && mode === "read") return folder
   if (folder.ownerId === userId) return folder
   if (folder.spaceId && folder.space) {
     // The space creator is implicitly admin of the space — no SpaceMember row
@@ -35,13 +42,18 @@ export async function getFolderWithAccess(
 export async function getFileWithAccess(
   userId: string,
   fileId: string,
-  mode: AccessMode = "read"
+  mode: AccessMode = "read",
+  opts?: AccessOpts
 ): Promise<FileRec | null> {
   const file = await prisma.file.findUnique({
     where: { id: fileId },
     include: { space: { include: { members: true } } },
   })
   if (!file) return null
+  // See getFolderWithAccess — same read-only admin bypass. findUnique isn't
+  // filtered by isTrashed, so this also covers files retained in the admin
+  // recycle bin (their blob is kept on disk until purged).
+  if (opts?.role === "ADMIN" && mode === "read") return file
   if (file.ownerId === userId) return file
   if (file.spaceId && file.space) {
     if (file.space.ownerId === userId) return file

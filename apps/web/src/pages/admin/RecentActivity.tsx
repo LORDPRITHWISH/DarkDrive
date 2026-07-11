@@ -12,6 +12,8 @@ import {
 import { Avatar, AvatarImage, AvatarFallback } from "@workspace/ui/components/avatar"
 import { formatDate, relativeTime } from "@/lib/format"
 import { iconFor } from "@/lib/fileIcon"
+import { FilePreview } from "@/components/FilePreview"
+import { useAdminFilePreview } from "./useAdminFilePreview"
 import type { AdminStats } from "@/lib/types"
 
 function actionMeta(action: string) {
@@ -52,6 +54,7 @@ function bucket(iso: string): { key: string; label: string; order: number } {
 }
 
 export function RecentActivity({ stats }: { stats: AdminStats }) {
+  const { preview, loadingId, open, close } = useAdminFilePreview()
   const groups = new Map<
     string,
     {
@@ -88,41 +91,51 @@ export function RecentActivity({ stats }: { stats: AdminStats }) {
                 {section.items.map((a) => {
                   const meta = actionMeta(a.action)
                   const Icon = meta.Icon
+                  const openable = !!a.fileId
                   return (
-                    <li
-                      key={a.id}
-                      className="hover:bg-accent/30 -mx-2 flex items-center gap-3 rounded-md px-2 py-1.5"
-                    >
-                      <Avatar className="h-7 w-7 shrink-0">
-                        {a.user.avatarUrl && (
-                          <AvatarImage src={a.user.avatarUrl} alt="" />
-                        )}
-                        <AvatarFallback>
-                          {a.user.name[0]?.toUpperCase() ?? "?"}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div
-                        className={`${meta.tint} grid h-6 w-6 shrink-0 place-items-center rounded-full`}
+                    <li key={a.id}>
+                      <button
+                        type="button"
+                        onClick={() => a.fileId && open(a.fileId)}
+                        disabled={!openable || loadingId === a.fileId}
+                        title={openable ? `Open "${a.fileName}"` : "File no longer exists"}
+                        className={`-mx-2 flex w-[calc(100%+1rem)] items-center gap-3 rounded-md px-2 py-1.5 text-left ${
+                          openable
+                            ? "hover:bg-accent/40 disabled:opacity-60"
+                            : "cursor-default opacity-60"
+                        }`}
                       >
-                        <Icon size={12} weight="fill" />
-                      </div>
-                      <div className="min-w-0 flex-1 text-sm">
-                        <span className="font-medium">{a.user.name}</span>
-                        <span className="text-muted-foreground">
-                          {" "}
-                          {meta.label}{" "}
+                        <Avatar className="h-7 w-7 shrink-0">
+                          {a.user.avatarUrl && (
+                            <AvatarImage src={a.user.avatarUrl} alt="" />
+                          )}
+                          <AvatarFallback>
+                            {a.user.name[0]?.toUpperCase() ?? "?"}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div
+                          className={`${meta.tint} grid h-6 w-6 shrink-0 place-items-center rounded-full`}
+                        >
+                          <Icon size={12} weight="fill" />
+                        </div>
+                        <div className="min-w-0 flex-1 text-sm">
+                          <span className="font-medium">{a.user.name}</span>
+                          <span className="text-muted-foreground">
+                            {" "}
+                            {meta.label}{" "}
+                          </span>
+                          <span className="inline-flex items-center gap-1 align-middle">
+                            {iconFor(a.mimeType, 14, a.fileName)}
+                            <span className="truncate">{a.fileName}</span>
+                          </span>
+                        </div>
+                        <span
+                          className="text-muted-foreground shrink-0 text-xs tabular-nums"
+                          title={formatDate(a.accessedAt)}
+                        >
+                          {relativeTime(a.accessedAt)}
                         </span>
-                        <span className="inline-flex items-center gap-1 align-middle">
-                          {iconFor(a.mimeType, 14, a.fileName)}
-                          <span className="truncate">{a.fileName}</span>
-                        </span>
-                      </div>
-                      <span
-                        className="text-muted-foreground shrink-0 text-xs tabular-nums"
-                        title={formatDate(a.accessedAt)}
-                      >
-                        {relativeTime(a.accessedAt)}
-                      </span>
+                      </button>
                     </li>
                   )
                 })}
@@ -131,6 +144,7 @@ export function RecentActivity({ stats }: { stats: AdminStats }) {
           ))
         )}
       </CardContent>
+      <FilePreview file={preview} onClose={close} />
     </Card>
   )
 }

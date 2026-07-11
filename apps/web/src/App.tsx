@@ -9,6 +9,7 @@ import {
 import { useAuth } from "@/store/auth"
 import { LoginPage } from "@/pages/Login"
 import { DrivePage } from "@/pages/Drive"
+import { SpacePage } from "@/pages/Space"
 import { SharePage } from "@/pages/SharePage"
 import { RecentPage } from "@/pages/Recent"
 import { SearchPage } from "@/pages/Search"
@@ -20,6 +21,9 @@ import { StarredPage } from "@/pages/Starred"
 import { UploadToaster } from "@/components/UploadToaster"
 import { Toaster } from "@/components/Toaster"
 import { getSocket } from "@/lib/socket"
+import { useNotifications } from "@/store/notifications"
+import { toast } from "@/store/toast"
+import type { AppNotification } from "@/lib/types"
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, loading, fetchMe } = useAuth()
@@ -49,7 +53,13 @@ function Root() {
 export function App() {
   useEffect(() => {
     const s = getSocket()
+    const onNotification = (n: AppNotification) => {
+      useNotifications.getState().receive(n)
+      toast.info(n.title)
+    }
+    s.on("notification:new", onNotification)
     return () => {
+      s.off("notification:new", onNotification)
       s.disconnect()
     }
   }, [])
@@ -75,6 +85,14 @@ export function App() {
           element={
             <Protected>
               <DrivePage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/spaces/:id"
+          element={
+            <Protected>
+              <SpacePage />
             </Protected>
           }
         />

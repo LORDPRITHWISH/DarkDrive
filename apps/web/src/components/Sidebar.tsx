@@ -21,6 +21,7 @@ import { SpaceManageDialog } from "@/components/SpaceManageDialog"
 import { SpaceEditorDialog } from "@/components/SpaceEditorDialog"
 import { SpaceLogo } from "@/components/SpaceLogo"
 import { UpgradeRequestDialog } from "@/components/UpgradeRequestDialog"
+import { NotificationBell } from "@/components/NotificationBell"
 import { useEffect, useRef, useState } from "react"
 import { useAuth } from "@/store/auth"
 import { useDrive } from "@/store/drive"
@@ -182,6 +183,8 @@ export function Sidebar() {
               )}
             </div>
 
+            <NotificationBell collapsed={collapsed} />
+
             <button
               onClick={() => setMobileOpen(false)}
               className="shrink-0 rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors md:hidden"
@@ -260,7 +263,7 @@ export function Sidebar() {
             collapsed ? (
               <Link
                 key={s.id}
-                to={`/drive/${s.rootFolderId}`}
+                to={`/spaces/${s.id}`}
                 title={s.name}
                 className="flex justify-center rounded-md py-1.5 hover:bg-accent/60"
               >
@@ -272,7 +275,7 @@ export function Sidebar() {
                 className="group/space flex items-center rounded-md hover:bg-accent/60"
               >
                 <Link
-                  to={`/drive/${s.rootFolderId}`}
+                  to={`/spaces/${s.id}`}
                   className="flex min-w-0 flex-1 items-center gap-2 truncate px-2 py-1.5 text-sm text-muted-foreground hover:text-foreground"
                   title={s.name}
                 >
@@ -321,7 +324,7 @@ export function Sidebar() {
               collapsed ? (
                 <Link
                   key={s.id}
-                  to={`/drive/${s.rootFolderId}`}
+                  to={`/spaces/${s.id}`}
                   title={s.ownerName ? `${s.name} · by ${s.ownerName}` : s.name}
                   className="flex justify-center rounded-md py-1.5 hover:bg-accent/60"
                 >
@@ -330,7 +333,7 @@ export function Sidebar() {
               ) : (
                 <Link
                   key={s.id}
-                  to={`/drive/${s.rootFolderId}`}
+                  to={`/spaces/${s.id}`}
                   className="flex min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent/60 hover:text-foreground"
                   title={s.ownerName ? `${s.name} · by ${s.ownerName}` : s.name}
                 >

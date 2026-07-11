@@ -17,6 +17,7 @@ import { FileTypesPanel } from "./admin/FileTypesPanel"
 import { LargestFiles } from "./admin/LargestFiles"
 import { DuplicatesList } from "./admin/DuplicatesList"
 import { TrashPanel } from "./admin/TrashPanel"
+import { RecycleBinPanel } from "./admin/RecycleBinPanel"
 import { ServerPanel } from "./admin/ServerPanel"
 import { ServerSummary } from "./admin/ServerSummary"
 import { HourlyChart } from "./admin/HourlyChart"
@@ -113,6 +114,14 @@ function Dashboard({
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="files">Files</TabsTrigger>
+          <TabsTrigger value="recycle-bin">
+            Recycle bin
+            {stats.storage.recycleBinCount > 0 && (
+              <span className="bg-primary text-primary-foreground ml-2 rounded-full px-1.5 text-[10px] font-semibold">
+                {stats.storage.recycleBinCount}
+              </span>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="activity">Activity</TabsTrigger>
           <TabsTrigger value="server">Server</TabsTrigger>
           <TabsTrigger value="users">Users</TabsTrigger>
@@ -146,6 +155,10 @@ function Dashboard({
             <LargestFiles stats={stats} />
             <DuplicatesList stats={stats} />
           </div>
+        </TabsContent>
+
+        <TabsContent value="recycle-bin">
+          <RecycleBinPanel users={users} />
         </TabsContent>
 
         <TabsContent

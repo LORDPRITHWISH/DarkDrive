@@ -13,7 +13,6 @@ import {
   absolutePath,
   ensureDirFor,
   newStorageKey,
-  removeFile,
   STORAGE_ROOT,
 } from "../storage/local.js"
 import {
@@ -25,6 +24,7 @@ import { allowFrameEmbedding } from "../lib/embed.js"
 import { streamStoredFile } from "../lib/stream.js"
 import { listSubtitleSiblings, isSubtitleFile, toVtt } from "../lib/subtitles.js"
 import { canThumbnail, generateThumbnail, queueThumbnail } from "../lib/thumbnails.js"
+import { maybeNotifyQuotaNearLimit } from "../lib/notify.js"
 
 export const filesRouter = Router()
 
@@ -150,7 +150,7 @@ filesRouter.get("/:id/preview", async (req, res) => {
   if (!req.user) return res.status(401).json({ error: "unauthorized" })
 
   const user = currentUser(req)
-  const file = await getFileWithAccess(user.id, req.params.id, "read")
+  const file = await getFileWithAccess(user.id, req.params.id, "read", { role: user.role })
   if (!file) return res.status(404).json({ error: "not_found" })
   if (!isPreviewableFile(file)) {
     return res.status(415).json({ error: "unsupported_preview" })
@@ -372,6 +372,8 @@ filesRouter.post("/upload/:uploadId/complete", async (req, res) => {
   // lazily on first request, so this is just a head start.
   queueThumbnail(rec.id)
 
+  void maybeNotifyQuotaNearLimit(user.id, BigInt(used._sum.size ?? BigInt(0)) + BigInt(stat.size), quota)
+
   res.status(201).json({ file: { ...rec, size: Number(rec.size) } })
 })
 
@@ -424,7 +426,7 @@ filesRouter.delete("/shortcuts/:id", async (req, res) => {
 
 filesRouter.get("/:id/download", async (req, res) => {
   const user = currentUser(req)
-  const file = await getFileWithAccess(user.id, req.params.id, "read")
+  const file = await getFileWithAccess(user.id, req.params.id, "read", { role: user.role })
   if (!file) return res.status(404).json({ error: "not_found" })
   // log access for recents / suggestions — but only on the opening request.
   // Media seeking fires many ranged requests per playback; logging each one
@@ -545,10 +547,10 @@ filesRouter.post(
       await Promise.all(
         items.map(async (it) => {
           if (it.type === "file") {
-            const file = await getFileWithAccess(user.id, it.id, "read")
+            const file = await getFileWithAccess(user.id, it.id, "read", { role: user.role })
             return file ? ({ type: "file" as const, file }) : null
           }
-          const folder = await getFolderWithAccess(user.id, it.id, "read")
+          const folder = await getFolderWithAccess(user.id, it.id, "read", { role: user.role })
           return folder ? ({ type: "folder" as const, folder }) : null
         })
       )
@@ -612,7 +614,7 @@ filesRouter.post(
 
 filesRouter.get("/:id/thumbnail", async (req, res) => {
   const user = currentUser(req)
-  const file = await getFileWithAccess(user.id, req.params.id, "read")
+  const file = await getFileWithAccess(user.id, req.params.id, "read", { role: user.role })
   if (!file) return res.status(404).json({ error: "not_found" })
   if (!canThumbnail(file)) return res.status(415).json({ error: "unsupported" })
 
@@ -637,7 +639,7 @@ filesRouter.get("/:id/thumbnail", async (req, res) => {
 // whose base name matches the video (e.g. Movie.mkv ↔ Movie.en.srt).
 filesRouter.get("/:id/subtitles", async (req, res) => {
   const user = currentUser(req)
-  const file = await getFileWithAccess(user.id, req.params.id, "read")
+  const file = await getFileWithAccess(user.id, req.params.id, "read", { role: user.role })
   if (!file) return res.status(404).json({ error: "not_found" })
 
   const siblings = await prisma.file.findMany({
@@ -657,7 +659,7 @@ filesRouter.get("/:id/subtitles", async (req, res) => {
 // attached to a <video> via a <track> element. Browsers only render VTT.
 filesRouter.get("/:id/subtitle.vtt", async (req, res) => {
   const user = currentUser(req)
-  const file = await getFileWithAccess(user.id, req.params.id, "read")
+  const file = await getFileWithAccess(user.id, req.params.id, "read", { role: user.role })
   if (!file) return res.status(404).json({ error: "not_found" })
   if (!isSubtitleFile(file.name)) {
     return res.status(415).json({ error: "unsupported_subtitle" })
@@ -678,7 +680,7 @@ filesRouter.get("/:id/subtitle.vtt", async (req, res) => {
 // File activity: view/download counts and a recent event log.
 filesRouter.get("/:id/activity", async (req, res) => {
   const user = currentUser(req)
-  const file = await getFileWithAccess(user.id, req.params.id, "read")
+  const file = await getFileWithAccess(user.id, req.params.id, "read", { role: user.role })
   if (!file) return res.status(404).json({ error: "not_found" })
 
   const [views, downloads, recent] = await Promise.all([
@@ -731,18 +733,19 @@ filesRouter.patch("/:id", async (req, res) => {
   res.json({ ...updated, size: Number(updated.size) })
 })
 
+// "Permanent" delete from the user's point of view: the file leaves their bin
+// and every normal listing. It is NOT destroyed — it is soft-deleted into the
+// admin-only recycle bin (stamped with deletedAt) so an admin can still restore
+// or purge it. The blob on disk is retained until an admin purges. Keeping
+// isTrashed=true preserves the invariant that deleted items never surface in
+// any isTrashed:false query.
 filesRouter.delete("/:id", async (req, res) => {
   const user = currentUser(req)
   const file = await getFileWithAccess(user.id, req.params.id, "admin")
   if (!file) return res.status(403).json({ error: "forbidden" })
-  await prisma.file.delete({ where: { id: file.id } })
-  try {
-    removeFile(file.storageKey)
-  } catch {}
-  if (file.thumbnailKey) {
-    try {
-      removeFile(file.thumbnailKey)
-    } catch {}
-  }
+  await prisma.file.update({
+    where: { id: file.id },
+    data: { deletedAt: new Date(), deletedById: user.id, isTrashed: true },
+  })
   res.json({ ok: true })
 })

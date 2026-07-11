@@ -8,7 +8,7 @@ import {
 import type { FileItem, Folder } from "@/lib/types"
 import { formatBytes, formatDate } from "@/lib/format"
 import { FileThumb } from "./FileThumb"
-import { isInternalDrag, readItemDrag, startItemDrag } from "./dnd"
+import { isInternalDrag, readItemDrag, type DragItem } from "./dnd"
 
 type ItemType = "folder" | "file"
 
@@ -20,10 +20,8 @@ type Props = {
   onOpenFolder: (id: string) => void
   onOpenFile: (file: FileItem) => void
   onMenu: (e: React.MouseEvent, type: ItemType, id: string, name: string) => void
-  onMoveDrop: (
-    targetFolderId: string,
-    dragged: { type: "folder" | "file"; id: string }
-  ) => void
+  onDragStart: (e: React.DragEvent, type: ItemType, id: string) => void
+  onMoveDrop: (targetFolderId: string, dragged: DragItem[]) => void
 }
 
 export function FileListView({
@@ -34,6 +32,7 @@ export function FileListView({
   onOpenFolder,
   onOpenFile,
   onMenu,
+  onDragStart,
   onMoveDrop,
 }: Props) {
   const [dropId, setDropId] = useState<string | null>(null)
@@ -52,7 +51,7 @@ export function FileListView({
           <tr
             key={f.id}
             draggable
-            onDragStart={(e) => startItemDrag(e, { type: "folder", id: f.id })}
+            onDragStart={(e) => onDragStart(e, "folder", f.id)}
             onDragOver={(e) => {
               if (!isInternalDrag(e)) return
               e.preventDefault()
@@ -62,12 +61,15 @@ export function FileListView({
             onDragLeave={() => setDropId((cur) => (cur === f.id ? null : cur))}
             onDrop={(e) => {
               const payload = readItemDrag(e)
-              if (!payload) return
+              if (!payload || payload.length === 0) return
               e.preventDefault()
               e.stopPropagation()
               setDropId(null)
-              if (payload.type === "folder" && payload.id === f.id) return
-              onMoveDrop(f.id, payload)
+              if (payload.every((p) => p.type === "folder" && p.id === f.id)) return
+              onMoveDrop(
+                f.id,
+                payload.filter((p) => !(p.type === "folder" && p.id === f.id))
+              )
             }}
             className={`hover:bg-accent/40 cursor-pointer border-b ${
               selection.has(f.id) ? "bg-accent/60" : ""
@@ -106,7 +108,7 @@ export function FileListView({
           <tr
             key={f.id}
             draggable
-            onDragStart={(e) => startItemDrag(e, { type: "file", id: f.id })}
+            onDragStart={(e) => onDragStart(e, "file", f.id)}
             className={`hover:bg-accent/40 cursor-pointer border-b ${
               selection.has(f.id) ? "bg-accent/60" : ""
             }`}

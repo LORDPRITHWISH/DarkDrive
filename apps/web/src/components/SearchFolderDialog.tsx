@@ -8,40 +8,37 @@ type TreeResponse = { rootId: string; folders: FolderNode[] }
 
 type Props = {
   open: boolean
-  items: { type: "folder" | "file"; id: string }[]
-  displayName: string
-  currentParentId: string | null // folderId for files, parentId for folders
+  initialFolderId?: string | null
   onClose: () => void
-  onSubmit: (targetFolderId: string) => void | Promise<void>
+  onSubmit: (folderId: string | null) => void
 }
 
-export function MoveDialog({
-  open,
-  items,
-  displayName,
-  currentParentId,
-  onClose,
-  onSubmit,
-}: Props) {
+// Lets the user scope a search to "My Drive" (any folder in their own tree)
+// or clear back to searching everywhere. Deliberately separate from
+// MoveDialog's tree — this one has no "forbidden" descendants logic and
+// picking the root itself (folderId: null) is a valid, meaningful choice.
+export function SearchFolderDialog({ open, initialFolderId, onClose, onSubmit }: Props) {
   const [tree, setTree] = useState<TreeResponse | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
-  const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
   useEffect(() => {
     if (!open) return
+    // Reset-on-open: mirrors MoveDialog's folder-tree fetch. The lint rule
+    // wants effects to avoid synchronous setState, but there's no prop to
+    // derive this from — the tree has to be (re-)fetched every time the
+    // dialog opens.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSelected(null)
-    setBusy(false)
     setErr(null)
     setTree(null)
     apiGet<TreeResponse>("/api/folders/tree/me")
       .then((r) => {
         setTree(r)
-        // auto-expand path to current parent
         const byId = new Map(r.folders.map((f) => [f.id, f]))
         const exp = new Set<string>()
-        let cur = currentParentId
+        let cur = initialFolderId ?? null
         while (cur) {
           exp.add(cur)
           cur = byId.get(cur)?.parentId ?? null
@@ -50,32 +47,7 @@ export function MoveDialog({
         setExpanded(exp)
       })
       .catch((e) => setErr(e.message))
-  }, [open, currentParentId])
-
-  // Folders that can't be the target: any selected folder itself and its descendants.
-  const forbidden = useMemo(() => {
-    if (!tree) return new Set<string>()
-    const folderIds = items.filter((i) => i.type === "folder").map((i) => i.id)
-    if (folderIds.length === 0) return new Set<string>()
-    const childrenOf = new Map<string, string[]>()
-    for (const f of tree.folders) {
-      if (!f.parentId) continue
-      if (!childrenOf.has(f.parentId)) childrenOf.set(f.parentId, [])
-      childrenOf.get(f.parentId)!.push(f.id)
-    }
-    const blocked = new Set<string>(folderIds)
-    const stack = [...folderIds]
-    while (stack.length) {
-      const id = stack.pop()!
-      for (const c of childrenOf.get(id) ?? []) {
-        if (!blocked.has(c)) {
-          blocked.add(c)
-          stack.push(c)
-        }
-      }
-    }
-    return blocked
-  }, [tree, items])
+  }, [open, initialFolderId])
 
   useEffect(() => {
     if (!open) return
@@ -88,19 +60,6 @@ export function MoveDialog({
 
   if (!open) return null
 
-  async function submit() {
-    if (!selected || busy) return
-    setBusy(true)
-    try {
-      await onSubmit(selected)
-      onClose()
-    } catch (e: any) {
-      setErr(e.message ?? "move_failed")
-    } finally {
-      setBusy(false)
-    }
-  }
-
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
@@ -112,9 +71,9 @@ export function MoveDialog({
       >
         <div className="flex items-start justify-between gap-2 border-b p-4">
           <div className="min-w-0 flex-1">
-            <h3 className="text-lg font-semibold">Move</h3>
-            <div className="text-muted-foreground truncate text-xs" title={displayName}>
-              {displayName}
+            <h3 className="text-lg font-semibold">Search in folder</h3>
+            <div className="text-muted-foreground text-xs">
+              Only this folder and its subfolders will be searched
             </div>
           </div>
           <button
@@ -136,13 +95,12 @@ export function MoveDialog({
               folders={tree.folders}
               selected={selected}
               expanded={expanded}
-              forbidden={forbidden}
-              currentParentId={currentParentId}
               onSelect={setSelected}
               onToggle={(id) =>
                 setExpanded((prev) => {
                   const next = new Set(prev)
-                  next.has(id) ? next.delete(id) : next.add(id)
+                  if (next.has(id)) next.delete(id)
+                  else next.add(id)
                   return next
                 })
               }
@@ -150,15 +108,24 @@ export function MoveDialog({
           )}
         </div>
 
-        <div className="flex items-center justify-end gap-2 border-t p-3">
-          <Button variant="ghost" onClick={onClose} disabled={busy}>
-            Cancel
+        <div className="flex items-center justify-between gap-2 border-t p-3">
+          <Button
+            variant="ghost"
+            onClick={() => {
+              onSubmit(null)
+              onClose()
+            }}
+          >
+            Search everywhere
           </Button>
           <Button
-            onClick={submit}
-            disabled={!selected || selected === currentParentId || busy}
+            onClick={() => {
+              onSubmit(selected)
+              onClose()
+            }}
+            disabled={!selected}
           >
-            {busy ? "Moving…" : "Move"}
+            Search here
           </Button>
         </div>
       </div>
@@ -171,8 +138,6 @@ function FolderTree({
   folders,
   selected,
   expanded,
-  forbidden,
-  currentParentId,
   onSelect,
   onToggle,
 }: {
@@ -180,8 +145,6 @@ function FolderTree({
   folders: FolderNode[]
   selected: string | null
   expanded: Set<string>
-  forbidden: Set<string>
-  currentParentId: string | null
   onSelect: (id: string) => void
   onToggle: (id: string) => void
 }) {
@@ -200,22 +163,16 @@ function FolderTree({
     const kids = childrenOf.get(id) ?? []
     const hasKids = kids.length > 0
     const isOpen = expanded.has(id)
-    const isForbidden = forbidden.has(id)
-    const isCurrent = id === currentParentId
     const isSelected = selected === id
 
     return (
       <div key={id}>
         <div
-          className={`flex items-center gap-1 rounded px-1.5 py-1 ${
-            isForbidden
-              ? "text-muted-foreground/60 cursor-not-allowed"
-              : "hover:bg-accent/60 cursor-pointer"
-          } ${isSelected ? "bg-accent text-accent-foreground" : ""}`}
+          className={`hover:bg-accent/60 flex cursor-pointer items-center gap-1 rounded px-1.5 py-1 ${
+            isSelected ? "bg-accent text-accent-foreground" : ""
+          }`}
           style={{ paddingLeft: depth * 14 + 6 }}
-          onClick={() => {
-            if (!isForbidden) onSelect(id)
-          }}
+          onClick={() => onSelect(id)}
         >
           <button
             className="shrink-0 rounded p-0.5 hover:bg-black/10"
@@ -236,14 +193,8 @@ function FolderTree({
           </button>
           <FolderIcon size={16} weight="fill" className="text-primary shrink-0" />
           <span className="truncate">{name}</span>
-          {isCurrent && (
-            <span className="text-muted-foreground ml-auto text-xs">current</span>
-          )}
         </div>
-        {isOpen &&
-          kids.map((k) =>
-            render(k.id, k.name, depth + 1)
-          )}
+        {isOpen && kids.map((k) => render(k.id, k.name, depth + 1))}
       </div>
     )
   }

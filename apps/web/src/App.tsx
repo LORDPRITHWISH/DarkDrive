@@ -11,6 +11,7 @@ import { LoginPage } from "@/pages/Login"
 import { DrivePage } from "@/pages/Drive"
 import { SharePage } from "@/pages/SharePage"
 import { RecentPage } from "@/pages/Recent"
+import { SearchPage } from "@/pages/Search"
 import { AdminPage } from "@/pages/Admin"
 import { HomePage } from "@/pages/Home"
 import { BinPage } from "@/pages/Bin"
@@ -82,6 +83,14 @@ export function App() {
           element={
             <Protected>
               <RecentPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/search"
+          element={
+            <Protected>
+              <SearchPage />
             </Protected>
           }
         />

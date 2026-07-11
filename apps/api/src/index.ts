@@ -13,6 +13,7 @@ import { sharesRouter } from "./routes/shares.js"
 import { spacesRouter } from "./routes/spaces.js"
 import { meRouter } from "./routes/me.js"
 import { adminRouter } from "./routes/admin.js"
+import { searchRouter } from "./routes/search.js"
 import { initSocket } from "./realtime/socket.js"
 
 const app = express()
@@ -95,6 +96,7 @@ app.use("/api/shares", sharesRouter)
 app.use("/api/spaces", spacesRouter)
 app.use("/api/me", meRouter)
 app.use("/api/admin", adminRouter)
+app.use("/api/search", searchRouter)
 
 // centralized error handler
 app.use((err: any, _req: express.Request, res: express.Response, _n: express.NextFunction) => {

@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react"
-import { ArrowCounterClockwiseIcon, MagnifyingGlassMinusIcon, MagnifyingGlassPlusIcon } from "@phosphor-icons/react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { ArrowCounterClockwiseIcon, MagnifyingGlassMinusIcon, MagnifyingGlassPlusIcon, UploadSimpleIcon } from "@phosphor-icons/react"
 import { useNavigate, useParams } from "react-router-dom"
 import { useDrive, ZOOM_MIN, ZOOM_MAX, ZOOM_DEFAULT } from "@/store/drive"
 import { Sidebar } from "@/components/Sidebar"
@@ -10,6 +10,8 @@ import { FileGrid } from "@/components/FileGrid"
 import { NavButtons } from "@/components/NavButtons"
 import { ShortcutsDialog } from "@/components/ShortcutsDialog"
 import { sortFiles, sortFolders } from "@/lib/sort"
+import { entriesFromDataTransfer } from "@/lib/dropEntries"
+import { isInternalDrag } from "@/components/file-grid/dnd"
 
 // Tags where keyboard shortcuts should stay silent — otherwise typing into
 // a rename input would trigger Del=trash, etc.
@@ -43,15 +45,21 @@ export function DrivePage() {
     sort,
     selection,
     select,
+    selectAll,
     clearSelection,
     preview,
     setPreview,
-    trashItem,
+    trashItems,
     view,
     zoom,
     setZoom,
   } = useDrive()
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  const [showDropOverlay, setShowDropOverlay] = useState(false)
+  // dragenter/dragleave fire on every child element crossed, so a plain
+  // boolean flickers the overlay off when the pointer passes over a card.
+  // A counter only zeroes out once the drag has actually left the window.
+  const dragDepth = useRef(0)
 
   useEffect(() => {
     if (folderId) void loadFolder(folderId)
@@ -87,6 +95,12 @@ export function DrivePage() {
           e.preventDefault()
           clearSelection()
         }
+        return
+      }
+
+      if ((e.key === "a" || e.key === "A") && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault()
+        selectAll(ordered.map((x) => x.id))
         return
       }
 
@@ -136,7 +150,7 @@ export function DrivePage() {
             })
         }
         clearSelection()
-        for (const t of targets) void trashItem(t.type, t.id)
+        void trashItems(targets)
       }
     }
     window.addEventListener("keydown", onKey)
@@ -148,22 +162,56 @@ export function DrivePage() {
     shortcutsOpen,
     clearSelection,
     select,
+    selectAll,
     setPreview,
-    trashItem,
+    trashItems,
     nav,
   ])
 
   return (
     <div
-      className="flex h-screen"
+      className="relative flex h-screen"
+      onDragEnter={(e) => {
+        if (isInternalDrag(e)) return
+        if (!Array.from(e.dataTransfer.types).includes("Files")) return
+        dragDepth.current++
+        setShowDropOverlay(true)
+      }}
       onDragOver={(e) => {
         e.preventDefault()
       }}
+      onDragLeave={(e) => {
+        if (isInternalDrag(e)) return
+        dragDepth.current = Math.max(0, dragDepth.current - 1)
+        if (dragDepth.current === 0) setShowDropOverlay(false)
+      }}
       onDrop={(e) => {
         e.preventDefault()
-        if (e.dataTransfer?.files?.length) void upload(e.dataTransfer.files)
+        dragDepth.current = 0
+        setShowDropOverlay(false)
+        if (isInternalDrag(e)) return
+        const dataTransfer = e.dataTransfer
+        if (!dataTransfer?.items?.length && !dataTransfer?.files?.length) return
+        // Walk dropped entries so folders (and their subfolders) keep their
+        // structure instead of collapsing into a flat file list.
+        void entriesFromDataTransfer(dataTransfer).then((entries) => {
+          if (entries.length) void upload(entries)
+        })
       }}
     >
+      {showDropOverlay && (
+        // z-40, not z-50 — isModalOpen() keys off ".fixed.inset-0.z-50" to
+        // detect real dialogs, and this overlay isn't one.
+        <div className="bg-primary/10 border-primary pointer-events-none fixed inset-0 z-40 flex items-center justify-center border-4 border-dashed backdrop-blur-[1px]">
+          <div className="bg-background flex flex-col items-center gap-2 rounded-xl border px-8 py-6 text-center shadow-lg">
+            <UploadSimpleIcon size={28} className="text-primary" />
+            <div className="text-lg font-semibold">Drop to upload</div>
+            <div className="text-muted-foreground text-sm">
+              Files and folders will be added to this folder
+            </div>
+          </div>
+        </div>
+      )}
       <Sidebar />
       <main className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between gap-3 border-b px-4 py-3">

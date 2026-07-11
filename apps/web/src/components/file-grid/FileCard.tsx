@@ -6,7 +6,6 @@ import { iconFor } from "@/lib/fileIcon"
 import { thumbnailable } from "@/lib/thumb"
 import { StarToggle } from "./StarToggle"
 import { FileThumb } from "./FileThumb"
-import { startItemDrag } from "./dnd"
 
 export function FileCard({
   file,
@@ -15,6 +14,7 @@ export function FileCard({
   onClick,
   onDoubleClick,
   onContextMenu,
+  onDragStart,
   renaming,
   renameValue,
   onRenameChange,
@@ -27,6 +27,7 @@ export function FileCard({
   onClick: (e: React.MouseEvent) => void
   onDoubleClick: () => void
   onContextMenu: (e: React.MouseEvent) => void
+  onDragStart: (e: React.DragEvent) => void
   renaming: boolean
   renameValue: string
   onRenameChange: (v: string) => void
@@ -38,7 +39,7 @@ export function FileCard({
     <div
       draggable
       onDragStart={(e) => {
-        startItemDrag(e, { type: "file", id: file.id })
+        onDragStart(e)
         setDragging(true)
       }}
       onDragEnd={() => setDragging(false)}

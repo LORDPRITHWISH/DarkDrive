@@ -193,6 +193,26 @@ export type SubtitleTrack = {
 
 export type Breadcrumb = { id: string; name: string }
 
+export type SearchTypeFilter =
+  | "all"
+  | "folder"
+  | "image"
+  | "video"
+  | "audio"
+  | "doc"
+  | "archive"
+  | "other"
+
+export type SearchFileResult = FileItem & { folderName: string | null }
+export type SearchFolderResult = Folder & { parentName: string | null }
+
+export type SearchResponse = {
+  folders: SearchFolderResult[]
+  files: SearchFileResult[]
+  truncated: boolean
+  scope: { id: string; name: string } | null
+}
+
 export type SpaceMember = {
   userId: string
   role: "VIEWER" | "EDITOR"

@@ -68,9 +68,6 @@ export function FileContextMenu({
           <MenuItem icon={<InfoIcon size={16} />} onClick={onProperties}>
             Properties
           </MenuItem>
-          <MenuItem icon={<DownloadIcon size={16} />} onClick={onDownload}>
-            Download
-          </MenuItem>
         </>
       )}
       {menu.type === "folder" && !isShortcut && (
@@ -78,6 +75,9 @@ export function FileContextMenu({
           Properties…
         </MenuItem>
       )}
+      <MenuItem icon={<DownloadIcon size={16} />} onClick={onDownload}>
+        Download
+      </MenuItem>
       {isShortcut && (
         <MenuItem icon={<LinkBreakIcon size={16} />} onClick={onRemoveShortcut}>
           Remove shortcut

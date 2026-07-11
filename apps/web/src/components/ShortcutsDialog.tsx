@@ -3,6 +3,9 @@ import { XIcon, KeyboardIcon } from "@phosphor-icons/react"
 
 const SHORTCUTS: { keys: string[]; label: string }[] = [
   { keys: ["↑", "↓"], label: "Move selection" },
+  { keys: ["Shift", "Click"], label: "Select range" },
+  { keys: ["Ctrl/⌘", "Click"], label: "Add/remove from selection" },
+  { keys: ["Ctrl/⌘", "A"], label: "Select all" },
   { keys: ["Enter"], label: "Open folder / preview file" },
   { keys: ["Del"], label: "Move selection to bin" },
   { keys: ["Esc"], label: "Close dialog / clear selection" },

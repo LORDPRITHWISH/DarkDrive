@@ -3,7 +3,7 @@ import { FolderIcon } from "@phosphor-icons/react"
 import type { Folder } from "@/lib/types"
 import { apiUrl } from "@/lib/config"
 import { StarToggle } from "./StarToggle"
-import { isInternalDrag, readItemDrag, startItemDrag } from "./dnd"
+import { isInternalDrag, readItemDrag, type DragItem } from "./dnd"
 
 function FolderThumb({ folderId }: { folderId: string }) {
   const [failed, setFailed] = useState(false)
@@ -26,6 +26,7 @@ export function FolderCard({
   onClick,
   onDoubleClick,
   onContextMenu,
+  onDragStart,
   onMoveDrop,
   renaming,
   renameValue,
@@ -39,10 +40,8 @@ export function FolderCard({
   onClick: (e: React.MouseEvent) => void
   onDoubleClick: () => void
   onContextMenu: (e: React.MouseEvent) => void
-  onMoveDrop: (
-    targetFolderId: string,
-    dragged: { type: "folder" | "file"; id: string }
-  ) => void
+  onDragStart: (e: React.DragEvent) => void
+  onMoveDrop: (targetFolderId: string, dragged: DragItem[]) => void
   renaming: boolean
   renameValue: string
   onRenameChange: (v: string) => void
@@ -56,7 +55,7 @@ export function FolderCard({
     <div
       draggable
       onDragStart={(e) => {
-        startItemDrag(e, { type: "folder", id: folder.id })
+        onDragStart(e)
         setDragging(true)
       }}
       onDragEnd={() => setDragging(false)}
@@ -69,12 +68,15 @@ export function FolderCard({
       onDragLeave={() => setDragOver(false)}
       onDrop={(e) => {
         const payload = readItemDrag(e)
-        if (!payload) return
+        if (!payload || payload.length === 0) return
         e.preventDefault()
         e.stopPropagation()
         setDragOver(false)
-        if (payload.type === "folder" && payload.id === folder.id) return
-        onMoveDrop(folder.id, payload)
+        if (payload.every((p) => p.type === "folder" && p.id === folder.id)) return
+        onMoveDrop(
+          folder.id,
+          payload.filter((p) => !(p.type === "folder" && p.id === folder.id))
+        )
       }}
       className={`group hover:bg-accent/30 relative cursor-pointer rounded-lg transition-colors ${
         selected ? "bg-accent/60 ring-primary/30 ring-2" : ""

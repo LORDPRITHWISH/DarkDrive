@@ -5,23 +5,22 @@ import { useDrive } from "@/store/drive"
 
 type Props = {
   open: boolean
-  itemType: "folder" | "file"
-  itemId: string
-  itemName: string
+  items: { type: "folder" | "file"; id: string }[]
+  displayName: string
   onClose: () => void
 }
 
 export function AddToSpaceDialog({
   open,
-  itemType,
-  itemId,
-  itemName,
+  items,
+  displayName,
   onClose,
 }: Props) {
   const spaces = useDrive((s) => s.spaces)
   const loadSpaces = useDrive((s) => s.loadSpaces)
   const addFileToSpace = useDrive((s) => s.addFileToSpace)
   const addFolderToSpace = useDrive((s) => s.addFolderToSpace)
+  const addItemsToSpace = useDrive((s) => s.addItemsToSpace)
   const [busy, setBusy] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
 
@@ -47,8 +46,13 @@ export function AddToSpaceDialog({
     setBusy(rootFolderId)
     setErr(null)
     try {
-      if (itemType === "file") await addFileToSpace(itemId, rootFolderId)
-      else await addFolderToSpace(itemId, rootFolderId)
+      if (items.length === 1) {
+        const [only] = items
+        if (only.type === "file") await addFileToSpace(only.id, rootFolderId)
+        else await addFolderToSpace(only.id, rootFolderId)
+      } else {
+        await addItemsToSpace(items, rootFolderId)
+      }
       onClose()
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : "failed")
@@ -69,8 +73,8 @@ export function AddToSpaceDialog({
         <div className="flex items-start justify-between gap-2 border-b p-4">
           <div className="min-w-0 flex-1">
             <h3 className="text-lg font-semibold">Add to space</h3>
-            <div className="text-muted-foreground truncate text-xs" title={itemName}>
-              {itemType === "folder" ? "Folder" : "File"}: {itemName}
+            <div className="text-muted-foreground truncate text-xs" title={displayName}>
+              {displayName}
             </div>
             <div className="text-muted-foreground mt-1 text-xs">
               The original stays in your drive. A link will appear in the space.

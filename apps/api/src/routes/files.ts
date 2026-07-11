@@ -1,10 +1,11 @@
-import { Router } from "express"
+import express, { Router } from "express"
 import { z } from "zod"
 import fs from "node:fs"
 import crypto from "node:crypto"
 import multer from "multer"
 import path from "node:path"
 import mime from "mime-types"
+import { ZipArchive, type Archiver } from "archiver"
 import { prisma } from "../db/prisma.js"
 import { currentUser, requireAuth } from "../middleware/auth.js"
 import { env } from "../env.js"
@@ -451,6 +452,164 @@ filesRouter.get("/:id/download", async (req, res) => {
 // this transparently backfills thumbnails for files uploaded before the
 // pipeline existed. Returns 404 when no thumbnail can be produced — the client
 // falls back to a type icon.
+// Bulk zip download: bundles selected files/folders (recursively, following
+// folder shortcuts the same way the folder-contents listing does) into a
+// single streamed .zip. POST + urlencoded body (not GET query) because a
+// large selection's item list can exceed safe URL length; the client submits
+// a hidden form so the browser handles it as a normal attachment download.
+const ZipItemsSchema = z
+  .array(z.object({ type: z.enum(["file", "folder"]), id: z.string() }))
+  .min(1)
+  .max(2000)
+
+function uniqueEntryName(used: Map<string, number>, name: string): string {
+  const count = used.get(name) ?? 0
+  used.set(name, count + 1)
+  if (count === 0) return name
+  const ext = path.extname(name)
+  const base = ext ? name.slice(0, -ext.length) : name
+  return `${base} (${count})${ext}`
+}
+
+function appendFileEntry(
+  archive: Archiver,
+  file: { name: string; storageKey: string },
+  entryPath: string
+) {
+  const abs = absolutePath(file.storageKey)
+  if (!fs.existsSync(abs)) return
+  archive.file(abs, { name: entryPath })
+}
+
+// Recursively mirrors a folder's contents into the archive under `prefix`.
+// Empty folders get an explicit directory entry so they still show up.
+async function appendFolderToArchive(
+  archive: Archiver,
+  folderId: string,
+  prefix: string,
+  downloadedFileIds: string[]
+): Promise<void> {
+  const [subfolders, realFiles, shortcuts] = await Promise.all([
+    prisma.folder.findMany({
+      where: { parentId: folderId, isTrashed: false },
+      orderBy: { name: "asc" },
+    }),
+    prisma.file.findMany({
+      where: { folderId, isTrashed: false },
+      orderBy: { name: "asc" },
+    }),
+    prisma.fileShortcut.findMany({
+      where: { folderId, file: { isTrashed: false } },
+      include: { file: true },
+    }),
+  ])
+
+  const files = [...realFiles, ...shortcuts.map((s) => s.file)]
+  if (files.length === 0 && subfolders.length === 0) {
+    archive.append(Buffer.alloc(0), { name: `${prefix}/` })
+    return
+  }
+
+  const used = new Map<string, number>()
+  for (const file of files) {
+    const entryName = uniqueEntryName(used, file.name)
+    appendFileEntry(archive, file, `${prefix}/${entryName}`)
+    downloadedFileIds.push(file.id)
+  }
+  for (const sub of subfolders) {
+    const entryName = uniqueEntryName(used, sub.name)
+    await appendFolderToArchive(archive, sub.id, `${prefix}/${entryName}`, downloadedFileIds)
+  }
+}
+
+filesRouter.post(
+  "/zip",
+  express.urlencoded({ extended: false, limit: "256kb" }),
+  async (req, res) => {
+    const user = currentUser(req)
+
+    let parsedItems: unknown
+    try {
+      parsedItems = JSON.parse(String(req.body?.items ?? ""))
+    } catch {
+      return res.status(400).json({ error: "invalid_items" })
+    }
+    const result = ZipItemsSchema.safeParse(parsedItems)
+    if (!result.success) return res.status(400).json({ error: "invalid_items" })
+    const items = result.data
+
+    // Tolerate partial access failures (an item trashed/unshared mid-flight)
+    // rather than failing the whole batch — same spirit as the bulk star/move
+    // actions on the client, which apply per-item.
+    const resolved = (
+      await Promise.all(
+        items.map(async (it) => {
+          if (it.type === "file") {
+            const file = await getFileWithAccess(user.id, it.id, "read")
+            return file ? ({ type: "file" as const, file }) : null
+          }
+          const folder = await getFolderWithAccess(user.id, it.id, "read")
+          return folder ? ({ type: "folder" as const, folder }) : null
+        })
+      )
+    ).filter((x): x is NonNullable<typeof x> => x !== null)
+
+    if (resolved.length === 0) return res.status(404).json({ error: "not_found" })
+
+    const rawName = typeof req.body?.name === "string" ? req.body.name : ""
+    const zipName = (rawName.trim() || "Download").slice(0, 150)
+
+    res.setHeader("Content-Type", "application/zip")
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${encodeURIComponent(zipName)}.zip"`
+    )
+    res.setHeader("Cache-Control", "no-store")
+
+    const archive = new ZipArchive({ zlib: { level: 6 } })
+    archive.on("warning", (err: Error) => console.warn("[zip] warning:", err))
+    archive.on("error", (err: Error) => {
+      console.error("[zip] error:", err)
+      res.destroy(err)
+    })
+    res.on("close", () => archive.destroy())
+    archive.pipe(res)
+
+    const downloadedFileIds: string[] = []
+    const rootUsed = new Map<string, number>()
+    try {
+      for (const item of resolved) {
+        if (item.type === "file") {
+          const entryName = uniqueEntryName(rootUsed, item.file.name)
+          appendFileEntry(archive, item.file, entryName)
+          downloadedFileIds.push(item.file.id)
+        } else {
+          const entryName = uniqueEntryName(rootUsed, item.folder.name)
+          await appendFolderToArchive(archive, item.folder.id, entryName, downloadedFileIds)
+        }
+      }
+    } catch (err) {
+      console.error("[zip] failed building archive:", err)
+      res.destroy()
+      return
+    }
+
+    archive.finalize()
+
+    if (downloadedFileIds.length > 0) {
+      prisma.fileAccess
+        .createMany({
+          data: downloadedFileIds.map((fileId) => ({
+            userId: user.id,
+            fileId,
+            action: "download",
+          })),
+        })
+        .catch(() => {})
+    }
+  }
+)
+
 filesRouter.get("/:id/thumbnail", async (req, res) => {
   const user = currentUser(req)
   const file = await getFileWithAccess(user.id, req.params.id, "read")

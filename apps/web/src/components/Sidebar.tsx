@@ -2,6 +2,8 @@ import { Link, useLocation } from "react-router-dom"
 import {
   HouseIcon,
   FolderIcon,
+  FolderOpenIcon,
+  FileIcon,
   UsersThreeIcon,
   PlusIcon,
   ClockCounterClockwiseIcon,
@@ -11,6 +13,7 @@ import {
   GearSixIcon,
   UploadIcon,
   GlobeIcon,
+  MagnifyingGlassIcon,
   XIcon,
 } from "@phosphor-icons/react"
 import type { Space } from "@/lib/types"
@@ -39,6 +42,9 @@ export function Sidebar() {
   } = useDrive()
   const { quota, loadQuota, requestUpgrade } = useMe()
   const fileInput = useRef<HTMLInputElement>(null)
+  const folderInput = useRef<HTMLInputElement>(null)
+  const uploadMenuRef = useRef<HTMLDivElement>(null)
+  const [uploadMenuOpen, setUploadMenuOpen] = useState(false)
   const [creatingSpace, setCreatingSpace] = useState(false)
   const [upgradeOpen, setUpgradeOpen] = useState(false)
   const [manageSpace, setManageSpace] = useState<Space | null>(null)
@@ -60,6 +66,15 @@ export function Sidebar() {
   useEffect(() => {
     setMobileOpen(false)
   }, [loc.pathname, setMobileOpen])
+
+  useEffect(() => {
+    if (!uploadMenuOpen) return
+    const h = (e: MouseEvent) => {
+      if (!uploadMenuRef.current?.contains(e.target as Node)) setUploadMenuOpen(false)
+    }
+    document.addEventListener("mousedown", h)
+    return () => document.removeEventListener("mousedown", h)
+  }, [uploadMenuOpen])
 
   const collapsed = isMobile ? false : desktopCollapsed
 
@@ -103,8 +118,8 @@ export function Sidebar() {
       <aside
         className={`fixed inset-y-0 left-0 z-50 md:relative md:z-auto ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
-        } md:translate-x-0 flex h-screen shrink-0 flex-col gap-4 border-r bg-card p-3 transition-transform duration-200 md:transition-all w-[85vw] max-w-xs md:w-64 md:max-w-none ${
-          desktopCollapsed ? "md:w-14" : ""
+        } md:translate-x-0 flex h-screen shrink-0 flex-col gap-4 border-r bg-card p-3 transition-transform duration-200 md:transition-all w-[85vw] max-w-xs md:max-w-none ${
+          desktopCollapsed ? "md:w-14" : "md:w-64"
         }`}
       >
         {/* Header: logo + upload */}
@@ -118,27 +133,54 @@ export function Sidebar() {
             {!collapsed && <div className="font-semibold tracking-tight">DarkDrive</div>}
           </Link>
 
-          <div className="ml-auto flex items-center gap-1.5">
-            {!collapsed && (
-              <Button
-                size="sm"
-                onClick={() => fileInput.current?.click()}
-                title="Upload files"
-              >
-                <UploadIcon size={16} weight="bold" />
-                <span className="hidden md:inline">Upload</span>
-              </Button>
-            )}
+          <div className={`flex items-center gap-1.5 ${collapsed ? "" : "ml-auto"}`}>
+            <div ref={uploadMenuRef} className="relative">
+              {!collapsed && (
+                <Button
+                  size="sm"
+                  onClick={() => setUploadMenuOpen((v) => !v)}
+                  title="Upload"
+                >
+                  <UploadIcon size={16} weight="bold" />
+                  <span className="hidden md:inline">Upload</span>
+                </Button>
+              )}
 
-            {collapsed && (
-              <button
-                onClick={() => fileInput.current?.click()}
-                title="Upload files"
-                className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-              >
-                <UploadIcon size={16} weight="bold" />
-              </button>
-            )}
+              {collapsed && (
+                <button
+                  onClick={() => setUploadMenuOpen((v) => !v)}
+                  title="Upload"
+                  className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                >
+                  <UploadIcon size={16} weight="bold" />
+                </button>
+              )}
+
+              {uploadMenuOpen && (
+                <div className="bg-popover animate-in fade-in slide-in-from-top-1 absolute left-0 top-full z-30 mt-1 w-36 overflow-hidden rounded-xl border p-1 text-sm shadow-xl duration-150">
+                  <button
+                    onClick={() => {
+                      setUploadMenuOpen(false)
+                      fileInput.current?.click()
+                    }}
+                    className="hover:bg-accent flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors"
+                  >
+                    <FileIcon size={14} />
+                    Files
+                  </button>
+                  <button
+                    onClick={() => {
+                      setUploadMenuOpen(false)
+                      folderInput.current?.click()
+                    }}
+                    className="hover:bg-accent flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors"
+                  >
+                    <FolderOpenIcon size={14} />
+                    Folder
+                  </button>
+                </div>
+              )}
+            </div>
 
             <button
               onClick={() => setMobileOpen(false)}
@@ -155,7 +197,21 @@ export function Sidebar() {
             hidden
             onChange={(e) => {
               const target = currentFolderId ?? user?.rootFolderId
-              if (e.target.files && target) void upload(e.target.files, target)
+              if (e.target.files?.length && target) void upload(e.target.files, target)
+              e.target.value = ""
+            }}
+          />
+          <input
+            ref={folderInput}
+            type="file"
+            multiple
+            hidden
+            // Non-standard attributes that switch the native picker to
+            // folder-selection mode in Chromium/Firefox.
+            {...({ webkitdirectory: "", directory: "" } as Record<string, string>)}
+            onChange={(e) => {
+              const target = currentFolderId ?? user?.rootFolderId
+              if (e.target.files?.length && target) void upload(e.target.files, target)
               e.target.value = ""
             }}
           />
@@ -170,6 +226,7 @@ export function Sidebar() {
             "My Drive",
             <FolderIcon size={18} />
           )}
+        {navItem("/search", "Search", <MagnifyingGlassIcon size={18} />)}
         {navItem("/recent", "Recent", <ClockCounterClockwiseIcon size={18} />)}
         {navItem("/starred", "Starred", <StarIcon size={18} />)}
         {navItem("/bin", "Bin", <TrashIcon size={18} />)}

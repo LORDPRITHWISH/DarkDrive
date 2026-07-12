@@ -267,7 +267,9 @@ export function DrivePage() {
                 </span>
               </div>
             )}
-            <HeaderActions />
+            <div className="flex items-center gap-1">
+              <HeaderActions />
+            </div>
           </div>
         </header>
         <div className="flex items-center gap-2 border-b p-2 md:gap-3 md:p-3">

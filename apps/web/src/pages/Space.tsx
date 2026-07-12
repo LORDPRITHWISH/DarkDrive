@@ -16,6 +16,7 @@ import { useAuth } from "@/store/auth"
 import { useDrive } from "@/store/drive"
 import { Sidebar } from "@/components/Sidebar"
 import { SidebarToggle } from "@/components/SidebarToggle"
+import { HeaderActions } from "@/components/HeaderActions"
 import { SpaceLogo } from "@/components/SpaceLogo"
 import { SpaceManageDialog } from "@/components/SpaceManageDialog"
 import { SpaceEditorDialog } from "@/components/SpaceEditorDialog"
@@ -75,6 +76,9 @@ export function SpacePage() {
           <SidebarToggle />
           <div className="truncate text-sm font-semibold">
             {data?.space.name ?? "Space"}
+          </div>
+          <div className="ml-auto flex items-center gap-1">
+            <HeaderActions />
           </div>
         </header>
 

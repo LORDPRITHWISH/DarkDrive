@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useMe } from "@/store/me"
 import { Sidebar } from "@/components/Sidebar"
 import { SidebarToggle } from "@/components/SidebarToggle"
+import { HeaderActions } from "@/components/HeaderActions"
 import { FilePreview } from "@/components/FilePreview"
 import { formatBytes, formatDate } from "@/lib/format"
 import { apiUrl } from "@/lib/config"
@@ -118,6 +119,7 @@ export function RecentPage() {
             >
               <SquaresFourIcon size={16} />
             </Button>
+            <HeaderActions />
           </div>
         </header>
         <div className="flex items-center gap-2 overflow-x-auto border-b px-4 py-3 md:px-6">

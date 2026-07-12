@@ -4,6 +4,7 @@ import { useNavigate, useParams } from "react-router-dom"
 import { useDrive, ZOOM_MIN, ZOOM_MAX, ZOOM_DEFAULT } from "@/store/drive"
 import { Sidebar } from "@/components/Sidebar"
 import { SidebarToggle } from "@/components/SidebarToggle"
+import { HeaderActions } from "@/components/HeaderActions"
 import { Toolbar } from "@/components/Toolbar"
 import { Breadcrumbs } from "@/components/Breadcrumbs"
 import { FileGrid } from "@/components/FileGrid"
@@ -266,6 +267,7 @@ export function DrivePage() {
                 </span>
               </div>
             )}
+            <HeaderActions />
           </div>
         </header>
         <div className="flex items-center gap-2 border-b p-2 md:gap-3 md:p-3">

@@ -12,6 +12,7 @@ import {
 import { useNavigate } from "react-router-dom"
 import { Sidebar } from "@/components/Sidebar"
 import { SidebarToggle } from "@/components/SidebarToggle"
+import { HeaderActions } from "@/components/HeaderActions"
 import { FilePreview } from "@/components/FilePreview"
 import { Button } from "@workspace/ui/components/button"
 import { apiGet } from "@/lib/api"
@@ -98,6 +99,7 @@ export function StarredPage() {
             >
               <SquaresFourIcon size={16} />
             </Button>
+            <HeaderActions />
           </div>
         </header>
 

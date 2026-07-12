@@ -583,10 +583,17 @@ function VideoPreview({
         document.fullscreenElement &&
         el.contains(document.fullscreenElement)
       ) {
-        screen.orientation?.lock?.("landscape").catch(() => {})
+        const orientation = screen.orientation as ScreenOrientation & {
+          lock?: (o: string) => Promise<void>
+          unlock?: () => void
+        }
+        orientation?.lock?.("landscape").catch(() => {})
       } else if (!document.fullscreenElement) {
         try {
-          screen.orientation?.unlock?.()
+          const orientation = screen.orientation as ScreenOrientation & {
+            unlock?: () => void
+          }
+          orientation?.unlock?.()
         } catch {}
       }
     }

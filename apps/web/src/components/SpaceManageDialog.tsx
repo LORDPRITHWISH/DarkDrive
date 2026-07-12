@@ -426,6 +426,7 @@ export function SpaceManageDialog({
                         size="icon-sm"
                         onClick={() => navigator.clipboard.writeText(url)}
                         title="Copy"
+                        aria-label="Copy invite link"
                       >
                         <CopyIcon size={14} />
                       </Button>
@@ -435,6 +436,7 @@ export function SpaceManageDialog({
                         className="text-muted-foreground hover:text-destructive"
                         onClick={() => void revokeInvite(inv.id)}
                         title="Revoke"
+                        aria-label="Revoke invite link"
                       >
                         <TrashIcon size={14} />
                       </Button>

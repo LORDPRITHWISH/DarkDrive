@@ -8,6 +8,7 @@ export function HeaderActions() {
       <Link
         to="/landing"
         title="About DarkDrive"
+        aria-label="About DarkDrive"
         className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
       >
         <InfoIcon size={16} />

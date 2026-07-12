@@ -7,7 +7,18 @@ import multer from "multer"
 import { prisma } from "../db/prisma.js"
 import { currentUser, requireAuth } from "../middleware/auth.js"
 import { getFolderWithAccess, assertUserRootFolderId } from "../lib/access.js"
+import { renderImage } from "../lib/thumbnails.js"
 import { absolutePath, ensureDirFor, newStorageKey, removeFile, STORAGE_ROOT } from "../storage/local.js"
+
+// Sniff the real format from magic bytes rather than trusting the `.jpg`
+// storage key — covers thumbnails written before upload-time re-encoding
+// existed, where raw non-JPEG bytes were stored under a `.jpg` name.
+function sniffImageContentType(head: Buffer): string {
+  if (head[0] === 0x89 && head[1] === 0x50 && head[2] === 0x4e && head[3] === 0x47) return "image/png"
+  if (head.toString("ascii", 0, 4) === "RIFF" && head.toString("ascii", 8, 12) === "WEBP") return "image/webp"
+  if (head.toString("ascii", 0, 6) === "GIF87a" || head.toString("ascii", 0, 6) === "GIF89a") return "image/gif"
+  return "image/jpeg"
+}
 
 const thumbUpload = multer({
   storage: multer.diskStorage({
@@ -89,7 +100,11 @@ foldersRouter.get("/:id/thumbnail", async (req, res) => {
   if (!folder.thumbnailKey) return res.status(404).json({ error: "no_thumbnail" })
   const abs = absolutePath(folder.thumbnailKey)
   if (!fs.existsSync(abs)) return res.status(404).json({ error: "gone" })
-  res.setHeader("Content-Type", "image/jpeg")
+  const head = Buffer.alloc(12)
+  const fd = fs.openSync(abs, "r")
+  fs.readSync(fd, head, 0, 12, 0)
+  fs.closeSync(fd)
+  res.setHeader("Content-Type", sniffImageContentType(head))
   res.setHeader("Cache-Control", "private, max-age=86400")
   fs.createReadStream(abs).pipe(res)
 })
@@ -102,9 +117,13 @@ foldersRouter.post("/:id/thumbnail", thumbUpload.single("thumbnail"), async (req
   const file = req.file
   if (!file) return res.status(400).json({ error: "no_file" })
 
+  // Storage/serving always assume JPEG (`.jpg` key, `image/jpeg` content-type),
+  // so re-encode whatever image/* format was uploaded rather than storing raw bytes.
   const key = newStorageKey(`folder-thumb-${folder.id}.jpg`)
-  fs.copyFileSync(file.path, ensureDirFor(key))
+  const dest = ensureDirFor(key)
+  const ok = await renderImage(file.path, dest)
   try { fs.unlinkSync(file.path) } catch {}
+  if (!ok) return res.status(400).json({ error: "unsupported_image" })
 
   const oldKey = folder.thumbnailKey
   const updated = await prisma.folder.update({

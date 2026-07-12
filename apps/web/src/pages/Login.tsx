@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { Link, useNavigate } from "react-router-dom"
+import { Link } from "react-router-dom"
 import {
   FileCsvIcon,
   FileDocIcon,
@@ -73,7 +73,6 @@ const ROTATING_CHIPS: { Icon: IconC; label: string }[] = [
 type Offset = { dx: number; dy: number }
 
 export function LoginPage() {
-  const navigate = useNavigate()
   const [chipIdx, setChipIdx] = useState(0)
   const [offsets, setOffsets] = useState<Record<number, Offset>>({})
   const [dragging, setDragging] = useState<number | null>(null)
@@ -101,7 +100,13 @@ export function LoginPage() {
     setDevError(null)
     try {
       await apiJson("/api/auth/dev-login", "POST", { email: devEmail })
-      navigate("/home")
+      // Full reload, not react-router navigate: the Zustand auth store's
+      // fetchMe() short-circuits once hasFetched is true (set by Root's
+      // mount-time call), so a client-side nav here would land on Home
+      // still holding the stale pre-login `user: null` and bounce back to
+      // /login. The Google OAuth callback avoids this the same way — a
+      // server-side redirect that reloads the page and resets the store.
+      window.location.assign("/home")
     } catch {
       setDevError("Dev login failed")
     } finally {

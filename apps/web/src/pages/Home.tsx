@@ -1,13 +1,16 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { FolderIcon, StarIcon } from "@phosphor-icons/react"
 import { useAuth } from "@/store/auth"
 import { useMe } from "@/store/me"
 import { Sidebar } from "@/components/Sidebar"
+import { SidebarToggle } from "@/components/SidebarToggle"
+import { HeaderActions } from "@/components/HeaderActions"
 import { FilePreview } from "@/components/FilePreview"
 import { formatBytes, formatDate } from "@/lib/format"
 import { apiUrl } from "@/lib/config"
 import { iconFor } from "@/lib/fileIcon"
+import { Table, TableBody, TableCell, TableRow } from "@workspace/ui/components/table"
 import type { FileItem } from "@/lib/types"
 
 function greeting() {
@@ -59,6 +62,18 @@ export function HomePage() {
     setPreview(f)
   }
 
+  const allFiles = useMemo(() => {
+    const seen = new Set<string>()
+    const result: FileItem[] = []
+    for (const f of [...recentlyAdded, ...suggestions]) {
+      if (!seen.has(f.id)) { seen.add(f.id); result.push(f) }
+    }
+    for (const f of recent) {
+      if (!seen.has(f.id)) { seen.add(f.id); result.push(f) }
+    }
+    return result
+  }, [recentlyAdded, suggestions, recent])
+
   const firstName = user?.name?.split(" ")[0] ?? ""
 
   return (
@@ -66,9 +81,13 @@ export function HomePage() {
       <Sidebar />
       <main className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center gap-3 border-b px-4 py-3">
+          <SidebarToggle />
           <div className="text-sm font-semibold">Home</div>
+          <div className="ml-auto flex items-center gap-1">
+            <HeaderActions />
+          </div>
         </header>
-        <div className="flex-1 overflow-auto px-6 py-5">
+        <div className="flex-1 overflow-auto px-4 py-5 md:px-6">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">
               {greeting()}
@@ -213,27 +232,27 @@ export function HomePage() {
                   </Link>
                 </div>
                 <div className="overflow-hidden rounded-lg border">
-                  <table className="w-full text-sm">
-                    <tbody>
+                  <Table>
+                    <TableBody>
                       {recent.map((f) => (
-                        <tr
+                        <TableRow
                           key={f.id}
-                          className="hover:bg-accent/40 cursor-pointer border-b last:border-b-0"
+                          className="cursor-pointer last:border-b-0"
                           onClick={() => setPreview(f)}
                         >
-                          <td className="py-2 pl-3">
+                          <TableCell className="p-0 py-2 pl-3">
                             <div className="flex items-center gap-2">
                               {iconFor(f.mimeType, 18, f.name)}
                               <span className="truncate">{f.name}</span>
                             </div>
-                          </td>
-                          <td className="text-muted-foreground py-2 pr-3 text-right text-xs">
+                          </TableCell>
+                          <TableCell className="text-muted-foreground p-0 py-2 pr-3 text-right text-xs">
                             {formatDate(f.accessedAt)}
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       ))}
-                    </tbody>
-                  </table>
+                    </TableBody>
+                  </Table>
                 </div>
               </section>
             )}
@@ -257,7 +276,12 @@ export function HomePage() {
               )}
           </div>
         </div>
-        <FilePreview file={preview} onClose={() => setPreview(null)} />
+        <FilePreview
+          file={preview}
+          onClose={() => setPreview(null)}
+          items={allFiles}
+          onNavigate={setPreview}
+        />
       </main>
     </div>
   )

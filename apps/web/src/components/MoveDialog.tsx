@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useState } from "react"
-import { CaretDownIcon, CaretRightIcon, FolderIcon, XIcon } from "@phosphor-icons/react"
+import { CaretDownIcon, CaretRightIcon, FolderIcon } from "@phosphor-icons/react"
 import { Button } from "@workspace/ui/components/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@workspace/ui/components/dialog"
 import { apiGet } from "@/lib/api"
 
 type FolderNode = { id: string; name: string; parentId: string | null }
@@ -8,9 +15,8 @@ type TreeResponse = { rootId: string; folders: FolderNode[] }
 
 type Props = {
   open: boolean
-  itemType: "folder" | "file"
-  itemId: string
-  itemName: string
+  items: { type: "folder" | "file"; id: string }[]
+  displayName: string
   currentParentId: string | null // folderId for files, parentId for folders
   onClose: () => void
   onSubmit: (targetFolderId: string) => void | Promise<void>
@@ -18,9 +24,8 @@ type Props = {
 
 export function MoveDialog({
   open,
-  itemType,
-  itemId,
-  itemName,
+  items,
+  displayName,
   currentParentId,
   onClose,
   onSubmit,
@@ -54,17 +59,19 @@ export function MoveDialog({
       .catch((e) => setErr(e.message))
   }, [open, currentParentId])
 
-  // Folders that can't be the target: the item itself (if folder) and its descendants.
+  // Folders that can't be the target: any selected folder itself and its descendants.
   const forbidden = useMemo(() => {
-    if (!tree || itemType !== "folder") return new Set<string>()
+    if (!tree) return new Set<string>()
+    const folderIds = items.filter((i) => i.type === "folder").map((i) => i.id)
+    if (folderIds.length === 0) return new Set<string>()
     const childrenOf = new Map<string, string[]>()
     for (const f of tree.folders) {
       if (!f.parentId) continue
       if (!childrenOf.has(f.parentId)) childrenOf.set(f.parentId, [])
       childrenOf.get(f.parentId)!.push(f.id)
     }
-    const blocked = new Set<string>([itemId])
-    const stack = [itemId]
+    const blocked = new Set<string>(folderIds)
+    const stack = [...folderIds]
     while (stack.length) {
       const id = stack.pop()!
       for (const c of childrenOf.get(id) ?? []) {
@@ -75,18 +82,7 @@ export function MoveDialog({
       }
     }
     return blocked
-  }, [tree, itemType, itemId])
-
-  useEffect(() => {
-    if (!open) return
-    const h = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose()
-    }
-    window.addEventListener("keydown", h)
-    return () => window.removeEventListener("keydown", h)
-  }, [open, onClose])
-
-  if (!open) return null
+  }, [tree, items])
 
   async function submit() {
     if (!selected || busy) return
@@ -102,29 +98,14 @@ export function MoveDialog({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-      onClick={onClose}
-    >
-      <div
-        className="bg-background flex h-[520px] w-full max-w-md flex-col overflow-hidden rounded-lg border shadow-lg"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-2 border-b p-4">
-          <div className="min-w-0 flex-1">
-            <h3 className="text-lg font-semibold">Move</h3>
-            <div className="text-muted-foreground truncate text-xs" title={itemName}>
-              {itemName}
-            </div>
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="flex h-[520px] w-full max-w-md flex-col gap-0 overflow-hidden p-0">
+        <DialogHeader className="border-b p-4">
+          <DialogTitle>Move</DialogTitle>
+          <div className="text-muted-foreground truncate text-xs" title={displayName}>
+            {displayName}
           </div>
-          <button
-            className="hover:bg-accent shrink-0 rounded p-1"
-            onClick={onClose}
-            aria-label="Close"
-          >
-            <XIcon size={18} />
-          </button>
-        </div>
+        </DialogHeader>
 
         <div className="flex-1 overflow-auto p-2 text-sm">
           {err && <div className="text-destructive mb-2 px-2">{err}</div>}
@@ -150,7 +131,7 @@ export function MoveDialog({
           )}
         </div>
 
-        <div className="flex items-center justify-end gap-2 border-t p-3">
+        <DialogFooter className="border-t p-3">
           <Button variant="ghost" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
@@ -160,9 +141,9 @@ export function MoveDialog({
           >
             {busy ? "Moving…" : "Move"}
           </Button>
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 

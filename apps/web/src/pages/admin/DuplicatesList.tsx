@@ -8,16 +8,19 @@ import {
 } from "@workspace/ui/components/card"
 import { Badge } from "@workspace/ui/components/badge"
 import { formatBytes } from "@/lib/format"
+import { FilePreview } from "@/components/FilePreview"
+import { useAdminFilePreview } from "./useAdminFilePreview"
 import type { AdminStats } from "@/lib/types"
 
 export function DuplicatesList({ stats }: { stats: AdminStats }) {
+  const { preview, loadingId, open, close } = useAdminFilePreview()
   return (
     <Card>
       <CardHeader>
         <CardTitle>Possible duplicates</CardTitle>
         <CardDescription>
           Grouped by filename + size. Not a content hash, so false positives are
-          possible.
+          possible. Click a group to open one matching copy.
         </CardDescription>
       </CardHeader>
       <CardContent className="gap-0">
@@ -30,30 +33,36 @@ export function DuplicatesList({ stats }: { stats: AdminStats }) {
             {stats.files.duplicates.map((d, i) => {
               const wasted = d.size * (d.count - 1)
               return (
-                <li
-                  key={`${d.name}-${d.size}-${i}`}
-                  className="flex items-center gap-3 py-2"
-                >
-                  <span className="text-muted-foreground shrink-0">
-                    <CopyIcon size={18} />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium" title={d.name}>
-                      {d.name}
+                <li key={`${d.name}-${d.size}-${i}`}>
+                  <button
+                    type="button"
+                    onClick={() => open(d.sampleId)}
+                    disabled={loadingId === d.sampleId}
+                    className="hover:bg-accent/40 -mx-2 flex w-[calc(100%+1rem)] items-center gap-3 rounded-md px-2 py-2 text-left disabled:opacity-60"
+                    title={`Open a copy of "${d.name}"`}
+                  >
+                    <span className="text-muted-foreground shrink-0">
+                      <CopyIcon size={18} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-medium" title={d.name}>
+                        {d.name}
+                      </div>
+                      <div className="text-muted-foreground text-xs">
+                        {formatBytes(d.size)} each · {formatBytes(wasted)} reclaimable
+                      </div>
                     </div>
-                    <div className="text-muted-foreground text-xs">
-                      {formatBytes(d.size)} each · {formatBytes(wasted)} reclaimable
-                    </div>
-                  </div>
-                  <Badge variant="destructive" className="shrink-0">
-                    {d.count} copies
-                  </Badge>
+                    <Badge variant="destructive" className="shrink-0">
+                      {d.count} copies
+                    </Badge>
+                  </button>
                 </li>
               )
             })}
           </ul>
         )}
       </CardContent>
+      <FilePreview file={preview} onClose={close} />
     </Card>
   )
 }

@@ -5,7 +5,39 @@ import fsp from "node:fs/promises"
 import { prisma } from "../db/prisma.js"
 import { redis } from "../db/redis.js"
 import { currentUser, requireAuth } from "../middleware/auth.js"
-import { STORAGE_ROOT } from "../storage/local.js"
+import { assertUserRootFolderId } from "../lib/access.js"
+import { removeFile, STORAGE_ROOT } from "../storage/local.js"
+import { notify } from "../lib/notify.js"
+
+function formatBytes(bytes: number): string {
+  if (bytes <= 0) return "0 B"
+  const units = ["B", "KB", "MB", "GB", "TB"]
+  const i = Math.min(Math.floor(Math.log2(bytes) / 10), units.length - 1)
+  return `${(bytes / 1024 ** i).toFixed(i === 0 ? 0 : 1)} ${units[i]}`
+}
+
+type FileTypeKey = "image" | "video" | "audio" | "doc" | "archive" | "other"
+
+// Coarse category for a file, matching the buckets used across the dashboard.
+function fileTypeKey(mimeType: string, name: string): FileTypeKey {
+  const m = mimeType
+  if (m.startsWith("image/")) return "image"
+  if (m.startsWith("video/")) return "video"
+  if (m.startsWith("audio/")) return "audio"
+  if (
+    m === "application/pdf" ||
+    m.startsWith("text/") ||
+    m.includes("officedocument") ||
+    m.includes("msword") ||
+    m.includes("ms-excel") ||
+    m.includes("ms-powerpoint") ||
+    /\.(pdf|docx?|xlsx?|pptx?|odt|ods|odp|rtf|md|txt)$/i.test(name)
+  )
+    return "doc"
+  if (m.includes("zip") || m.includes("tar") || m.includes("rar") || m.includes("7z"))
+    return "archive"
+  return "other"
+}
 
 export const adminRouter = Router()
 adminRouter.use(requireAuth)
@@ -155,6 +187,8 @@ adminRouter.get("/stats", async (_req, res) => {
     sharedFilesCount,
     shareLinksCount,
     spaceCount,
+    recycleBinAgg,
+    recycleBinFolderCount,
   ] = await Promise.all([
     prisma.user.count(),
     prisma.user.count({ where: { disabledAt: { not: null } } }),
@@ -172,11 +206,13 @@ adminRouter.get("/stats", async (_req, res) => {
     prisma.file.aggregate({
       _count: { _all: true },
       _sum: { size: true },
-      where: { isTrashed: true },
+      // User bins only — items permanently deleted into the admin recycle bin
+      // (deletedAt set) are reported separately under `recycleBin`.
+      where: { isTrashed: true, deletedAt: null },
     }),
     prisma.file.findMany({
       where: { isTrashed: false },
-      select: { mimeType: true, size: true, name: true },
+      select: { id: true, mimeType: true, size: true, name: true },
     }),
     prisma.file.findMany({
       where: { isTrashed: false },
@@ -221,6 +257,13 @@ adminRouter.get("/stats", async (_req, res) => {
     prisma.file.count({ where: { spaceId: { not: null }, isTrashed: false } }),
     prisma.share.count(),
     prisma.space.count(),
+    // Admin recycle bin — files permanently deleted by users but retained.
+    prisma.file.aggregate({
+      _count: { _all: true },
+      _sum: { size: true },
+      where: { deletedAt: { not: null } },
+    }),
+    prisma.folder.count({ where: { deletedAt: { not: null } } }),
   ])
 
   // Users: growth per month over last 12 months
@@ -272,13 +315,18 @@ adminRouter.get("/stats", async (_req, res) => {
   for (const a of accessHourly) hourly[a.accessedAt.getHours()] += 1
   const peakHour = hourly.indexOf(Math.max(...hourly))
 
-  // Potential duplicates: group by name+size among non-trashed files.
-  const dupeMap = new Map<string, { name: string; size: number; count: number }>()
+  // Potential duplicates: group by name+size among non-trashed files. Keeps the
+  // first file id seen per group as a clickable sample — opening it previews
+  // one representative copy rather than every match.
+  const dupeMap = new Map<
+    string,
+    { name: string; size: number; count: number; sampleId: string }
+  >()
   for (const f of allFilesForTypes) {
     const k = `${f.name}::${f.size}`
     const cur = dupeMap.get(k)
     if (cur) cur.count += 1
-    else dupeMap.set(k, { name: f.name, size: Number(f.size), count: 1 })
+    else dupeMap.set(k, { name: f.name, size: Number(f.size), count: 1, sampleId: f.id })
   }
   const duplicates = [...dupeMap.values()]
     .filter((d) => d.count > 1)
@@ -352,6 +400,8 @@ adminRouter.get("/stats", async (_req, res) => {
       totalQuotaBytes: Number(quotaAgg._sum.storageQuotaBytes ?? BigInt(0)),
       trashedBytes: Number(trashedAgg._sum.size ?? BigInt(0)),
       trashedCount: trashedAgg._count._all,
+      recycleBinBytes: Number(recycleBinAgg._sum.size ?? BigInt(0)),
+      recycleBinCount: recycleBinAgg._count._all + recycleBinFolderCount,
       topStorage,
     },
     files: {
@@ -368,6 +418,7 @@ adminRouter.get("/stats", async (_req, res) => {
       peakHour,
       recent: recentAccesses.map((a) => ({
         id: a.id,
+        fileId: a.file ? a.fileId : null,
         action: a.action,
         accessedAt: a.accessedAt,
         fileName: a.file?.name ?? "(deleted)",
@@ -447,6 +498,12 @@ adminRouter.patch("/users/:id", async (req, res) => {
       return res.status(400).json({ error: "cannot_disable_self" })
   }
 
+  const before = await prisma.user.findUnique({
+    where: { id: req.params.id },
+    select: { storageQuotaBytes: true, upgradeRequestedAt: true },
+  })
+  if (!before) return res.status(404).json({ error: "not_found" })
+
   const data: Record<string, unknown> = {}
   if (body.storageQuotaBytes !== undefined)
     data.storageQuotaBytes = BigInt(body.storageQuotaBytes)
@@ -472,6 +529,33 @@ adminRouter.patch("/users/:id", async (req, res) => {
       disabledAt: true,
     },
   })
+
+  // Was this an upgrade-request resolution (approve or dismiss), a plain
+  // quota edit, or neither? Each gets a distinct message so the user knows
+  // what actually happened without digging into the admin panel.
+  if (before.upgradeRequestedAt && body.clearUpgradeRequest) {
+    if (u.storageQuotaBytes > before.storageQuotaBytes) {
+      void notify(u.id, {
+        type: "quota_upgrade_approved",
+        title: "Your storage upgrade request was approved",
+        body: `New limit: ${formatBytes(Number(u.storageQuotaBytes))}`,
+      })
+    } else {
+      void notify(u.id, {
+        type: "quota_upgrade_denied",
+        title: "Your storage upgrade request was dismissed",
+      })
+    }
+  } else if (
+    body.storageQuotaBytes !== undefined &&
+    u.storageQuotaBytes !== before.storageQuotaBytes
+  ) {
+    void notify(u.id, {
+      type: "quota_changed",
+      title: `Your storage limit was changed to ${formatBytes(Number(u.storageQuotaBytes))}`,
+    })
+  }
+
   res.json({
     ...u,
     storageQuotaBytes: Number(u.storageQuotaBytes),
@@ -479,4 +563,517 @@ adminRouter.patch("/users/:id", async (req, res) => {
       ? Number(u.upgradeRequestedBytes)
       : null,
   })
+})
+
+// Everything about one user: what they've stored (files, folders, trash,
+// retained deletions, type breakdown), their activity (views/downloads over
+// time, recent events), their login history, and their sharing footprint.
+// Powers the "click a user to see their whole lifecycle" drawer in the admin
+// Users tab. Aggregated per-request — a single user's dataset is small enough
+// that this stays cheap.
+adminRouter.get("/users/:id/detail", async (req, res) => {
+  const id = req.params.id
+  const now = new Date()
+  const dayMs = 86400000
+  const d7 = new Date(now.getTime() - 7 * dayMs)
+  const d30 = new Date(now.getTime() - 30 * dayMs)
+
+  const user = await prisma.user.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      avatarUrl: true,
+      role: true,
+      createdAt: true,
+      disabledAt: true,
+      storageQuotaBytes: true,
+      upgradeRequestedAt: true,
+      upgradeRequestedBytes: true,
+    },
+  })
+  if (!user) return res.status(404).json({ error: "not_found" })
+
+  const [
+    ownedFiles,
+    trashedAgg,
+    recycleAgg,
+    folderCount,
+    views7d,
+    downloads7d,
+    views30d,
+    downloads30d,
+    totalEvents,
+    recentAccesses,
+    lastAccess,
+    loginTotal,
+    recentLogins,
+    shareLinks,
+    shortcuts,
+    spacesOwned,
+    memberships,
+  ] = await Promise.all([
+    prisma.file.findMany({
+      where: { ownerId: id, isTrashed: false },
+      select: { id: true, name: true, mimeType: true, size: true, createdAt: true },
+    }),
+    prisma.file.aggregate({
+      _count: { _all: true },
+      _sum: { size: true },
+      where: { ownerId: id, isTrashed: true, deletedAt: null },
+    }),
+    prisma.file.aggregate({
+      _count: { _all: true },
+      _sum: { size: true },
+      where: { ownerId: id, deletedAt: { not: null } },
+    }),
+    prisma.folder.count({
+      where: { ownerId: id, isTrashed: false, deletedAt: null },
+    }),
+    prisma.fileAccess.count({
+      where: { userId: id, action: "view", accessedAt: { gte: d7 } },
+    }),
+    prisma.fileAccess.count({
+      where: { userId: id, action: "download", accessedAt: { gte: d7 } },
+    }),
+    prisma.fileAccess.count({
+      where: { userId: id, action: "view", accessedAt: { gte: d30 } },
+    }),
+    prisma.fileAccess.count({
+      where: { userId: id, action: "download", accessedAt: { gte: d30 } },
+    }),
+    prisma.fileAccess.count({ where: { userId: id } }),
+    prisma.fileAccess.findMany({
+      where: { userId: id },
+      orderBy: { accessedAt: "desc" },
+      take: 30,
+      include: { file: { select: { name: true, mimeType: true } } },
+    }),
+    prisma.fileAccess.findFirst({
+      where: { userId: id },
+      orderBy: { accessedAt: "desc" },
+      select: { accessedAt: true },
+    }),
+    prisma.loginEvent.count({ where: { userId: id } }),
+    prisma.loginEvent.findMany({
+      where: { userId: id },
+      orderBy: { createdAt: "desc" },
+      take: 30,
+      select: { id: true, ip: true, userAgent: true, createdAt: true },
+    }),
+    prisma.share.count({ where: { createdById: id } }),
+    prisma.fileShortcut.count({ where: { file: { ownerId: id } } }),
+    prisma.space.findMany({
+      where: { ownerId: id },
+      select: {
+        id: true,
+        name: true,
+        isPublic: true,
+        _count: { select: { members: true } },
+      },
+    }),
+    prisma.spaceMember.findMany({
+      where: { userId: id },
+      select: { role: true, space: { select: { id: true, name: true } } },
+    }),
+  ])
+
+  // Storage rollup + type breakdown over the user's live (non-trashed) files.
+  const byType = { image: 0, video: 0, audio: 0, doc: 0, archive: 0, other: 0 }
+  const bytesByType = { image: 0, video: 0, audio: 0, doc: 0, archive: 0, other: 0 }
+  let usedBytes = 0
+  for (const f of ownedFiles) {
+    const sz = Number(f.size)
+    usedBytes += sz
+    const k = fileTypeKey(f.mimeType, f.name)
+    byType[k] += 1
+    bytesByType[k] += sz
+  }
+  const quotaBytes = Number(user.storageQuotaBytes)
+
+  const largestFiles = [...ownedFiles]
+    .sort((a, b) => Number(b.size) - Number(a.size))
+    .slice(0, 10)
+    .map((f) => ({
+      id: f.id,
+      name: f.name,
+      mimeType: f.mimeType,
+      size: Number(f.size),
+      createdAt: f.createdAt,
+    }))
+
+  const recentFiles = [...ownedFiles]
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    .slice(0, 10)
+    .map((f) => ({
+      id: f.id,
+      name: f.name,
+      mimeType: f.mimeType,
+      size: Number(f.size),
+      createdAt: f.createdAt,
+    }))
+
+  res.json({
+    user: {
+      ...user,
+      storageQuotaBytes: quotaBytes,
+      upgradeRequestedBytes: user.upgradeRequestedBytes
+        ? Number(user.upgradeRequestedBytes)
+        : null,
+    },
+    storage: {
+      usedBytes,
+      quotaBytes,
+      pct: quotaBytes > 0 ? Math.min(100, (usedBytes / quotaBytes) * 100) : 0,
+      fileCount: ownedFiles.length,
+      folderCount,
+      trashedCount: trashedAgg._count._all,
+      trashedBytes: Number(trashedAgg._sum.size ?? BigInt(0)),
+      recycleBinCount: recycleAgg._count._all,
+      recycleBinBytes: Number(recycleAgg._sum.size ?? BigInt(0)),
+      byType,
+      bytesByType,
+    },
+    largestFiles,
+    recentFiles,
+    activity: {
+      views7d,
+      downloads7d,
+      views30d,
+      downloads30d,
+      total: totalEvents,
+      lastActiveAt: lastAccess?.accessedAt ?? null,
+      recent: recentAccesses.map((a) => ({
+        id: a.id,
+        action: a.action,
+        accessedAt: a.accessedAt,
+        fileId: a.fileId,
+        fileName: a.file?.name ?? "(deleted)",
+        mimeType: a.file?.mimeType ?? "",
+      })),
+    },
+    logins: {
+      total: loginTotal,
+      lastLoginAt: recentLogins[0]?.createdAt ?? null,
+      recent: recentLogins,
+    },
+    sharing: {
+      shareLinks,
+      shortcuts,
+      spacesOwned: spacesOwned.map((s) => ({
+        id: s.id,
+        name: s.name,
+        isPublic: s.isPublic,
+        memberCount: s._count.members,
+      })),
+      memberships: memberships.map((m) => ({
+        spaceId: m.space.id,
+        name: m.space.name,
+        role: m.role,
+      })),
+    },
+  })
+})
+
+// Full metadata for a single file, regardless of owner or trash state — lets
+// the admin dashboard open a preview for any file surfaced in a summary panel
+// (largest files, duplicates, recent activity, recycle bin), which normally
+// only carries a partial, aggregated shape. The actual bytes are then served
+// by the ordinary /api/files/:id/download|preview routes, which grant
+// read-only access to admins (see lib/access.ts).
+adminRouter.get("/files/:id", async (req, res) => {
+  const file = await prisma.file.findUnique({ where: { id: req.params.id } })
+  if (!file) return res.status(404).json({ error: "not_found" })
+  res.json({ ...file, size: Number(file.size) })
+})
+
+// --- Admin recycle bin -------------------------------------------------------
+// Everything users have permanently deleted lives here (deletedAt set) and is
+// never removed automatically. Only an admin can restore it to the owner's
+// drive or purge it for good (DB row + blob on disk).
+
+// Collect every folder id in the subtree rooted at `rootId` (inclusive).
+async function collectFolderSubtree(rootId: string): Promise<string[]> {
+  const ids = [rootId]
+  const seen = new Set(ids)
+  let frontier = [rootId]
+  while (frontier.length) {
+    const children = await prisma.folder.findMany({
+      where: { parentId: { in: frontier } },
+      select: { id: true },
+    })
+    frontier = []
+    for (const c of children) {
+      if (!seen.has(c.id)) {
+        seen.add(c.id)
+        ids.push(c.id)
+        frontier.push(c.id)
+      }
+    }
+  }
+  return ids
+}
+
+// Listing. Deleted folders collapse their contents: a deleted folder is shown
+// once (with a rolled-up file count + size for its whole subtree) and the files
+// inside it are not listed separately. Only "top-level" deletions are returned —
+// a deleted item whose parent folder is itself deleted is nested under it.
+adminRouter.get("/recycle-bin", async (_req, res) => {
+  const [delFolders, delFiles] = await Promise.all([
+    prisma.folder.findMany({
+      where: { deletedAt: { not: null } },
+      select: {
+        id: true,
+        name: true,
+        color: true,
+        parentId: true,
+        ownerId: true,
+        deletedById: true,
+        deletedAt: true,
+      },
+    }),
+    prisma.file.findMany({
+      where: { deletedAt: { not: null } },
+      select: {
+        id: true,
+        name: true,
+        mimeType: true,
+        size: true,
+        folderId: true,
+        ownerId: true,
+        deletedById: true,
+        deletedAt: true,
+      },
+    }),
+  ])
+
+  const deletedFolderIds = new Set(delFolders.map((f) => f.id))
+  const childrenOf = new Map<string, string[]>()
+  for (const f of delFolders) {
+    if (f.parentId && deletedFolderIds.has(f.parentId)) {
+      const arr = childrenOf.get(f.parentId) ?? []
+      arr.push(f.id)
+      childrenOf.set(f.parentId, arr)
+    }
+  }
+  const filesByFolder = new Map<string, typeof delFiles>()
+  for (const file of delFiles) {
+    const arr = filesByFolder.get(file.folderId) ?? []
+    arr.push(file)
+    filesByFolder.set(file.folderId, arr)
+  }
+
+  function subtreeStats(rootId: string) {
+    let bytes = 0
+    let fileCount = 0
+    let folderCount = 0
+    const stack = [rootId]
+    const seen = new Set<string>()
+    while (stack.length) {
+      const id = stack.pop()!
+      if (seen.has(id)) continue
+      seen.add(id)
+      folderCount += 1
+      for (const file of filesByFolder.get(id) ?? []) {
+        bytes += Number(file.size)
+        fileCount += 1
+      }
+      for (const c of childrenOf.get(id) ?? []) stack.push(c)
+    }
+    // Exclude the root itself from the "contains N folders" count.
+    return { bytes, fileCount, folderCount: folderCount - 1 }
+  }
+
+  // Resolve owner + deleter identities in one query.
+  const userIds = new Set<string>()
+  for (const x of [...delFolders, ...delFiles]) {
+    userIds.add(x.ownerId)
+    if (x.deletedById) userIds.add(x.deletedById)
+  }
+  const users = await prisma.user.findMany({
+    where: { id: { in: [...userIds] } },
+    select: { id: true, name: true, email: true, avatarUrl: true },
+  })
+  const userById = new Map(users.map((u) => [u.id, u]))
+  const person = (id: string | null) => (id ? userById.get(id) ?? null : null)
+
+  const topFolders = delFolders
+    .filter((f) => !(f.parentId && deletedFolderIds.has(f.parentId)))
+    .map((f) => {
+      const st = subtreeStats(f.id)
+      return {
+        id: f.id,
+        name: f.name,
+        color: f.color,
+        owner: person(f.ownerId),
+        deletedBy: person(f.deletedById),
+        deletedAt: f.deletedAt,
+        sizeBytes: st.bytes,
+        fileCount: st.fileCount,
+        folderCount: st.folderCount,
+      }
+    })
+    .sort((a, b) => (b.deletedAt?.getTime() ?? 0) - (a.deletedAt?.getTime() ?? 0))
+
+  const topFiles = delFiles
+    .filter((f) => !deletedFolderIds.has(f.folderId))
+    .map((f) => ({
+      id: f.id,
+      name: f.name,
+      mimeType: f.mimeType,
+      size: Number(f.size),
+      owner: person(f.ownerId),
+      deletedBy: person(f.deletedById),
+      deletedAt: f.deletedAt,
+    }))
+    .sort((a, b) => (b.deletedAt?.getTime() ?? 0) - (a.deletedAt?.getTime() ?? 0))
+
+  const totalBytes = delFiles.reduce((s, f) => s + Number(f.size), 0)
+  res.json({
+    folders: topFolders,
+    files: topFiles,
+    totals: {
+      folders: delFolders.length,
+      files: delFiles.length,
+      bytes: totalBytes,
+    },
+  })
+})
+
+const RecycleItemSchema = z.object({
+  type: z.enum(["file", "folder"]),
+  id: z.string(),
+  // Optional destination folder — lets an admin drop a restored item into any
+  // folder in any user's drive instead of its original spot. Omitted = restore
+  // in place.
+  destFolderId: z.string().optional(),
+})
+
+// Full folder tree (id/name/parentId) for an arbitrary user's drive, so the
+// recycle bin "move to" picker can browse anywhere in the system, not just
+// the admin's own drive. Mirrors GET /api/folders/tree/me.
+adminRouter.get("/users/:id/folders/tree", async (req, res) => {
+  const target = await prisma.user.findUnique({ where: { id: req.params.id } })
+  if (!target) return res.status(404).json({ error: "not_found" })
+  const rootId = target.rootFolderId ?? (await assertUserRootFolderId(target))
+  const folders = await prisma.folder.findMany({
+    where: { ownerId: target.id, spaceId: null, isTrashed: false },
+    select: { id: true, name: true, parentId: true },
+  })
+  res.json({ rootId, folders })
+})
+
+// Restore an item to its owner's drive (clears deletedAt + isTrashed on the
+// whole subtree). If a destFolderId is given, the item is reparented there
+// instead of restored to its original location — it can land in any user's
+// drive. If the original parent has since been purged and no destination was
+// given, the folder becomes an orphan, but the data is recovered — an
+// acceptable trade-off.
+adminRouter.post("/recycle-bin/restore", async (req, res) => {
+  const { type, id, destFolderId } = RecycleItemSchema.parse(req.body)
+  const restore = { deletedAt: null, deletedById: null, isTrashed: false }
+
+  let dest: { id: string } | null = null
+  if (destFolderId) {
+    const target = await prisma.folder.findUnique({ where: { id: destFolderId } })
+    if (!target || target.deletedAt) return res.status(400).json({ error: "invalid_target" })
+    dest = target
+  }
+
+  if (type === "file") {
+    const file = await prisma.file.findUnique({ where: { id } })
+    if (!file || !file.deletedAt) return res.status(404).json({ error: "not_found" })
+    await prisma.file.update({
+      where: { id },
+      data: dest ? { ...restore, folderId: dest.id } : restore,
+    })
+    return res.json({ ok: true })
+  }
+
+  const folder = await prisma.folder.findUnique({ where: { id } })
+  if (!folder || !folder.deletedAt) return res.status(404).json({ error: "not_found" })
+  const ids = await collectFolderSubtree(id)
+  if (dest && ids.includes(dest.id))
+    return res.status(400).json({ error: "cycle" })
+  await prisma.$transaction([
+    prisma.file.updateMany({
+      where: { folderId: { in: ids }, deletedAt: { not: null } },
+      data: restore,
+    }),
+    prisma.folder.updateMany({
+      where: { id: { in: ids.filter((x) => x !== id) }, deletedAt: { not: null } },
+      data: restore,
+    }),
+    prisma.folder.update({
+      where: { id },
+      data: dest ? { ...restore, parentId: dest.id } : restore,
+    }),
+  ])
+  res.json({ ok: true })
+})
+
+// Purge an item for good: remove the DB row(s) and the blob(s) on disk. For a
+// folder the FK cascade removes the subtree rows, so blob keys are gathered
+// first.
+adminRouter.post("/recycle-bin/purge", async (req, res) => {
+  const { type, id } = RecycleItemSchema.parse(req.body)
+
+  if (type === "file") {
+    const file = await prisma.file.findUnique({ where: { id } })
+    if (!file || !file.deletedAt) return res.status(404).json({ error: "not_found" })
+    await prisma.file.delete({ where: { id } })
+    try { removeFile(file.storageKey) } catch {}
+    if (file.thumbnailKey) { try { removeFile(file.thumbnailKey) } catch {} }
+    return res.json({ ok: true })
+  }
+
+  const folder = await prisma.folder.findUnique({ where: { id } })
+  if (!folder || !folder.deletedAt) return res.status(404).json({ error: "not_found" })
+  const ids = await collectFolderSubtree(id)
+  const [files, folders] = await Promise.all([
+    prisma.file.findMany({
+      where: { folderId: { in: ids } },
+      select: { storageKey: true, thumbnailKey: true },
+    }),
+    prisma.folder.findMany({
+      where: { id: { in: ids } },
+      select: { thumbnailKey: true },
+    }),
+  ])
+  await prisma.folder.delete({ where: { id } }) // cascades to the subtree
+  for (const f of files) {
+    try { removeFile(f.storageKey) } catch {}
+    if (f.thumbnailKey) { try { removeFile(f.thumbnailKey) } catch {} }
+  }
+  for (const f of folders) {
+    if (f.thumbnailKey) { try { removeFile(f.thumbnailKey) } catch {} }
+  }
+  res.json({ ok: true })
+})
+
+// Purge everything in the recycle bin.
+adminRouter.post("/recycle-bin/purge-all", async (_req, res) => {
+  const [files, folders] = await Promise.all([
+    prisma.file.findMany({
+      where: { deletedAt: { not: null } },
+      select: { storageKey: true, thumbnailKey: true },
+    }),
+    prisma.folder.findMany({
+      where: { deletedAt: { not: null } },
+      select: { thumbnailKey: true },
+    }),
+  ])
+  await prisma.$transaction([
+    prisma.file.deleteMany({ where: { deletedAt: { not: null } } }),
+    prisma.folder.deleteMany({ where: { deletedAt: { not: null } } }),
+  ])
+  for (const f of files) {
+    try { removeFile(f.storageKey) } catch {}
+    if (f.thumbnailKey) { try { removeFile(f.thumbnailKey) } catch {} }
+  }
+  for (const f of folders) {
+    if (f.thumbnailKey) { try { removeFile(f.thumbnailKey) } catch {} }
+  }
+  res.json({ ok: true, files: files.length, folders: folders.length })
 })

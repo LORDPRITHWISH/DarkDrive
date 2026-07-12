@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react"
+import { useNavigate } from "react-router-dom"
 import {
   UploadIcon,
   FolderPlusIcon,
+  FolderOpenIcon,
   SquaresFourIcon,
   ListBulletsIcon,
   EyeIcon,
@@ -10,6 +12,7 @@ import {
   SortAscendingIcon,
   SortDescendingIcon,
   CheckIcon,
+  MagnifyingGlassIcon,
 } from "@phosphor-icons/react"
 import { Button } from "@workspace/ui/components/button"
 import { useDrive, type SortKey } from "@/store/drive"
@@ -23,7 +26,9 @@ const SORT_LABELS: Record<SortKey, string> = {
 }
 
 export function Toolbar() {
+  const nav = useNavigate()
   const fileInput = useRef<HTMLInputElement>(null)
+  const folderInput = useRef<HTMLInputElement>(null)
   const [newFolderOpen, setNewFolderOpen] = useState(false)
   const [sortOpen, setSortOpen] = useState(false)
   const sortRef = useRef<HTMLDivElement>(null)
@@ -36,6 +41,7 @@ export function Toolbar() {
     upload,
     sort,
     setSort,
+    currentFolderId,
   } = useDrive()
 
   useEffect(() => {
@@ -51,26 +57,57 @@ export function Toolbar() {
     <div className="flex flex-1 items-center gap-2">
       <Button size="sm" onClick={() => fileInput.current?.click()}>
         <UploadIcon size={16} />
-        Upload
+        <span className="hidden md:inline">Upload</span>
       </Button>
       <input
         ref={fileInput}
         type="file"
         multiple
         hidden
-        onChange={(e) => e.target.files && upload(e.target.files)}
+        onChange={(e) => {
+          if (e.target.files?.length) void upload(e.target.files)
+          e.target.value = ""
+        }}
+      />
+      <Button size="sm" variant="outline" onClick={() => folderInput.current?.click()}>
+        <FolderOpenIcon size={16} />
+        <span className="hidden md:inline">Upload folder</span>
+      </Button>
+      <input
+        ref={folderInput}
+        type="file"
+        multiple
+        hidden
+        // Non-standard attributes (unsupported by React's input typings) that
+        // switch the native picker to folder-selection mode in Chromium/Firefox.
+        {...({ webkitdirectory: "", directory: "" } as Record<string, string>)}
+        onChange={(e) => {
+          if (e.target.files?.length) void upload(e.target.files)
+          e.target.value = ""
+        }}
       />
       <Button size="sm" variant="outline" onClick={() => setNewFolderOpen(true)}>
         <FolderPlusIcon size={16} />
-        New folder
+        <span className="hidden md:inline">New folder</span>
       </Button>
       <NewFolderDialog
         open={newFolderOpen}
         onClose={() => setNewFolderOpen(false)}
-        onSubmit={(name, color) => createFolder(name, color)}
+        onSubmit={(name, color, thumbnail) => createFolder(name, color, thumbnail)}
       />
 
       <div className="ml-auto flex items-center gap-1">
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() =>
+            nav(currentFolderId ? `/search?folderId=${currentFolderId}` : "/search")
+          }
+          title="Search in this folder"
+        >
+          <MagnifyingGlassIcon size={16} />
+        </Button>
+        <div className="bg-border mx-1 hidden h-5 w-px md:block" />
         <div ref={sortRef} className="relative">
           <Button
             size="sm"
@@ -79,11 +116,11 @@ export function Toolbar() {
             title={`Sort by ${SORT_LABELS[sort.key]} (${sort.dir})`}
           >
             <ArrowsDownUpIcon size={14} />
-            {SORT_LABELS[sort.key]}
+            <span className="hidden md:inline">{SORT_LABELS[sort.key]}</span>
             {sort.dir === "asc" ? (
-              <SortAscendingIcon size={12} className="opacity-70" />
+              <SortAscendingIcon size={12} className="hidden opacity-70 md:inline" />
             ) : (
-              <SortDescendingIcon size={12} className="opacity-70" />
+              <SortDescendingIcon size={12} className="hidden opacity-70 md:inline" />
             )}
           </Button>
           {sortOpen && (
@@ -137,7 +174,7 @@ export function Toolbar() {
         >
           {showHidden ? <EyeIcon size={16} /> : <EyeSlashIcon size={16} />}
         </Button>
-        <div className="bg-border mx-1 h-5 w-px" />
+        <div className="bg-border mx-1 hidden h-5 w-px md:block" />
         <Button
           size="sm"
           variant={view === "grid" ? "default" : "ghost"}

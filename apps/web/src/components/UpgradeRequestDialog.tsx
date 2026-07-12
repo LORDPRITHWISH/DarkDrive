@@ -1,6 +1,14 @@
 import { useEffect, useState } from "react"
-import { CheckCircleIcon, XIcon } from "@phosphor-icons/react"
+import { CheckCircleIcon } from "@phosphor-icons/react"
 import { Button } from "@workspace/ui/components/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@workspace/ui/components/dialog"
 import { formatBytes } from "@/lib/format"
 
 // Slabs a user can request. Slabs at or below the current quota are filtered
@@ -41,17 +49,6 @@ export function UpgradeRequestDialog({
     setErr(null)
   }, [open])
 
-  useEffect(() => {
-    if (!open) return
-    const h = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose()
-    }
-    window.addEventListener("keydown", h)
-    return () => window.removeEventListener("keydown", h)
-  }, [open, onClose])
-
-  if (!open) return null
-
   const options = REQUEST_SLABS.filter((s) => s.bytes > currentQuotaBytes)
 
   async function submit() {
@@ -69,33 +66,18 @@ export function UpgradeRequestDialog({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-      onClick={onClose}
-    >
-      <div
-        className="bg-background w-full max-w-md rounded-lg border p-5 shadow-lg"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mb-4 flex items-start justify-between gap-2">
-          <div>
-            <h3 className="text-lg font-semibold">Request an upgrade</h3>
-            <p className="text-muted-foreground mt-1 text-xs">
-              Currently using {formatBytes(usedBytes)} of{" "}
-              {formatBytes(currentQuotaBytes)}. Pick a new slab — an admin
-              reviews the request before it's applied.
-            </p>
-          </div>
-          <button
-            className="hover:bg-accent rounded p-1"
-            onClick={onClose}
-            aria-label="Close"
-          >
-            <XIcon size={18} />
-          </button>
-        </div>
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Request an upgrade</DialogTitle>
+          <DialogDescription>
+            Currently using {formatBytes(usedBytes)} of{" "}
+            {formatBytes(currentQuotaBytes)}. Pick a new slab — an admin
+            reviews the request before it's applied.
+          </DialogDescription>
+        </DialogHeader>
 
-        <ul className="mb-4 flex flex-col gap-1">
+        <ul className="flex flex-col gap-1">
           {options.length === 0 ? (
             <li className="text-muted-foreground py-6 text-center text-sm">
               You're already on the highest slab.
@@ -133,15 +115,15 @@ export function UpgradeRequestDialog({
 
         {err && <div className="text-destructive mb-2 text-xs">{err}</div>}
 
-        <div className="flex justify-end gap-2">
+        <DialogFooter>
           <Button variant="ghost" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
           <Button onClick={submit} disabled={!selected || busy}>
             {busy ? "Submitting…" : "Request upgrade"}
           </Button>
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

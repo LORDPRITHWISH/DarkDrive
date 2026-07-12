@@ -129,7 +129,7 @@ export function LandingPage() {
         />
 
         {/* Floating color orbs */}
-        <div className="float-slow bg-primary/25 absolute -top-40 -left-40 h-120 w-120 rounded-full blur-3xl" />
+        <div className="float-slow absolute -top-40 -left-40 h-120 w-120 rounded-full bg-primary/25 blur-3xl" />
         <div className="float-medium absolute top-1/3 -right-32 h-105 w-105 rounded-full bg-sky-400/20 blur-3xl" />
         <div className="float-slow absolute -bottom-40 left-1/4 h-95 w-95 rounded-full bg-cyan-300/20 blur-3xl" />
         <div className="float-drift absolute top-1/2 left-1/2 h-80 w-80 rounded-full bg-blue-400/15 blur-3xl" />
@@ -157,7 +157,7 @@ export function LandingPage() {
 
         {/* Twinkling stars */}
         <div
-          className="twinkle bg-primary absolute top-[12%] left-[22%] h-1 w-1 rounded-full shadow-[0_0_8px_2px_currentColor]"
+          className="twinkle absolute top-[12%] left-[22%] h-1 w-1 rounded-full bg-primary shadow-[0_0_8px_2px_currentColor]"
           style={{ animationDelay: "0s" }}
         />
         <div
@@ -169,7 +169,7 @@ export function LandingPage() {
           style={{ animationDelay: "2.5s" }}
         />
         <div
-          className="twinkle bg-primary absolute top-[72%] left-[62%] h-1 w-1 rounded-full shadow-[0_0_8px_2px_currentColor]"
+          className="twinkle absolute top-[72%] left-[62%] h-1 w-1 rounded-full bg-primary shadow-[0_0_8px_2px_currentColor]"
           style={{ animationDelay: "0.8s" }}
         />
         <div
@@ -182,15 +182,15 @@ export function LandingPage() {
         />
       </div>
 
-      <header className="animate-in fade-in slide-in-from-top-4 relative z-10 flex items-center justify-between border-b px-6 py-4 duration-700">
+      <header className="relative z-10 flex animate-in items-center justify-between border-b px-6 py-4 duration-700 fade-in slide-in-from-top-4">
         <div className="flex items-center gap-2.5">
           <img
-            src="/DarkDrive.png"
+            src="/DarkDriveBrand.png"
             alt="DarkDrive"
             className="h-9 w-9 rounded-md ring-2 ring-primary/20 transition-transform duration-300 hover:scale-110 hover:rotate-6"
           />
           <span className="text-xl font-black tracking-tight">DarkDrive</span>
-          <span className="bg-primary/10 text-primary ml-1 hidden rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider sm:inline">
+          <span className="ml-1 hidden rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold tracking-wider text-primary uppercase sm:inline">
             Self-Hosted
           </span>
         </div>
@@ -199,7 +199,7 @@ export function LandingPage() {
             href="https://github.com/LORDPRITHWISH"
             target="_blank"
             rel="noreferrer"
-            className="text-muted-foreground hover:text-foreground hidden items-center gap-1.5 text-sm font-medium transition-colors sm:inline-flex"
+            className="hidden items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground sm:inline-flex"
           >
             <GithubLogoIcon size={16} weight="bold" />
             GitHub
@@ -218,289 +218,315 @@ export function LandingPage() {
         sparkCount={10}
         duration={500}
       >
-      <main className="relative z-10 flex-1">
-        {/* HERO */}
-        <section className="mx-auto max-w-5xl px-6 py-20 text-center sm:py-32">
-          <img
-            src="/DarkDrive.png"
-            alt="DarkDrive"
-            className="animate-in fade-in zoom-in-95 mx-auto mb-6 h-20 w-20 duration-700 sm:h-24 sm:w-24"
-          />
+        <main className="relative z-10 flex-1">
+          {/* HERO */}
+          <section className="mx-auto max-w-5xl px-6 py-20 text-center sm:py-32">
+            <img
+              src="/DarkDrive.png"
+              alt="DarkDrive"
+              className="mx-auto mb-6 h-20 w-20 animate-in duration-700 zoom-in-95 fade-in sm:h-24 sm:w-24"
+            />
 
-          <div className="animate-in fade-in zoom-in-95 mb-6 inline-flex items-center gap-2 rounded-full border bg-background/60 px-4 py-1.5 text-xs font-semibold backdrop-blur-sm duration-500">
-            <SparkleIcon size={14} weight="fill" className="text-primary animate-pulse" />
-            <ShinyText text="Built by an indie dev · Fully self-hostable" speed={4} />
-          </div>
+            <div className="mb-6 inline-flex animate-in items-center gap-2 rounded-full border bg-background/60 px-4 py-1.5 text-xs font-semibold backdrop-blur-sm duration-500 zoom-in-95 fade-in">
+              <SparkleIcon
+                size={14}
+                weight="fill"
+                className="animate-pulse text-primary"
+              />
+              <ShinyText
+                text="Built by an indie dev · Fully self-hostable"
+                speed={4}
+              />
+            </div>
 
-          <h1 className="text-3xl font-black leading-[1.1] tracking-tight sm:text-5xl lg:text-6xl">
-            <SplitText text="Your files." delay={30} />
-            <br />
-            <SplitText text="Your space." delay={30} />
-            <br />
-            <GradientText
-              colors={["#60a5fa", "#22d3ee", "#3b82f6", "#06b6d4", "#60a5fa"]}
-              animationSpeed={6}
-              className="max-w-none! mx-0! inline-block p-0! font-black"
-            >
-              Your drive.
-            </GradientText>
-          </h1>
+            <h1 className="text-3xl leading-[1.1] font-black tracking-tight sm:text-5xl lg:text-6xl">
+              <SplitText text="Your files." delay={30} />
+              <br />
+              <SplitText text="Your space." delay={30} />
+              <br />
+              <GradientText
+                colors={["#60a5fa", "#22d3ee", "#3b82f6", "#06b6d4", "#60a5fa"]}
+                animationSpeed={6}
+                className="mx-0! inline-block max-w-none! p-0! font-black"
+              >
+                Your drive.
+              </GradientText>
+            </h1>
 
-          <BlurText
-            text="A private, self-hosted drive for you and your team. Upload anything, preview it inline, and share it into collaborative workspaces — with real storage controls and a dashboard that actually tells you what's going on."
-            delay={30}
-            animateBy="words"
-            className="text-muted-foreground mx-auto mt-7 max-w-2xl justify-center text-lg font-medium sm:text-xl"
-          />
+            <BlurText
+              text="A private, self-hosted drive for you and your team. Upload anything, preview it inline, and share it into collaborative workspaces — with real storage controls and a dashboard that actually tells you what's going on."
+              delay={30}
+              animateBy="words"
+              className="mx-auto mt-7 max-w-2xl justify-center text-lg font-medium text-muted-foreground sm:text-xl"
+            />
 
-          <div className="animate-in fade-in slide-in-from-bottom-4 mt-10 flex flex-col items-center justify-center gap-3 delay-300 duration-700 sm:flex-row">
-            <FancyCTAButton to={ctaHref} label={ctaLabel} />
-            <StarBorder
-              as="a"
-              href="https://github.com/LORDPRITHWISH"
-              target="_blank"
-              rel="noreferrer"
-              color="var(--primary)"
-              speed="5s"
-              className="rounded-xl! transition-transform"
-              innerClassName="flex h-12 items-center justify-center rounded-xl px-7"
-            >
-              <span className="inline-flex items-center gap-2 text-sm font-bold">
-                <GithubLogoIcon size={16} weight="bold" />
-                Star on GitHub
-                <StarIcon size={14} weight="fill" className="text-yellow-500" />
-              </span>
-            </StarBorder>
-          </div>
+            <div className="mt-10 flex animate-in flex-col items-center justify-center gap-3 delay-300 duration-700 fade-in slide-in-from-bottom-4 sm:flex-row">
+              <FancyCTAButton to={ctaHref} label={ctaLabel} />
+              <StarBorder
+                as="a"
+                href="https://github.com/LORDPRITHWISH"
+                target="_blank"
+                rel="noreferrer"
+                color="var(--primary)"
+                speed="5s"
+                className="rounded-xl! transition-transform"
+                innerClassName="flex h-12 items-center justify-center rounded-xl px-7"
+              >
+                <span className="inline-flex items-center gap-2 text-sm font-bold">
+                  <GithubLogoIcon size={16} weight="bold" />
+                  Star on GitHub
+                  <StarIcon
+                    size={14}
+                    weight="fill"
+                    className="text-yellow-500"
+                  />
+                </span>
+              </StarBorder>
+            </div>
 
-          <p className="text-muted-foreground animate-in fade-in mt-4 text-xs font-medium delay-500 duration-1000">
-            New accounts start with <span className="text-foreground font-bold">1 GB</span> of
-            storage · No credit card · Runs on your hardware
-          </p>
-
-          {/* Stat strip */}
-          <div className="animate-in fade-in mt-16 grid grid-cols-2 gap-6 delay-500 duration-1000 sm:grid-cols-4">
-            <Stat value="100" suffix="files" label="per upload batch" />
-            <Stat value="∞" label="storage (your disk)" />
-            <Stat value="<50" suffix="ms" label="preview render" />
-            <Stat value="0" suffix="$" label="per user / month" />
-          </div>
-        </section>
-
-        {/* MARQUEE TECH BAR */}
-        <section className="border-y bg-muted/30 relative overflow-hidden py-6">
-          <div className="marquee-track flex w-max gap-10 whitespace-nowrap text-sm font-bold uppercase tracking-widest text-muted-foreground">
-            {[...Array(2)].map((_, i) => (
-              <div key={i} className="flex items-center gap-10">
-                <span className="flex items-center gap-2"><CodeIcon size={18} weight="bold" /> React 19</span>
-                <span className="text-primary">◆</span>
-                <span className="flex items-center gap-2"><LightningIcon size={18} weight="fill" /> Vite 7</span>
-                <span className="text-primary">◆</span>
-                <span className="flex items-center gap-2"><DatabaseIcon size={18} weight="bold" /> Chunked Uploads</span>
-                <span className="text-primary">◆</span>
-                <span className="flex items-center gap-2"><ShareNetworkIcon size={18} weight="bold" /> Socket.IO</span>
-                <span className="text-primary">◆</span>
-                <span className="flex items-center gap-2"><LockKeyIcon size={18} weight="bold" /> Self-Hosted</span>
-                <span className="text-primary">◆</span>
-                <span className="flex items-center gap-2"><GaugeIcon size={18} weight="bold" /> Live Dashboard</span>
-                <span className="text-primary">◆</span>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* FEATURES */}
-        <section className="mx-auto max-w-6xl px-6 py-20 sm:py-28">
-          <div className="mx-auto mb-14 max-w-2xl text-center">
-            <p className="text-primary mb-3 text-xs font-black uppercase tracking-widest">
-              Everything you need
+            <p className="mt-4 animate-in text-xs font-medium text-muted-foreground delay-500 duration-1000 fade-in">
+              New accounts start with{" "}
+              <span className="font-bold text-foreground">1 GB</span> of storage
+              · No credit card · Runs on your hardware
             </p>
-            <h2 className="text-4xl font-black tracking-tight sm:text-5xl">
-              Features that actually <span className="gradient-text">ship</span>.
-            </h2>
-            <p className="text-muted-foreground mt-4 text-lg">
-              Not a landing page with a waitlist. Every feature below is live,
-              working, and documented.
-            </p>
-          </div>
 
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            <Feature
-              icon={<CloudIcon size={22} weight="duotone" />}
-              title="Fast, chunked uploads"
-              body="Drag-and-drop up to 100 files at once. Chunked uploads resume on network hiccups. Quota-aware — rejected before bandwidth is wasted."
-              accent="sky"
-            />
-            <Feature
-              icon={<EyeIcon size={22} weight="duotone" />}
-              title="Inline preview for everything"
-              body="Images, video, audio, PDF, CSV, text and code render in-place. Office docs fall back cleanly to the Microsoft viewer."
-              accent="cyan"
-            />
-            <Feature
-              icon={<UsersThreeIcon size={22} weight="duotone" />}
-              title="Shared collaborative spaces"
-              body="Invite teammates into a workspace. Uploads into a shared space stay in your own drive and surface there as shortcuts."
-              accent="emerald"
-            />
-            <Feature
-              icon={<ShieldCheckIcon size={22} weight="duotone" />}
-              title="Admin controls"
-              body="Per-user storage quotas, role management, disable/enable accounts, and a dashboard with live CPU, RAM, and disk telemetry."
-              accent="violet"
-            />
-            <Feature
-              icon={<FileArrowUpIcon size={22} weight="duotone" />}
-              title="Public share links"
-              body="Generate shareable links for any file. Control expiry, revoke access, and track who opened what — without giving up your drive."
-              accent="amber"
-            />
-            <Feature
-              icon={<GaugeIcon size={22} weight="duotone" />}
-              title="Real-time updates"
-              body="Socket.IO pipes live changes to every session. Upload progress, shared-space activity, and dashboard metrics stream instantly."
-              accent="rose"
-            />
-          </div>
-        </section>
+            {/* Stat strip */}
+            <div className="mt-16 grid animate-in grid-cols-2 gap-6 delay-500 duration-1000 fade-in sm:grid-cols-4">
+              <Stat value="100" suffix="files" label="per upload batch" />
+              <Stat value="∞" label="storage (your disk)" />
+              <Stat value="<50" suffix="ms" label="preview render" />
+              <Stat value="0" suffix="$" label="per user / month" />
+            </div>
+          </section>
 
-        {/* HOW IT WORKS */}
-        <section className="border-y bg-muted/20 py-20 sm:py-28">
-          <div className="mx-auto max-w-6xl px-6">
+          {/* MARQUEE TECH BAR */}
+          <section className="relative overflow-hidden border-y bg-muted/30 py-6">
+            <div className="marquee-track flex w-max gap-10 text-sm font-bold tracking-widest whitespace-nowrap text-muted-foreground uppercase">
+              {[...Array(2)].map((_, i) => (
+                <div key={i} className="flex items-center gap-10">
+                  <span className="flex items-center gap-2">
+                    <CodeIcon size={18} weight="bold" /> React 19
+                  </span>
+                  <span className="text-primary">◆</span>
+                  <span className="flex items-center gap-2">
+                    <LightningIcon size={18} weight="fill" /> Vite 7
+                  </span>
+                  <span className="text-primary">◆</span>
+                  <span className="flex items-center gap-2">
+                    <DatabaseIcon size={18} weight="bold" /> Chunked Uploads
+                  </span>
+                  <span className="text-primary">◆</span>
+                  <span className="flex items-center gap-2">
+                    <ShareNetworkIcon size={18} weight="bold" /> Socket.IO
+                  </span>
+                  <span className="text-primary">◆</span>
+                  <span className="flex items-center gap-2">
+                    <LockKeyIcon size={18} weight="bold" /> Self-Hosted
+                  </span>
+                  <span className="text-primary">◆</span>
+                  <span className="flex items-center gap-2">
+                    <GaugeIcon size={18} weight="bold" /> Live Dashboard
+                  </span>
+                  <span className="text-primary">◆</span>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* FEATURES */}
+          <section className="mx-auto max-w-6xl px-6 py-20 sm:py-28">
             <div className="mx-auto mb-14 max-w-2xl text-center">
-              <p className="text-primary mb-3 text-xs font-black uppercase tracking-widest">
-                How it works
+              <p className="mb-3 text-xs font-black tracking-widest text-primary uppercase">
+                Everything you need
               </p>
               <h2 className="text-4xl font-black tracking-tight sm:text-5xl">
-                Three steps. <span className="gradient-text">That's it.</span>
+                Features that actually{" "}
+                <span className="gradient-text">ship</span>.
+              </h2>
+              <p className="mt-4 text-lg text-muted-foreground">
+                Not a landing page with a waitlist. Every feature below is live,
+                working, and documented.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              <Feature
+                icon={<CloudIcon size={22} weight="duotone" />}
+                title="Fast, chunked uploads"
+                body="Drag-and-drop up to 100 files at once. Chunked uploads resume on network hiccups. Quota-aware — rejected before bandwidth is wasted."
+                accent="sky"
+              />
+              <Feature
+                icon={<EyeIcon size={22} weight="duotone" />}
+                title="Inline preview for everything"
+                body="Images, video, audio, PDF, CSV, text and code render in-place. Office docs fall back cleanly to the Microsoft viewer."
+                accent="cyan"
+              />
+              <Feature
+                icon={<UsersThreeIcon size={22} weight="duotone" />}
+                title="Shared collaborative spaces"
+                body="Invite teammates into a workspace. Uploads into a shared space stay in your own drive and surface there as shortcuts."
+                accent="emerald"
+              />
+              <Feature
+                icon={<ShieldCheckIcon size={22} weight="duotone" />}
+                title="Admin controls"
+                body="Per-user storage quotas, role management, disable/enable accounts, and a dashboard with live CPU, RAM, and disk telemetry."
+                accent="violet"
+              />
+              <Feature
+                icon={<FileArrowUpIcon size={22} weight="duotone" />}
+                title="Public share links"
+                body="Generate shareable links for any file. Control expiry, revoke access, and track who opened what — without giving up your drive."
+                accent="amber"
+              />
+              <Feature
+                icon={<GaugeIcon size={22} weight="duotone" />}
+                title="Real-time updates"
+                body="Socket.IO pipes live changes to every session. Upload progress, shared-space activity, and dashboard metrics stream instantly."
+                accent="rose"
+              />
+            </div>
+          </section>
+
+          {/* HOW IT WORKS */}
+          <section className="border-y bg-muted/20 py-20 sm:py-28">
+            <div className="mx-auto max-w-6xl px-6">
+              <div className="mx-auto mb-14 max-w-2xl text-center">
+                <p className="mb-3 text-xs font-black tracking-widest text-primary uppercase">
+                  How it works
+                </p>
+                <h2 className="text-4xl font-black tracking-tight sm:text-5xl">
+                  Three steps. <span className="gradient-text">That's it.</span>
+                </h2>
+              </div>
+
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+                <Step
+                  n={1}
+                  title="Sign in"
+                  body="Create an account — or spin up your own DarkDrive server from the GitHub repo and own the whole stack."
+                />
+                <Step
+                  n={2}
+                  title="Upload & organize"
+                  body="Drag files in, create workspaces, invite collaborators. Everything previews inline, nothing gets siloed behind a plugin."
+                />
+                <Step
+                  n={3}
+                  title="Share with control"
+                  body="Public links, teammate access, admin-enforced quotas. You decide what's public, what's private, and what's gone."
+                />
+              </div>
+            </div>
+          </section>
+
+          {/* AUTHOR SECTION */}
+          <section className="mx-auto max-w-5xl px-6 py-20 sm:py-28">
+            <div className="mx-auto mb-10 max-w-2xl text-center">
+              <p className="mb-3 text-xs font-black tracking-widest text-primary uppercase">
+                The person behind it
+              </p>
+              <h2 className="text-4xl font-black tracking-tight sm:text-5xl">
+                Built by <span className="gradient-text">Prithwish</span>.
               </h2>
             </div>
 
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-              <Step
-                n={1}
-                title="Sign in"
-                body="Create an account — or spin up your own DarkDrive server from the GitHub repo and own the whole stack."
+            <SpotlightCard
+              spotlightColor="color-mix(in oklab, var(--primary) 40%, transparent)"
+              className="border-2 p-0 transition-all hover:shadow-2xl hover:shadow-primary/10"
+            >
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-0 -z-10 opacity-60"
+                style={{
+                  background:
+                    "radial-gradient(circle at 20% 0%, var(--primary), transparent 50%), radial-gradient(circle at 80% 100%, oklch(0.715 0.143 215.221 / 0.4), transparent 50%)",
+                }}
               />
-              <Step
-                n={2}
-                title="Upload & organize"
-                body="Drag files in, create workspaces, invite collaborators. Everything previews inline, nothing gets siloed behind a plugin."
-              />
-              <Step
-                n={3}
-                title="Share with control"
-                body="Public links, teammate access, admin-enforced quotas. You decide what's public, what's private, and what's gone."
-              />
-            </div>
-          </div>
-        </section>
-
-        {/* AUTHOR SECTION */}
-        <section className="mx-auto max-w-5xl px-6 py-20 sm:py-28">
-          <div className="mx-auto mb-10 max-w-2xl text-center">
-            <p className="text-primary mb-3 text-xs font-black uppercase tracking-widest">
-              The person behind it
-            </p>
-            <h2 className="text-4xl font-black tracking-tight sm:text-5xl">
-              Built by <span className="gradient-text">Prithwish</span>.
-            </h2>
-          </div>
-
-          <SpotlightCard
-            spotlightColor="color-mix(in oklab, var(--primary) 40%, transparent)"
-            className="border-2 p-0 transition-all hover:shadow-2xl hover:shadow-primary/10"
-          >
-            <div
-              aria-hidden
-              className="pointer-events-none absolute inset-0 -z-10 opacity-60"
-              style={{
-                background:
-                  "radial-gradient(circle at 20% 0%, var(--primary), transparent 50%), radial-gradient(circle at 80% 100%, oklch(0.715 0.143 215.221 / 0.4), transparent 50%)",
-              }}
-            />
-            <div className="p-8 sm:p-10">
-              <div className="flex flex-col items-start gap-6 sm:flex-row sm:items-center">
-                <div className="tilt-hover from-primary to-sky-400 flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl bg-linear-to-br text-white shadow-lg shadow-primary/30">
-                  <span className="text-3xl font-black">P</span>
+              <div className="p-8 sm:p-10">
+                <div className="flex flex-col items-start gap-6 sm:flex-row sm:items-center">
+                  <div className="tilt-hover flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl bg-linear-to-br from-primary to-sky-400 text-white shadow-lg shadow-primary/30">
+                    <span className="text-3xl font-black">P</span>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-2xl font-black tracking-tight sm:text-3xl">
+                      Prithwish
+                      <span className="ml-2 text-lg font-semibold text-muted-foreground">
+                        · Indie builder
+                      </span>
+                    </h3>
+                    <p className="mt-2 text-base leading-relaxed text-muted-foreground">
+                      Full-stack developer shipping self-hostable software for
+                      people who'd rather own their data than rent it. DarkDrive
+                      is part of{" "}
+                      <span className="font-bold text-foreground">Zenux</span> —
+                      a collection of open, privacy-first tools. If you like
+                      this one, there's more where it came from.
+                    </p>
+                  </div>
                 </div>
-                <div className="flex-1">
-                  <h3 className="text-2xl font-black tracking-tight sm:text-3xl">
-                    Prithwish
-                    <span className="text-muted-foreground ml-2 text-lg font-semibold">
-                      · Indie builder
-                    </span>
-                  </h3>
-                  <p className="text-muted-foreground mt-2 text-base leading-relaxed">
-                    Full-stack developer shipping self-hostable software for people
-                    who'd rather own their data than rent it. DarkDrive is part of{" "}
-                    <span className="text-foreground font-bold">Zenux</span> — a
-                    collection of open, privacy-first tools. If you like this one,
-                    there's more where it came from.
-                  </p>
+
+                <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <AuthorLink
+                    href="https://prithwish.me/"
+                    icon={<GlobeIcon size={18} weight="bold" />}
+                    label="prithwish.me"
+                    sub="Portfolio & blog"
+                  />
+                  <AuthorLink
+                    href="https://zenux.live/"
+                    icon={<SparkleIcon size={18} weight="fill" />}
+                    label="zenux.live"
+                    sub="All projects"
+                  />
+                  <AuthorLink
+                    href="https://github.com/LORDPRITHWISH"
+                    icon={<GithubLogoIcon size={18} weight="bold" />}
+                    label="GitHub"
+                    sub="@LORDPRITHWISH"
+                  />
                 </div>
               </div>
+            </SpotlightCard>
+          </section>
 
-              <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <AuthorLink
-                  href="https://prithwish.me/"
-                  icon={<GlobeIcon size={18} weight="bold" />}
-                  label="prithwish.me"
-                  sub="Portfolio & blog"
-                />
-                <AuthorLink
+          {/* FINAL CTA */}
+          <section className="mx-auto max-w-4xl px-6 pb-24 text-center">
+            <div className="relative overflow-hidden rounded-3xl border-2 border-primary/20 bg-primary/5 p-10 sm:p-16">
+              <div
+                aria-hidden
+                className="float-slow absolute -top-20 -right-20 h-60 w-60 rounded-full bg-primary/20 blur-3xl"
+              />
+              <h2 className="text-4xl font-black tracking-tight sm:text-5xl">
+                Ready to own your <span className="gradient-text">drive</span>?
+              </h2>
+              <p className="mx-auto mt-4 max-w-xl text-lg font-medium text-muted-foreground">
+                One click to start. Zero vendor lock-in. Your files, on your
+                terms — forever.
+              </p>
+              <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+                <FancyCTAButton to={ctaHref} label={ctaLabel} />
+                <a
                   href="https://zenux.live/"
-                  icon={<SparkleIcon size={18} weight="fill" />}
-                  label="zenux.live"
-                  sub="All projects"
-                />
-                <AuthorLink
-                  href="https://github.com/LORDPRITHWISH"
-                  icon={<GithubLogoIcon size={18} weight="bold" />}
-                  label="GitHub"
-                  sub="@LORDPRITHWISH"
-                />
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex h-11 items-center gap-2 rounded-md border-2 px-5 text-base font-semibold transition-all hover:scale-105 hover:bg-accent"
+                >
+                  Explore Zenux
+                  <ArrowUpRightIcon size={16} weight="bold" />
+                </a>
               </div>
             </div>
-          </SpotlightCard>
-        </section>
-
-        {/* FINAL CTA */}
-        <section className="mx-auto max-w-4xl px-6 pb-24 text-center">
-          <div className="bg-primary/5 relative overflow-hidden rounded-3xl border-2 border-primary/20 p-10 sm:p-16">
-            <div
-              aria-hidden
-              className="float-slow bg-primary/20 absolute -top-20 -right-20 h-60 w-60 rounded-full blur-3xl"
-            />
-            <h2 className="text-4xl font-black tracking-tight sm:text-5xl">
-              Ready to own your <span className="gradient-text">drive</span>?
-            </h2>
-            <p className="text-muted-foreground mx-auto mt-4 max-w-xl text-lg font-medium">
-              One click to start. Zero vendor lock-in. Your files, on your
-              terms — forever.
-            </p>
-            <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-              <FancyCTAButton to={ctaHref} label={ctaLabel} />
-              <a
-                href="https://zenux.live/"
-                target="_blank"
-                rel="noreferrer"
-                className="hover:bg-accent inline-flex h-11 items-center gap-2 rounded-md border-2 px-5 text-base font-semibold transition-all hover:scale-105"
-              >
-                Explore Zenux
-                <ArrowUpRightIcon size={16} weight="bold" />
-              </a>
-            </div>
-          </div>
-        </section>
-      </main>
+          </section>
+        </main>
       </ClickSpark>
 
       <footer className="relative z-10 border-t px-6 py-8">
-        <div className="text-muted-foreground mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 text-sm sm:flex-row">
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 text-sm text-muted-foreground sm:flex-row">
           <div className="flex items-center gap-2 font-semibold">
             <img src="/DarkDrive.png" alt="" className="h-5 w-5 rounded" />
-            <span className="text-foreground font-black">DarkDrive</span>
+            <span className="font-black text-foreground">DarkDrive</span>
             <span className="text-muted-foreground">· part of Zenux</span>
           </div>
           <div className="flex items-center gap-5 text-xs font-semibold">
@@ -508,7 +534,7 @@ export function LandingPage() {
               href="https://prithwish.me/"
               target="_blank"
               rel="noreferrer"
-              className="hover:text-foreground transition-colors"
+              className="transition-colors hover:text-foreground"
             >
               prithwish.me
             </a>
@@ -516,7 +542,7 @@ export function LandingPage() {
               href="https://zenux.live/"
               target="_blank"
               rel="noreferrer"
-              className="hover:text-foreground transition-colors"
+              className="transition-colors hover:text-foreground"
             >
               zenux.live
             </a>
@@ -524,13 +550,19 @@ export function LandingPage() {
               href="https://github.com/LORDPRITHWISH"
               target="_blank"
               rel="noreferrer"
-              className="hover:text-foreground transition-colors"
+              className="transition-colors hover:text-foreground"
             >
               GitHub
             </a>
           </div>
           <div className="flex items-center gap-1.5 text-xs">
-            Made with <HeartIcon size={12} weight="fill" className="text-rose-500 animate-pulse" /> by Prithwish
+            Made with{" "}
+            <HeartIcon
+              size={12}
+              weight="fill"
+              className="animate-pulse text-rose-500"
+            />{" "}
+            by Prithwish
           </div>
         </div>
       </footer>

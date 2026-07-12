@@ -15,8 +15,16 @@ const SOCKET_ORIGINS = Array.from(
 )
 console.log("[socket] allowed origins:", SOCKET_ORIGINS)
 
+let io: Server | null = null
+
+// Lets route handlers (outside the socket module) push events to a
+// specific user without threading the io instance through every router.
+export function getIO(): Server | null {
+  return io
+}
+
 export function initSocket(httpServer: HttpServer) {
-  const io = new Server(httpServer, {
+  io = new Server(httpServer, {
     // Function-style origin so we can log rejections and normalize away
     // trailing slashes — same logic as the Express CORS middleware.
     cors: {
@@ -48,6 +56,10 @@ export function initSocket(httpServer: HttpServer) {
 
   io.on("connection", (socket) => {
     const userId: string = (socket.data as any).userId
+
+    // Personal room for server-initiated pushes (notifications) that don't
+    // belong to any space.
+    socket.join(`user:${userId}`)
 
     socket.on("space:join", async (spaceId: string, ack?: (ok: boolean) => void) => {
       const member = await prisma.spaceMember.findUnique({

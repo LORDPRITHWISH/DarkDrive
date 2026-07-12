@@ -20,6 +20,16 @@ const schema = z.object({
   // Extra origins (comma-separated) the API should accept on top of WEB_URL.
   // Handy for staging + prod on the same box, or www + apex variants.
   ALLOWED_ORIGINS: z.string().optional(),
+  // Enables POST /api/auth/dev-login, a password-less login-by-email route
+  // for local development when you don't want to wire up Google OAuth.
+  // Ignored outside NODE_ENV=development regardless of this flag.
+  // z.coerce.boolean() is deliberately NOT used here: it's just Boolean(x),
+  // so ENABLE_DEV_LOGIN=false would coerce to `true` — only the literal
+  // strings "true"/"1" count as enabled, everything else (including "false")
+  // is disabled.
+  ENABLE_DEV_LOGIN: z
+    .preprocess((v) => v === "true" || v === "1", z.boolean())
+    .default(false),
 })
 
 export const env = schema.parse(process.env)

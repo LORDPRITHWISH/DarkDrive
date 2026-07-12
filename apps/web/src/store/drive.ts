@@ -9,8 +9,50 @@ import type {
 } from "@/lib/types"
 import { useMe } from "./me"
 import { toast } from "./toast"
+import type { UploadEntry } from "@/lib/dropEntries"
 
 const DEFAULT_CHUNK_SIZE = 25 * 1024 * 1024
+
+// Accepts a plain file list (flat upload) or entries carrying a relative
+// path (folder upload / folder drag-and-drop), and normalizes to entries.
+function normalizeUploadEntries(input: FileList | File[] | UploadEntry[]): UploadEntry[] {
+  const arr = Array.isArray(input) ? input : Array.from(input)
+  return arr.map((x) => {
+    if (x && typeof x === "object" && "file" in x && "relativePath" in x) {
+      return x as UploadEntry
+    }
+    const file = x as File
+    const relativePath = file.webkitRelativePath || file.name
+    return { file, relativePath }
+  })
+}
+
+// Resolves the folder a relative path's file should land in, creating any
+// missing subfolders along the way. Paths sharing a prefix reuse the same
+// in-flight creation request instead of racing duplicate POSTs.
+function makeFolderResolver(rootFolderId: string) {
+  const cache = new Map<string, Promise<string>>()
+  cache.set("", Promise.resolve(rootFolderId))
+
+  function resolve(dirPath: string): Promise<string> {
+    const cached = cache.get(dirPath)
+    if (cached) return cached
+    const idx = dirPath.lastIndexOf("/")
+    const parentPath = idx === -1 ? "" : dirPath.slice(0, idx)
+    const name = idx === -1 ? dirPath : dirPath.slice(idx + 1)
+    const promise = resolve(parentPath).then(async (parentId) => {
+      const folder = await apiJson<Folder>("/api/folders", "POST", {
+        name,
+        parentId,
+      })
+      return folder.id
+    })
+    cache.set(dirPath, promise)
+    return promise
+  }
+
+  return resolve
+}
 
 async function uploadFileChunked(
   folderId: string,
@@ -66,6 +108,36 @@ export type SortState = { key: SortKey; dir: SortDir }
 
 const DEFAULT_SORT: SortState = { key: "name", dir: "asc" }
 
+export const ZOOM_MIN = 50
+export const ZOOM_MAX = 200
+export const ZOOM_DEFAULT = 100
+
+const BASE_MIN_WIDTH = 170
+const BASE_ICON_SIZE = 72
+const ZOOM_STORAGE_KEY = "dd.zoom"
+
+export function zoomToGrid(zoom: number) {
+  const scale = zoom / 100
+  return {
+    minWidth: Math.round(BASE_MIN_WIDTH * scale),
+    iconSize: Math.round(BASE_ICON_SIZE * scale),
+  }
+}
+
+function readZoom(): number {
+  try {
+    const v = Number(localStorage.getItem(ZOOM_STORAGE_KEY))
+    if (v >= ZOOM_MIN && v <= ZOOM_MAX) return v
+  } catch {}
+  return ZOOM_DEFAULT
+}
+
+function writeZoom(level: number) {
+  try {
+    localStorage.setItem(ZOOM_STORAGE_KEY, String(level))
+  } catch {}
+}
+
 function sortStorageKey(folderId: string) {
   return `dd.sort.${folderId}`
 }
@@ -104,9 +176,11 @@ type DriveState = {
   showHidden: boolean
   view: "grid" | "list"
   selection: Set<string>
+  selectionAnchor: string | null
   spaces: Space[]
   publicSpaces: PublicSpace[]
   sort: SortState
+  zoom: number
   preview: FileItem | null
   uploads: {
     id: string
@@ -122,27 +196,45 @@ type DriveState = {
   setView: (v: "grid" | "list") => void
   toggleHidden: () => void
   setSort: (sort: SortState) => void
+  setZoom: (level: number) => void
   setPreview: (file: FileItem | null) => void
   select: (id: string, multi?: boolean) => void
+  selectRange: (id: string, orderedIds: string[]) => void
+  selectAll: (orderedIds: string[]) => void
   clearSelection: () => void
 
   loadFolder: (id: string) => Promise<void>
   refresh: () => Promise<void>
 
-  createFolder: (name: string, color?: string | null) => Promise<void>
+  createFolder: (name: string, color?: string | null, thumbnail?: File | null) => Promise<void>
   renameFolder: (id: string, name: string) => Promise<void>
   recolorFolder: (id: string, color: string | null) => Promise<void>
   renameFile: (id: string, name: string) => Promise<void>
   toggleHiddenItem: (type: "folder" | "file", id: string) => Promise<void>
   toggleStarred: (type: "folder" | "file", id: string) => Promise<void>
   trashItem: (type: "folder" | "file", id: string) => Promise<void>
+  trashItems: (items: { type: "folder" | "file"; id: string }[]) => Promise<void>
   restoreItem: (type: "folder" | "file", id: string) => Promise<void>
   deleteItem: (type: "folder" | "file", id: string) => Promise<void>
   removeShortcut: (shortcutId: string) => Promise<void>
   addFileToSpace: (fileId: string, targetFolderId: string) => Promise<void>
   addFolderToSpace: (folderId: string, targetFolderId: string) => Promise<void>
-  moveItem: (type: "folder" | "file", id: string, targetFolderId: string) => Promise<void>
-  upload: (files: FileList | File[], explicitTargetId?: string) => Promise<void>
+  addItemsToSpace: (
+    items: { type: "folder" | "file"; id: string }[],
+    targetFolderId: string
+  ) => Promise<void>
+  moveItems: (
+    items: { type: "folder" | "file"; id: string }[],
+    targetFolderId: string
+  ) => Promise<void>
+  setStarred: (
+    items: { type: "folder" | "file"; id: string }[],
+    starred: boolean
+  ) => Promise<void>
+  upload: (
+    files: FileList | File[] | UploadEntry[],
+    explicitTargetId?: string
+  ) => Promise<void>
 
   loadSpaces: () => Promise<void>
   loadPublicSpaces: () => Promise<void>
@@ -168,6 +260,11 @@ type DriveState = {
   updateMemberRole: (spaceId: string, userId: string, role: "VIEWER" | "EDITOR") => Promise<void>
   removeMember: (spaceId: string, userId: string) => Promise<void>
   deleteSpace: (spaceId: string) => Promise<void>
+  joinSpace: (spaceId: string) => Promise<void>
+  leaveSpace: (spaceId: string) => Promise<void>
+  togglePinSpace: (spaceId: string, pinned: boolean) => Promise<void>
+  requestEditorAccess: (spaceId: string) => Promise<void>
+  denyEditorRequest: (spaceId: string, userId: string) => Promise<void>
 }
 
 export const useDrive = create<DriveState>((set, get) => ({
@@ -181,9 +278,11 @@ export const useDrive = create<DriveState>((set, get) => ({
   showHidden: false,
   view: "grid",
   selection: new Set(),
+  selectionAnchor: null,
   spaces: [],
   publicSpaces: [],
   sort: DEFAULT_SORT,
+  zoom: readZoom(),
   preview: null,
   uploads: [],
 
@@ -197,6 +296,11 @@ export const useDrive = create<DriveState>((set, get) => ({
     const id = get().currentFolderId
     if (id) writeSort(id, sort)
   },
+  setZoom: (level) => {
+    const clamped = Math.max(ZOOM_MIN, Math.min(level, ZOOM_MAX))
+    set({ zoom: clamped })
+    writeZoom(clamped)
+  },
   setPreview: (file) => set({ preview: file }),
   select: (id, multi) => {
     const cur = new Set(get().selection)
@@ -205,9 +309,24 @@ export const useDrive = create<DriveState>((set, get) => ({
       cur.clear()
       cur.add(id)
     }
-    set({ selection: cur })
+    set({ selection: cur, selectionAnchor: id })
   },
-  clearSelection: () => set({ selection: new Set() }),
+  // Shift-click range select: spans from the last non-range anchor to the
+  // clicked item along the on-screen order. The anchor itself doesn't move,
+  // so repeated shift-clicks grow/shrink the range from the same start.
+  selectRange: (id, orderedIds) => {
+    const anchor = get().selectionAnchor ?? id
+    const a = orderedIds.indexOf(anchor)
+    const b = orderedIds.indexOf(id)
+    if (a === -1 || b === -1) {
+      get().select(id)
+      return
+    }
+    const [lo, hi] = a < b ? [a, b] : [b, a]
+    set({ selection: new Set(orderedIds.slice(lo, hi + 1)) })
+  },
+  selectAll: (orderedIds) => set({ selection: new Set(orderedIds) }),
+  clearSelection: () => set({ selection: new Set(), selectionAnchor: null }),
 
   loadFolder: async (id: string) => {
     set({
@@ -215,6 +334,7 @@ export const useDrive = create<DriveState>((set, get) => ({
       error: null,
       currentFolderId: id,
       selection: new Set(),
+      selectionAnchor: null,
       // Pick up the persisted sort for this folder so each folder remembers
       // its own preferred ordering.
       sort: readSort(id),
@@ -239,10 +359,15 @@ export const useDrive = create<DriveState>((set, get) => ({
     if (id) await get().loadFolder(id)
   },
 
-  createFolder: async (name, color) => {
+  createFolder: async (name, color, thumbnail) => {
     const parentId = get().currentFolderId
     if (!parentId) return
-    await apiJson("/api/folders", "POST", { name, parentId, color: color ?? null })
+    const folder = await apiJson<Folder>("/api/folders", "POST", { name, parentId, color: color ?? null })
+    if (thumbnail) {
+      const form = new FormData()
+      form.append("thumbnail", thumbnail)
+      await apiUpload(`/api/folders/${folder.id}/thumbnail`, form)
+    }
     await get().refresh()
   },
   renameFolder: async (id, name) => {
@@ -299,6 +424,43 @@ export const useDrive = create<DriveState>((set, get) => ({
       throw e
     }
   },
+  trashItems: async (items) => {
+    if (items.length === 0) return
+    if (items.length === 1) {
+      const [only] = items
+      await get().trashItem(only.type, only.id)
+      return
+    }
+    const results = await Promise.allSettled(
+      items.map((item) =>
+        apiJson(
+          `/api/${item.type === "folder" ? "folders" : "files"}/${item.id}`,
+          "PATCH",
+          { isTrashed: true }
+        )
+      )
+    )
+    const succeeded = items.filter((_, i) => results[i]!.status === "fulfilled")
+    const failed = items.length - succeeded.length
+    await get().refresh()
+    // One combined "Undo" toast for the whole batch, rather than firing one
+    // toast per item — restores everything that made it into the bin.
+    if (succeeded.length > 0) {
+      toast.action(`${succeeded.length} items moved to bin`, {
+        label: "Undo",
+        onClick: () => {
+          for (const it of succeeded) void get().restoreItem(it.type, it.id)
+        },
+      })
+    }
+    if (failed > 0) {
+      toast.error(
+        succeeded.length > 0
+          ? `${failed} of ${items.length} couldn't be moved to bin.`
+          : "Couldn't move items to bin."
+      )
+    }
+  },
   restoreItem: async (type, id) => {
     try {
       await apiJson(
@@ -338,28 +500,85 @@ export const useDrive = create<DriveState>((set, get) => ({
     await apiJson(`/api/folders/${folderId}/mirror`, "POST", { targetFolderId })
     await get().refresh()
   },
-  moveItem: async (type, id, targetFolderId) => {
-    if (type === "folder") {
-      await apiJson(`/api/folders/${id}`, "PATCH", { parentId: targetFolderId })
-    } else {
-      await apiJson(`/api/files/${id}`, "PATCH", { folderId: targetFolderId })
-    }
+  addItemsToSpace: async (items, targetFolderId) => {
+    if (items.length === 0) return
+    const results = await Promise.allSettled(
+      items.map((item) =>
+        item.type === "file"
+          ? apiJson(`/api/files/${item.id}/shortcut`, "POST", { targetFolderId })
+          : apiJson(`/api/folders/${item.id}/mirror`, "POST", { targetFolderId })
+      )
+    )
+    const failed = results.filter((r) => r.status === "rejected").length
     await get().refresh()
+    if (failed > 0) {
+      toast.error(
+        items.length === 1
+          ? "Couldn't add to space."
+          : `Added ${items.length - failed} of ${items.length} — ${failed} failed.`
+      )
+    } else if (items.length > 1) {
+      toast.success(`Added ${items.length} items to space.`)
+    }
+  },
+  moveItems: async (items, targetFolderId) => {
+    if (items.length === 0) return
+    const results = await Promise.allSettled(
+      items.map((item) =>
+        item.type === "folder"
+          ? apiJson(`/api/folders/${item.id}`, "PATCH", { parentId: targetFolderId })
+          : apiJson(`/api/files/${item.id}`, "PATCH", { folderId: targetFolderId })
+      )
+    )
+    const failed = results.filter((r) => r.status === "rejected").length
+    get().clearSelection()
+    await get().refresh()
+    if (failed > 0) {
+      toast.error(
+        items.length === 1
+          ? "Couldn't move item."
+          : `Moved ${items.length - failed} of ${items.length} — ${failed} failed.`
+      )
+    } else if (items.length > 1) {
+      toast.success(`Moved ${items.length} items.`)
+    }
+  },
+  setStarred: async (items, starred) => {
+    if (items.length === 0) return
+    const results = await Promise.allSettled(
+      items.map((item) =>
+        apiJson(
+          `/api/${item.type === "folder" ? "folders" : "files"}/${item.id}`,
+          "PATCH",
+          { isStarred: starred }
+        )
+      )
+    )
+    const failed = results.filter((r) => r.status === "rejected").length
+    await get().refresh()
+    if (failed > 0) {
+      toast.error(
+        items.length === 1
+          ? "Couldn't update star."
+          : `Updated ${items.length - failed} of ${items.length} — ${failed} failed.`
+      )
+    }
   },
 
   upload: async (files, explicitTargetId) => {
-    const folderId = explicitTargetId ?? get().currentFolderId
-    if (!folderId) return
-    const list = Array.from(files)
+    const rootFolderId = explicitTargetId ?? get().currentFolderId
+    if (!rootFolderId) return
+    const list = normalizeUploadEntries(files)
+    const resolveFolder = makeFolderResolver(rootFolderId)
 
-    for (const file of list) {
+    for (const { file, relativePath } of list) {
       const uid = crypto.randomUUID()
       set({
         uploads: [
           ...get().uploads,
           {
             id: uid,
-            name: file.name,
+            name: relativePath,
             size: file.size,
             loaded: 0,
             progress: 0,
@@ -374,6 +593,9 @@ export const useDrive = create<DriveState>((set, get) => ({
         { t: performance.now(), loaded: 0 },
       ]
       try {
+        const dirIdx = relativePath.lastIndexOf("/")
+        const dirPath = dirIdx === -1 ? "" : relativePath.slice(0, dirIdx)
+        const folderId = await resolveFolder(dirPath)
         await uploadFileChunked(folderId, file, (loaded) => {
           const now = performance.now()
           samples.push({ t: now, loaded })
@@ -471,5 +693,48 @@ export const useDrive = create<DriveState>((set, get) => ({
       toast.error(e instanceof Error ? e.message : "Couldn't delete space.")
       throw e
     }
+  },
+  joinSpace: async (spaceId) => {
+    try {
+      await apiJson(`/api/spaces/${spaceId}/join`, "POST")
+      await Promise.all([get().loadSpaces(), get().loadPublicSpaces()])
+      toast.success("Joined space.")
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't join space.")
+      throw e
+    }
+  },
+  leaveSpace: async (spaceId) => {
+    try {
+      await apiJson(`/api/spaces/${spaceId}/leave`, "POST")
+      await Promise.all([get().loadSpaces(), get().loadPublicSpaces()])
+      toast.success("Left space.")
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't leave space.")
+      throw e
+    }
+  },
+  togglePinSpace: async (spaceId, pinned) => {
+    try {
+      await apiJson(`/api/spaces/${spaceId}/pin`, "PATCH", { pinned })
+      await get().loadSpaces()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't update pin.")
+      throw e
+    }
+  },
+  requestEditorAccess: async (spaceId) => {
+    try {
+      await apiJson(`/api/spaces/${spaceId}/request-editor`, "POST")
+      await get().loadSpaces()
+      toast.success("Upload access requested.")
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't send request.")
+      throw e
+    }
+  },
+  denyEditorRequest: async (spaceId, userId) => {
+    await apiJson(`/api/spaces/${spaceId}/members/${userId}/deny-editor`, "POST")
+    await get().loadSpaces()
   },
 }))

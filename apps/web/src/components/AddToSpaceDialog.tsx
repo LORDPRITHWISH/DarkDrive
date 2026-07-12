@@ -1,27 +1,34 @@
 import { useEffect, useState } from "react"
-import { UsersThreeIcon, XIcon } from "@phosphor-icons/react"
+import { UsersThreeIcon } from "@phosphor-icons/react"
 import { Button } from "@workspace/ui/components/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@workspace/ui/components/dialog"
 import { useDrive } from "@/store/drive"
 
 type Props = {
   open: boolean
-  itemType: "folder" | "file"
-  itemId: string
-  itemName: string
+  items: { type: "folder" | "file"; id: string }[]
+  displayName: string
   onClose: () => void
 }
 
 export function AddToSpaceDialog({
   open,
-  itemType,
-  itemId,
-  itemName,
+  items,
+  displayName,
   onClose,
 }: Props) {
   const spaces = useDrive((s) => s.spaces)
   const loadSpaces = useDrive((s) => s.loadSpaces)
   const addFileToSpace = useDrive((s) => s.addFileToSpace)
   const addFolderToSpace = useDrive((s) => s.addFolderToSpace)
+  const addItemsToSpace = useDrive((s) => s.addItemsToSpace)
   const [busy, setBusy] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
 
@@ -32,23 +39,17 @@ export function AddToSpaceDialog({
     void loadSpaces()
   }, [open, loadSpaces])
 
-  useEffect(() => {
-    if (!open) return
-    const h = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose()
-    }
-    window.addEventListener("keydown", h)
-    return () => window.removeEventListener("keydown", h)
-  }, [open, onClose])
-
-  if (!open) return null
-
   async function add(rootFolderId: string) {
     setBusy(rootFolderId)
     setErr(null)
     try {
-      if (itemType === "file") await addFileToSpace(itemId, rootFolderId)
-      else await addFolderToSpace(itemId, rootFolderId)
+      if (items.length === 1) {
+        const [only] = items
+        if (only.type === "file") await addFileToSpace(only.id, rootFolderId)
+        else await addFolderToSpace(only.id, rootFolderId)
+      } else {
+        await addItemsToSpace(items, rootFolderId)
+      }
       onClose()
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : "failed")
@@ -58,32 +59,17 @@ export function AddToSpaceDialog({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-      onClick={onClose}
-    >
-      <div
-        className="bg-background flex max-h-[80vh] w-full max-w-sm flex-col overflow-hidden rounded-lg border shadow-lg"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-2 border-b p-4">
-          <div className="min-w-0 flex-1">
-            <h3 className="text-lg font-semibold">Add to space</h3>
-            <div className="text-muted-foreground truncate text-xs" title={itemName}>
-              {itemType === "folder" ? "Folder" : "File"}: {itemName}
-            </div>
-            <div className="text-muted-foreground mt-1 text-xs">
-              The original stays in your drive. A link will appear in the space.
-            </div>
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="flex max-h-[80vh] w-full max-w-sm flex-col gap-0 overflow-hidden p-0">
+        <DialogHeader className="border-b p-4">
+          <DialogTitle>Add to space</DialogTitle>
+          <div className="text-muted-foreground truncate text-xs" title={displayName}>
+            {displayName}
           </div>
-          <button
-            className="hover:bg-accent shrink-0 rounded p-1"
-            onClick={onClose}
-            aria-label="Close"
-          >
-            <XIcon size={18} />
-          </button>
-        </div>
+          <DialogDescription>
+            The original stays in your drive. A link will appear in the space.
+          </DialogDescription>
+        </DialogHeader>
 
         <div className="flex-1 overflow-auto p-2">
           {err && <div className="text-destructive p-2 text-xs">{err}</div>}
@@ -117,12 +103,12 @@ export function AddToSpaceDialog({
           )}
         </div>
 
-        <div className="flex justify-end border-t p-3">
+        <DialogFooter className="border-t p-3 sm:justify-end">
           <Button variant="ghost" onClick={onClose} disabled={busy !== null}>
             Cancel
           </Button>
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

@@ -3,7 +3,6 @@ import {
   DownloadIcon,
   EyeIcon as OpenEyeIcon,
   EyeSlashIcon,
-  FolderIcon,
   InfoIcon,
   LinkBreakIcon,
   PencilSimpleIcon,
@@ -20,6 +19,7 @@ export type MenuPos = {
   id: string
   name: string
   shortcutId?: string
+  hasThumbnail?: boolean
 }
 
 type Props = {
@@ -29,7 +29,7 @@ type Props = {
   onDownload: () => void
   onRename: () => void
   onMove: () => void
-  onChangeColor: () => void
+  onFolderProperties: () => void
   onShare: () => void
   onToggleStar: () => void
   onToggleHidden: () => void
@@ -45,7 +45,7 @@ export function FileContextMenu({
   onDownload,
   onRename,
   onMove,
-  onChangeColor,
+  onFolderProperties,
   onShare,
   onToggleStar,
   onToggleHidden,
@@ -68,11 +68,16 @@ export function FileContextMenu({
           <MenuItem icon={<InfoIcon size={16} />} onClick={onProperties}>
             Properties
           </MenuItem>
-          <MenuItem icon={<DownloadIcon size={16} />} onClick={onDownload}>
-            Download
-          </MenuItem>
         </>
       )}
+      {menu.type === "folder" && !isShortcut && (
+        <MenuItem icon={<InfoIcon size={16} />} onClick={onFolderProperties}>
+          Properties…
+        </MenuItem>
+      )}
+      <MenuItem icon={<DownloadIcon size={16} />} onClick={onDownload}>
+        Download
+      </MenuItem>
       {isShortcut && (
         <MenuItem icon={<LinkBreakIcon size={16} />} onClick={onRemoveShortcut}>
           Remove shortcut
@@ -86,11 +91,6 @@ export function FileContextMenu({
       <MenuItem icon={<ArrowsOutCardinalIcon size={16} />} onClick={onMove}>
         Move to…
       </MenuItem>
-      {menu.type === "folder" && !isShortcut && (
-        <MenuItem icon={<FolderIcon size={16} weight="fill" />} onClick={onChangeColor}>
-          Change color…
-        </MenuItem>
-      )}
       {!isShortcut && (
         <>
           <MenuItem icon={<UsersThreeIcon size={16} />} onClick={onAddToSpace}>

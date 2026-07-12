@@ -32,11 +32,32 @@ model User {
 
   folders      Folder[]  @relation("FolderOwner")
   files        File[]    @relation("FileOwner")
-  spaces       Space[]   @relation("SpaceOwner")
-  memberships  SpaceMember[]
-  shares       Share[]
-  fileAccesses FileAccess[]
-  loginEvents  LoginEvent[]
+  spaces        Space[]   @relation("SpaceOwner")
+  memberships   SpaceMember[]
+  shares        Share[]
+  spaceInvites  SpaceInvite[]
+  fileAccesses  FileAccess[]
+  loginEvents   LoginEvent[]
+  notifications Notification[]
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Discriminator the client uses to pick an icon/label — see
+  // apps/api/src/lib/notify.ts for the fixed set of values in use.
+  type      String
+  title     String
+  body      String?
+  // Client-side path to navigate to when the notification is clicked, e.g.
+  // "/drive/<folderId>". Null for notifications with nowhere to go.
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
 }
 
 model FileAccess {
@@ -76,9 +97,17 @@ model Folder {
   files     File[]
   spaceId   String?
   space     Space?   @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  thumbnailKey String?
   isHidden  Boolean  @default(false)
   isTrashed Boolean  @default(false)
   isStarred Boolean  @default(false)
+  // System-level (admin) recycle bin. When a user permanently deletes an item
+  // from their own bin, it is not destroyed — it is stamped with `deletedAt` and
+  // retained here so an admin can restore or purge it. `deletedById` records who
+  // triggered the deletion. A non-null `deletedAt` always implies
+  // `isTrashed = true`, so deleted items stay excluded from every normal listing.
+  deletedAt   DateTime?
+  deletedById String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -89,6 +118,7 @@ model Folder {
 
   @@index([ownerId, parentId])
   @@index([spaceId, parentId])
+  @@index([deletedAt])
 }
 
 model File {
@@ -103,9 +133,20 @@ model File {
   size       BigInt
   mimeType   String
   storageKey String   @unique
+  // Storage key of the generated preview thumbnail (a small JPEG), or null if
+  // none exists yet. Populated by the thumbnail pipeline (see lib/thumbnails).
+  thumbnailKey String?
+  // Generation outcome: "ready", "failed", or "unsupported". Null means not yet
+  // attempted. Used to avoid re-running the pipeline on files that can't (or
+  // didn't) produce a thumbnail.
+  thumbnailState String?
   isHidden   Boolean  @default(false)
   isTrashed  Boolean  @default(false)
   isStarred  Boolean  @default(false)
+  // See Folder.deletedAt — admin recycle bin retention for permanently-deleted
+  // files. A non-null `deletedAt` always implies `isTrashed = true`.
+  deletedAt   DateTime?
+  deletedById String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -115,6 +156,7 @@ model File {
 
   @@index([ownerId, folderId])
   @@index([spaceId, folderId])
+  @@index([deletedAt])
 }
 
 model Space {
@@ -137,17 +179,43 @@ model Space {
   // When true, any authenticated DarkDrive user can read the space's contents.
   // Writes are still restricted to the owner and explicit EDITOR members.
   isPublic     Boolean  @default(false)
+  // Whether the owner has pinned this space to their own sidebar. Mirrors
+  // SpaceMember.pinned, which serves the same purpose for joined members —
+  // owners have no SpaceMember row so they need their own copy of the flag.
+  pinned       Boolean  @default(false)
   createdAt    DateTime @default(now())
 
   members      SpaceMember[]
   folders      Folder[]
   files        File[]
+  invites      SpaceInvite[]
 }
 
 enum SpaceRole {
   VIEWER
   EDITOR
   ADMIN
+}
+
+// A shareable invite link — anyone with the token and a DarkDrive account
+// can join the space at the given role, subject to the optional expiry and
+// use-limit. Distinct from Space.isPublic: this grants access to spaces that
+// aren't publicly discoverable, to whoever holds the link.
+model SpaceInvite {
+  id          String    @id @default(cuid())
+  spaceId     String
+  space       Space     @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  token       String    @unique
+  role        SpaceRole @default(VIEWER)
+  createdById String
+  createdBy   User      @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  // Null means no limit / never expires.
+  maxUses     Int?
+  useCount    Int       @default(0)
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([spaceId])
 }
 
 model SpaceMember {
@@ -157,6 +225,12 @@ model SpaceMember {
   userId   String
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   role     SpaceRole @default(EDITOR)
+  // Whether this member has pinned the space to their own sidebar. Only
+  // meaningful for non-owner members — owners always see their own spaces.
+  pinned   Boolean   @default(false)
+  // Set when a VIEWER asks the owner to be promoted to EDITOR (upload
+  // rights). Null when there's no pending request — cleared on approve/deny.
+  editorRequestedAt DateTime?
   joinedAt DateTime  @default(now())
 
   @@unique([spaceId, userId])

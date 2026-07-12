@@ -29,3 +29,7 @@ npm-debug.log*
 .DS_Store
 *.pem
 apps/web/.env.production
+.codex
+
+.superpowers
+.playwright-mcp

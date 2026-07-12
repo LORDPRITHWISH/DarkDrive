@@ -2,12 +2,12 @@ import { useEffect, useState } from "react"
 import { Link, useParams } from "react-router-dom"
 import {
   DownloadIcon,
-  XIcon,
   FolderIcon,
   ArrowRightIcon,
   LinkIcon,
 } from "@phosphor-icons/react"
 import { Button } from "@workspace/ui/components/button"
+import { Dialog, DialogContent, DialogTitle } from "@workspace/ui/components/dialog"
 import { formatBytes, formatDate } from "@/lib/format"
 import { apiUrl } from "@/lib/config"
 import { iconFor } from "@/lib/fileIcon"
@@ -252,38 +252,20 @@ function SharedFileModal({
   token: string
   onClose: () => void
 }) {
-  useEffect(() => {
-    const h = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose()
-    }
-    window.addEventListener("keydown", h)
-    return () => window.removeEventListener("keydown", h)
-  }, [onClose])
-
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-      onClick={onClose}
-    >
-      <div
-        className="bg-background flex max-h-[90vh] max-w-[95vw] overflow-hidden rounded-lg border"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="flex max-h-[90vh] w-full max-w-[95vw] gap-0 overflow-hidden p-0 sm:max-w-[95vw]">
         <div className="bg-muted flex min-w-0 items-center justify-center overflow-hidden">
           <FileViewer file={file} src={shareInlineUrl(token, file.id)} />
         </div>
         <aside className="flex w-72 shrink-0 flex-col gap-3 overflow-auto border-l p-4">
           <div className="flex items-start justify-between gap-2">
-            <h3 className="min-w-0 flex-1 truncate font-semibold" title={file.name}>
-              {file.name}
-            </h3>
-            <button
-              className="hover:bg-accent shrink-0 rounded p-1"
-              onClick={onClose}
-              aria-label="Close"
+            <DialogTitle
+              className="min-w-0 flex-1 truncate text-base font-semibold"
+              title={file.name}
             >
-              <XIcon size={18} />
-            </button>
+              {file.name}
+            </DialogTitle>
           </div>
           <a
             href={shareDownloadUrl(token, file.id)}
@@ -297,7 +279,7 @@ function SharedFileModal({
             <div>Added {formatDate(file.createdAt)}</div>
           </div>
         </aside>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }

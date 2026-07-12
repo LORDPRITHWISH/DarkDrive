@@ -3,7 +3,6 @@ import {
   DownloadSimpleIcon,
   EyeIcon,
   FileIcon,
-  XIcon,
 } from "@phosphor-icons/react"
 import type { FileItem } from "@/lib/types"
 import { apiGet } from "@/lib/api"
@@ -11,6 +10,14 @@ import { apiUrl } from "@/lib/config"
 import { formatBytes, formatDate, relativeTime } from "@/lib/format"
 import { iconFor } from "@/lib/fileIcon"
 import { thumbnailable } from "@/lib/thumb"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@workspace/ui/components/dialog"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@workspace/ui/components/tabs"
+import { Avatar, AvatarImage, AvatarFallback } from "@workspace/ui/components/avatar"
 
 type ActivityEvent = {
   action: string
@@ -59,74 +66,45 @@ export function FilePropertiesDialog({
       .finally(() => setActivityLoading(false))
   }, [file, tab, activity, activityLoading])
 
-  useEffect(() => {
-    if (!file) return
-    const h = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose()
-    }
-    window.addEventListener("keydown", h)
-    return () => window.removeEventListener("keydown", h)
-  }, [file, onClose])
-
   if (!file) return null
 
   const showThumb = thumbnailable(file) && !thumbFailed
   const dlHref = apiUrl(`/api/files/${file.id}/download`)
 
   return (
-    <div
-      className="animate-in fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm duration-150"
-      onClick={onClose}
-    >
-      <div
-        className="animate-in fade-in zoom-in-95 bg-card flex w-full max-w-md flex-col overflow-hidden rounded-2xl border shadow-2xl duration-150"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="flex max-h-[85vh] w-full max-w-md flex-col gap-0 overflow-hidden p-0">
         {/* Header */}
-        <div className="flex items-start gap-3 border-b px-5 py-4">
+        <DialogHeader className="flex-row items-start gap-3 border-b px-5 py-4">
           <div className="mt-0.5 shrink-0">
             {iconFor(file.mimeType, 28, file.name)}
           </div>
-          <div className="min-w-0 flex-1">
-            <div className="truncate font-semibold" title={file.name}>
+          <div className="min-w-0 flex-1 text-left">
+            <DialogTitle className="truncate" title={file.name}>
               {file.name}
-            </div>
+            </DialogTitle>
             <div className="text-muted-foreground mt-0.5 text-xs">
               {formatBytes(file.size)} · {file.mimeType || "unknown type"}
             </div>
           </div>
-          <button
-            className="hover:bg-accent shrink-0 rounded-lg p-1.5 transition-colors"
-            onClick={onClose}
-            aria-label="Close"
-          >
-            <XIcon size={16} />
-          </button>
-        </div>
+        </DialogHeader>
 
-        {/* Tabs */}
-        <div className="border-b">
-          <div className="flex px-5">
-            {(["info", "activity"] as Tab[]).map((t) => (
-              <button
-                key={t}
-                onClick={() => setTab(t)}
-                className={`relative py-2.5 pr-4 text-sm font-medium capitalize transition-colors ${
-                  tab === t
-                    ? "text-foreground after:bg-primary after:absolute after:bottom-0 after:left-0 after:right-4 after:h-0.5 after:content-['']"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {t}
-              </button>
-            ))}
-          </div>
-        </div>
+        <Tabs
+          value={tab}
+          onValueChange={(v) => setTab(v as Tab)}
+          className="min-h-0 flex-1 gap-0"
+        >
+          <TabsList className="px-5">
+            <TabsTrigger value="info" className="capitalize">
+              Info
+            </TabsTrigger>
+            <TabsTrigger value="activity" className="capitalize">
+              Activity
+            </TabsTrigger>
+          </TabsList>
 
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto">
-          {tab === "info" && (
-            <div className="space-y-4 p-5">
+          <div className="flex-1 overflow-y-auto">
+            <TabsContent value="info" className="space-y-4 p-5">
               {/* Thumbnail preview */}
               {showThumb && (
                 <div className="overflow-hidden rounded-xl border">
@@ -166,11 +144,9 @@ export function FilePropertiesDialog({
                   Download file
                 </a>
               </div>
-            </div>
-          )}
+            </TabsContent>
 
-          {tab === "activity" && (
-            <div className="p-5">
+            <TabsContent value="activity" className="p-5">
               {activityLoading && (
                 <div className="text-muted-foreground py-10 text-center text-sm">
                   Loading activity…
@@ -228,11 +204,11 @@ export function FilePropertiesDialog({
                   )}
                 </div>
               )}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+            </TabsContent>
+          </div>
+        </Tabs>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -283,18 +259,14 @@ function EventRow({ event }: { event: ActivityEvent }) {
   const isDownload = event.action === "download"
   return (
     <div className="hover:bg-accent/40 flex items-center gap-3 rounded-lg px-2 py-1.5 transition-colors">
-      {/* Avatar */}
-      <div className="bg-muted grid h-7 w-7 shrink-0 place-items-center overflow-hidden rounded-full border text-xs font-semibold uppercase">
-        {event.user.avatarUrl ? (
-          <img
-            src={event.user.avatarUrl}
-            alt={event.user.name}
-            className="h-full w-full object-cover"
-          />
-        ) : (
-          event.user.name.charAt(0)
+      <Avatar className="h-7 w-7 border">
+        {event.user.avatarUrl && (
+          <AvatarImage src={event.user.avatarUrl} alt={event.user.name} />
         )}
-      </div>
+        <AvatarFallback className="text-xs font-semibold uppercase">
+          {event.user.name.charAt(0)}
+        </AvatarFallback>
+      </Avatar>
 
       {/* User + action */}
       <div className="min-w-0 flex-1">

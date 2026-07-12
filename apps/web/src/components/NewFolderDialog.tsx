@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState } from "react"
-import { FolderIcon, TrashIcon, UploadIcon, XIcon } from "@phosphor-icons/react"
+import { FolderIcon, TrashIcon, UploadIcon } from "@phosphor-icons/react"
 import { Button } from "@workspace/ui/components/button"
+import { Input } from "@workspace/ui/components/input"
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@workspace/ui/components/dialog"
 
 export const FOLDER_COLORS: { label: string; value: string }[] = [
   { label: "Default", value: "" },
@@ -51,21 +59,10 @@ export function NewFolderDialog({
   }, [open, initialName, initialColor])
 
   useEffect(() => {
-    if (!open) return
-    const h = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose()
-    }
-    window.addEventListener("keydown", h)
-    return () => window.removeEventListener("keydown", h)
-  }, [open, onClose])
-
-  useEffect(() => {
     return () => {
       if (thumbPreview) URL.revokeObjectURL(thumbPreview)
     }
   }, [thumbPreview])
-
-  if (!open) return null
 
   function pickFile(file: File) {
     if (thumbPreview) URL.revokeObjectURL(thumbPreview)
@@ -91,23 +88,13 @@ export function NewFolderDialog({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <div
-        className="bg-card animate-in fade-in zoom-in-95 w-full max-w-sm rounded-2xl border shadow-2xl duration-150"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* header */}
-        <div className="flex items-center justify-between border-b px-5 py-4">
-          <h3 className="text-base font-semibold">{title}</h3>
-          <button className="hover:bg-accent rounded-lg p-1.5 transition-colors" onClick={onClose} aria-label="Close">
-            <XIcon size={16} />
-          </button>
-        </div>
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
 
-        <div className="space-y-4 p-5">
+        <div className="space-y-4">
           {/* Thumbnail preview */}
           <div className="flex items-center gap-4">
             <div className="relative grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-xl border bg-muted">
@@ -170,8 +157,7 @@ export function NewFolderDialog({
             <span className="mb-1 block text-xs font-medium text-muted-foreground uppercase tracking-wider">
               Name
             </span>
-            <input
-              className="bg-background focus-visible:ring-ring w-full rounded-xl border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none"
+            <Input
               placeholder="Folder name"
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -207,15 +193,15 @@ export function NewFolderDialog({
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 border-t px-5 py-3">
+        <DialogFooter>
           <Button variant="ghost" size="sm" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
           <Button size="sm" onClick={submit} disabled={!name.trim() || busy}>
             {busy ? "Saving…" : submitLabel}
           </Button>
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

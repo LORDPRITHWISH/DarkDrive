@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useState } from "react"
-import { CaretDownIcon, CaretRightIcon, FolderIcon, XIcon } from "@phosphor-icons/react"
+import { CaretDownIcon, CaretRightIcon, FolderIcon } from "@phosphor-icons/react"
 import { Button } from "@workspace/ui/components/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@workspace/ui/components/dialog"
 import { apiGet } from "@/lib/api"
 
 type FolderNode = { id: string; name: string; parentId: string | null }
@@ -49,41 +57,15 @@ export function SearchFolderDialog({ open, initialFolderId, onClose, onSubmit }:
       .catch((e) => setErr(e.message))
   }, [open, initialFolderId])
 
-  useEffect(() => {
-    if (!open) return
-    const h = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose()
-    }
-    window.addEventListener("keydown", h)
-    return () => window.removeEventListener("keydown", h)
-  }, [open, onClose])
-
-  if (!open) return null
-
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-      onClick={onClose}
-    >
-      <div
-        className="bg-background flex h-[520px] w-full max-w-md flex-col overflow-hidden rounded-lg border shadow-lg"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-2 border-b p-4">
-          <div className="min-w-0 flex-1">
-            <h3 className="text-lg font-semibold">Search in folder</h3>
-            <div className="text-muted-foreground text-xs">
-              Only this folder and its subfolders will be searched
-            </div>
-          </div>
-          <button
-            className="hover:bg-accent shrink-0 rounded p-1"
-            onClick={onClose}
-            aria-label="Close"
-          >
-            <XIcon size={18} />
-          </button>
-        </div>
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="flex h-[520px] w-full max-w-md flex-col gap-0 overflow-hidden p-0">
+        <DialogHeader className="border-b p-4">
+          <DialogTitle>Search in folder</DialogTitle>
+          <DialogDescription>
+            Only this folder and its subfolders will be searched
+          </DialogDescription>
+        </DialogHeader>
 
         <div className="flex-1 overflow-auto p-2 text-sm">
           {err && <div className="text-destructive mb-2 px-2">{err}</div>}
@@ -108,7 +90,7 @@ export function SearchFolderDialog({ open, initialFolderId, onClose, onSubmit }:
           )}
         </div>
 
-        <div className="flex items-center justify-between gap-2 border-t p-3">
+        <DialogFooter className="flex-row items-center justify-between gap-2 border-t p-3 sm:justify-between">
           <Button
             variant="ghost"
             onClick={() => {
@@ -127,9 +109,9 @@ export function SearchFolderDialog({ open, initialFolderId, onClose, onSubmit }:
           >
             Search here
           </Button>
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 

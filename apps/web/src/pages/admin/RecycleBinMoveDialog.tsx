@@ -4,10 +4,17 @@ import {
   CaretRightIcon,
   FolderIcon,
   MagnifyingGlassIcon,
-  XIcon,
 } from "@phosphor-icons/react"
 import { Button } from "@workspace/ui/components/button"
+import { Input } from "@workspace/ui/components/input"
 import { Avatar, AvatarImage, AvatarFallback } from "@workspace/ui/components/avatar"
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@workspace/ui/components/dialog"
 import { apiGet } from "@/lib/api"
 import type { AdminFolderTree, AdminUser } from "@/lib/types"
 
@@ -67,15 +74,6 @@ export function RecycleBinMoveDialog({ open, item, users, onClose, onSubmit }: P
     )
   }, [users, query])
 
-  useEffect(() => {
-    if (!open) return
-    const h = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose()
-    }
-    window.addEventListener("keydown", h)
-    return () => window.removeEventListener("keydown", h)
-  }, [open, onClose])
-
   if (!open || !item) return null
 
   async function submit() {
@@ -92,29 +90,14 @@ export function RecycleBinMoveDialog({ open, item, users, onClose, onSubmit }: P
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-      onClick={onClose}
-    >
-      <div
-        className="bg-background flex h-[560px] w-full max-w-2xl flex-col overflow-hidden rounded-lg border shadow-lg"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-2 border-b p-4">
-          <div className="min-w-0 flex-1">
-            <h3 className="text-lg font-semibold">Move to…</h3>
-            <div className="text-muted-foreground truncate text-xs" title={item.name}>
-              {item.name}
-            </div>
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="flex h-[560px] w-full max-w-2xl flex-col gap-0 overflow-hidden p-0">
+        <DialogHeader className="border-b p-4">
+          <DialogTitle>Move to…</DialogTitle>
+          <div className="text-muted-foreground truncate text-xs" title={item.name}>
+            {item.name}
           </div>
-          <button
-            className="hover:bg-accent shrink-0 rounded p-1"
-            onClick={onClose}
-            aria-label="Close"
-          >
-            <XIcon size={18} />
-          </button>
-        </div>
+        </DialogHeader>
 
         <div className="flex min-h-0 flex-1">
           {/* User picker */}
@@ -124,9 +107,9 @@ export function RecycleBinMoveDialog({ open, item, users, onClose, onSubmit }: P
                 size={14}
                 className="text-muted-foreground pointer-events-none absolute top-1/2 left-4 -translate-y-1/2"
               />
-              <input
+              <Input
                 autoFocus
-                className="bg-background focus-visible:ring-ring w-full rounded-md border py-1.5 pr-2 pl-7 text-xs focus-visible:ring-2 focus-visible:outline-none"
+                className="h-auto py-1.5 pr-2 pl-7 text-xs"
                 placeholder="Find a user…"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
@@ -189,16 +172,16 @@ export function RecycleBinMoveDialog({ open, item, users, onClose, onSubmit }: P
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2 border-t p-3">
+        <DialogFooter className="border-t p-3">
           <Button variant="ghost" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
           <Button onClick={submit} disabled={!selected || busy}>
             {busy ? "Moving…" : "Move here"}
           </Button>
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 

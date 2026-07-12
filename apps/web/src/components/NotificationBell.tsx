@@ -31,7 +31,7 @@ function iconFor(type: NotificationType) {
   }
 }
 
-export function NotificationBell({ collapsed }: { collapsed?: boolean }) {
+export function NotificationBell() {
   const nav = useNavigate()
   const { items, unreadCount, loaded, load, markRead, markAllRead, dismiss } =
     useNotifications()
@@ -62,9 +62,7 @@ export function NotificationBell({ collapsed }: { collapsed?: boolean }) {
       <button
         onClick={() => setOpen((v) => !v)}
         title="Notifications"
-        className={`relative rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors ${
-          collapsed ? "" : ""
-        }`}
+        className="relative rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
       >
         <BellIcon size={16} />
         {unreadCount > 0 && (
@@ -75,7 +73,7 @@ export function NotificationBell({ collapsed }: { collapsed?: boolean }) {
       </button>
 
       {open && (
-        <div className="bg-popover animate-in fade-in slide-in-from-top-1 absolute left-0 top-full z-30 mt-1 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border shadow-xl duration-150">
+        <div className="bg-popover animate-in fade-in slide-in-from-top-1 absolute right-0 top-full z-30 mt-1 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border shadow-xl duration-150">
           <div className="flex items-center justify-between border-b px-3 py-2">
             <span className="text-sm font-semibold">Notifications</span>
             {unreadCount > 0 && (

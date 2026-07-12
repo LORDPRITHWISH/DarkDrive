@@ -7,7 +7,17 @@ import {
   TrashIcon,
 } from "@phosphor-icons/react"
 import { Sidebar } from "@/components/Sidebar"
+import { SidebarToggle } from "@/components/SidebarToggle"
+import { HeaderActions } from "@/components/HeaderActions"
 import { Button } from "@workspace/ui/components/button"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@workspace/ui/components/table"
 import { apiGet, apiJson } from "@/lib/api"
 import { useDrive } from "@/store/drive"
 import { useMe } from "@/store/me"
@@ -113,6 +123,7 @@ export function BinPage() {
       >
         <header className="flex items-center justify-between gap-3 border-b px-4 py-3">
           <div className="flex items-center gap-2">
+            <SidebarToggle />
             <TrashIcon size={18} />
             <div className="text-sm font-semibold">Bin</div>
           </div>
@@ -126,7 +137,7 @@ export function BinPage() {
               title="Permanently delete everything in the bin"
             >
               <TrashIcon size={14} weight="fill" />
-              {clearing ? "Emptying…" : "Empty bin"}
+              <span className="hidden sm:inline">{clearing ? "Emptying…" : "Empty bin"}</span>
             </Button>
             <Button
               size="sm"
@@ -144,6 +155,7 @@ export function BinPage() {
             >
               <ListBulletsIcon size={16} />
             </Button>
+            <HeaderActions />
           </div>
         </header>
 
@@ -177,23 +189,22 @@ export function BinPage() {
               ))}
             </div>
           ) : (
-            <table className="w-full text-sm">
-              <thead className="text-muted-foreground border-b text-xs uppercase">
-                <tr>
-                  <th className="py-2 pl-4 text-left font-medium">Name</th>
-                  <th className="py-2 text-left font-medium">Trashed</th>
-                  <th className="py-2 text-left font-medium">Size</th>
-                  <th className="py-2 pr-4" />
-                </tr>
-              </thead>
-              <tbody>
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="p-0 py-2 pl-4">Name</TableHead>
+                  <TableHead className="p-0 py-2">Trashed</TableHead>
+                  <TableHead className="p-0 py-2">Size</TableHead>
+                  <TableHead className="p-0 py-2 pr-4" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {folders.map((f) => (
-                  <tr
+                  <TableRow
                     key={f.id}
-                    className="hover:bg-accent/40 border-b"
                     onContextMenu={(e) => openMenu(e, "folder", f.id, f.name)}
                   >
-                    <td className="py-2 pl-4">
+                    <TableCell className="p-0 py-2 pl-4">
                       <div className="flex items-center gap-2">
                         <FolderIcon
                           size={20}
@@ -203,42 +214,42 @@ export function BinPage() {
                         />
                         <span>{f.name}</span>
                       </div>
-                    </td>
-                    <td className="py-2">{formatDate(f.updatedAt)}</td>
-                    <td className="py-2">—</td>
-                    <td className="py-2 pr-4">
+                    </TableCell>
+                    <TableCell className="p-0 py-2">{formatDate(f.updatedAt)}</TableCell>
+                    <TableCell className="p-0 py-2">—</TableCell>
+                    <TableCell className="p-0 py-2 pr-4">
                       <RowActions
                         onRestore={() => restore("folder", f.id)}
                         onDelete={() => remove("folder", f.id, f.name)}
                       />
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
                 {files.map((f) => (
-                  <tr
+                  <TableRow
                     key={f.id}
-                    className="hover:bg-accent/40 cursor-pointer border-b"
+                    className="cursor-pointer"
                     onClick={() => setPreview(f)}
                     onContextMenu={(e) => openMenu(e, "file", f.id, f.name)}
                   >
-                    <td className="py-2 pl-4">
+                    <TableCell className="p-0 py-2 pl-4">
                       <div className="flex items-center gap-2">
                         {iconFor(f.mimeType, 20, f.name)}
                         <span>{f.name}</span>
                       </div>
-                    </td>
-                    <td className="py-2">{formatDate(f.updatedAt)}</td>
-                    <td className="py-2">{formatBytes(f.size)}</td>
-                    <td className="py-2 pr-4" onClick={(e) => e.stopPropagation()}>
+                    </TableCell>
+                    <TableCell className="p-0 py-2">{formatDate(f.updatedAt)}</TableCell>
+                    <TableCell className="p-0 py-2">{formatBytes(f.size)}</TableCell>
+                    <TableCell className="p-0 py-2 pr-4" onClick={(e) => e.stopPropagation()}>
                       <RowActions
                         onRestore={() => restore("file", f.id)}
                         onDelete={() => remove("file", f.id, f.name)}
                       />
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           )}
         </div>
 
@@ -273,7 +284,12 @@ export function BinPage() {
           </ul>
         )}
 
-        <FilePreview file={preview} onClose={() => setPreview(null)} />
+        <FilePreview
+          file={preview}
+          onClose={() => setPreview(null)}
+          items={files}
+          onNavigate={setPreview}
+        />
       </main>
     </div>
   )

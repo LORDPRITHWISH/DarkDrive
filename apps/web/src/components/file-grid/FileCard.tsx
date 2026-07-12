@@ -2,17 +2,19 @@ import { useState } from "react"
 import { LinkSimpleIcon } from "@phosphor-icons/react"
 import type { FileItem } from "@/lib/types"
 import { formatBytes } from "@/lib/format"
-import { apiUrl } from "@/lib/config"
 import { iconFor } from "@/lib/fileIcon"
+import { thumbnailable } from "@/lib/thumb"
 import { StarToggle } from "./StarToggle"
-import { startItemDrag } from "./dnd"
+import { FileThumb } from "./FileThumb"
 
 export function FileCard({
   file,
   selected,
+  iconSize = 72,
   onClick,
   onDoubleClick,
   onContextMenu,
+  onDragStart,
   renaming,
   renameValue,
   onRenameChange,
@@ -21,22 +23,23 @@ export function FileCard({
 }: {
   file: FileItem
   selected: boolean
+  iconSize?: number
   onClick: (e: React.MouseEvent) => void
   onDoubleClick: () => void
   onContextMenu: (e: React.MouseEvent) => void
+  onDragStart: (e: React.DragEvent) => void
   renaming: boolean
   renameValue: string
   onRenameChange: (v: string) => void
   onRenameCommit: () => void
   onRenameCancel: () => void
 }) {
-  const isImg = file.mimeType.startsWith("image/")
   const [dragging, setDragging] = useState(false)
   return (
     <div
       draggable
       onDragStart={(e) => {
-        startItemDrag(e, { type: "file", id: file.id })
+        onDragStart(e)
         setDragging(true)
       }}
       onDragEnd={() => setDragging(false)}
@@ -61,16 +64,12 @@ export function FileCard({
           <LinkSimpleIcon size={12} />
         </div>
       )}
-      <div className=" grid aspect-4/3 place-items-center overflow-hidden rounded-lg">
-        {isImg ? (
-          <img
-            src={apiUrl(`/api/files/${file.id}/download?inline=1`)}
-            alt=""
-            className="h-full w-full object-cover"
-            loading="lazy"
-          />
-        ) : (
-          iconFor(file.mimeType, 72, file.name)
+      <div className="relative grid aspect-4/3 place-items-center overflow-hidden rounded-lg">
+        <FileThumb file={file} iconSize={iconSize} />
+        {thumbnailable(file) && (
+          <div className="bg-background/80 absolute right-2 bottom-2 z-10 rounded-md p-1 backdrop-blur-sm">
+            {iconFor(file.mimeType, 16, file.name)}
+          </div>
         )}
       </div>
       <div className="p-2">

@@ -1,10 +1,11 @@
-import { Router } from "express"
+import express, { Router } from "express"
 import { z } from "zod"
 import fs from "node:fs"
 import crypto from "node:crypto"
 import multer from "multer"
 import path from "node:path"
 import mime from "mime-types"
+import { ZipArchive, type Archiver } from "archiver"
 import { prisma } from "../db/prisma.js"
 import { currentUser, requireAuth } from "../middleware/auth.js"
 import { env } from "../env.js"
@@ -12,7 +13,6 @@ import {
   absolutePath,
   ensureDirFor,
   newStorageKey,
-  removeFile,
   STORAGE_ROOT,
 } from "../storage/local.js"
 import {
@@ -20,6 +20,11 @@ import {
   getFileWithAccess,
   getFolderWithAccess,
 } from "../lib/access.js"
+import { allowFrameEmbedding } from "../lib/embed.js"
+import { streamStoredFile } from "../lib/stream.js"
+import { listSubtitleSiblings, isSubtitleFile, toVtt } from "../lib/subtitles.js"
+import { canThumbnail, generateThumbnail, queueThumbnail } from "../lib/thumbnails.js"
+import { maybeNotifyQuotaNearLimit } from "../lib/notify.js"
 
 export const filesRouter = Router()
 
@@ -50,6 +55,7 @@ type UploadSession = {
 // restart — acceptable trade-off for the simpler implementation, and matches
 // the pre-chunking behavior (a single POST also fails on restart).
 const sessions = new Map<string, UploadSession>()
+const PREVIEW_TTL_MS = 60 * 60 * 1000
 
 setInterval(() => {
   const now = Date.now()
@@ -74,6 +80,107 @@ const chunkUpload = multer({
       cb(null, `${Date.now()}-${crypto.randomBytes(8).toString("hex")}`),
   }),
   limits: { fileSize: MAX_CHUNK_BYTES },
+})
+
+function isOfficeFile(file: { mimeType: string; name: string }) {
+  return (
+    /\.(pptx?|docx?|xlsx?)$/i.test(file.name) ||
+    file.mimeType.includes("officedocument") ||
+    file.mimeType.includes("ms-powerpoint") ||
+    file.mimeType === "application/msword" ||
+    file.mimeType === "application/vnd.ms-excel"
+  )
+}
+
+function isPdfFile(file: { mimeType: string; name: string }) {
+  return file.mimeType === "application/pdf" || /\.pdf$/i.test(file.name)
+}
+
+function isPreviewableFile(file: { mimeType: string; name: string }) {
+  return isOfficeFile(file) || isPdfFile(file)
+}
+
+function previewSignature(
+  file: { id: string; storageKey: string },
+  expiresAt: number
+) {
+  return crypto
+    .createHmac("sha256", env.SESSION_SECRET)
+    .update(`${file.id}:${file.storageKey}:${expiresAt}`)
+    .digest("base64url")
+}
+
+function safeEqual(a: string, b: string) {
+  const aBuf = Buffer.from(a)
+  const bBuf = Buffer.from(b)
+  return aBuf.length === bBuf.length && crypto.timingSafeEqual(aBuf, bBuf)
+}
+
+
+filesRouter.get("/:id/preview", async (req, res) => {
+  const sig = Array.isArray(req.query.sig) ? req.query.sig[0] : req.query.sig
+  const expires = Array.isArray(req.query.expires)
+    ? req.query.expires[0]
+    : req.query.expires
+
+  if (typeof sig === "string" || typeof expires === "string") {
+    if (typeof sig !== "string" || typeof expires !== "string") {
+      return res.status(400).json({ error: "invalid_preview_token" })
+    }
+    const expiresAt = Number(expires)
+    if (!Number.isInteger(expiresAt) || expiresAt <= 0) {
+      return res.status(400).json({ error: "invalid_preview_token" })
+    }
+    if (Date.now() > expiresAt) {
+      return res.status(410).json({ error: "expired" })
+    }
+
+    const file = await prisma.file.findUnique({ where: { id: req.params.id } })
+    if (!file) return res.status(404).json({ error: "not_found" })
+    if (!isPreviewableFile(file)) {
+      return res.status(415).json({ error: "unsupported_preview" })
+    }
+    if (!safeEqual(sig, previewSignature(file, expiresAt))) {
+      return res.status(403).json({ error: "forbidden" })
+    }
+
+    return streamStoredFile(req, res, file, { disposition: "inline" })
+  }
+
+  if (!req.user) return res.status(401).json({ error: "unauthorized" })
+
+  const user = currentUser(req)
+  const file = await getFileWithAccess(user.id, req.params.id, "read", { role: user.role })
+  if (!file) return res.status(404).json({ error: "not_found" })
+  if (!isPreviewableFile(file)) {
+    return res.status(415).json({ error: "unsupported_preview" })
+  }
+
+  prisma.fileAccess
+    .create({
+      data: {
+        userId: user.id,
+        fileId: file.id,
+        action: "view",
+      },
+    })
+    .catch(() => {})
+
+  const expiresAt = Date.now() + PREVIEW_TTL_MS
+  const sourceUrl = new URL(`/api/files/${file.id}/preview`, env.APP_URL)
+  sourceUrl.searchParams.set("expires", String(expiresAt))
+  sourceUrl.searchParams.set("sig", previewSignature(file, expiresAt))
+
+  if (req.query.format === "json") {
+    return res.json({
+      sourceUrl: sourceUrl.toString(),
+      expiresAt: new Date(expiresAt).toISOString(),
+    })
+  }
+
+  allowFrameEmbedding(res)
+  res.setHeader("Cache-Control", "no-store")
+  res.redirect(sourceUrl.toString())
 })
 
 filesRouter.use(requireAuth)
@@ -260,6 +367,13 @@ filesRouter.post("/upload/:uploadId/complete", async (req, res) => {
   } catch {}
   sessions.delete(req.params.uploadId)
 
+  // Kick off thumbnail generation in the background so the upload response
+  // isn't blocked on ffmpeg/libreoffice. Missing thumbnails are also generated
+  // lazily on first request, so this is just a head start.
+  queueThumbnail(rec.id)
+
+  void maybeNotifyQuotaNearLimit(user.id, BigInt(used._sum.size ?? BigInt(0)) + BigInt(stat.size), quota)
+
   res.status(201).json({ file: { ...rec, size: Number(rec.size) } })
 })
 
@@ -312,26 +426,290 @@ filesRouter.delete("/shortcuts/:id", async (req, res) => {
 
 filesRouter.get("/:id/download", async (req, res) => {
   const user = currentUser(req)
-  const file = await getFileWithAccess(user.id, req.params.id, "read")
+  const file = await getFileWithAccess(user.id, req.params.id, "read", { role: user.role })
   if (!file) return res.status(404).json({ error: "not_found" })
+  // log access for recents / suggestions — but only on the opening request.
+  // Media seeking fires many ranged requests per playback; logging each one
+  // would flood fileAccess, so we skip mid-stream range continuations.
+  const range = req.headers.range
+  const isContinuation = typeof range === "string" && !/^bytes=0?-/.test(range)
+  if (!isContinuation) {
+    prisma.fileAccess
+      .create({
+        data: {
+          userId: user.id,
+          fileId: file.id,
+          action: req.query.inline === "1" ? "view" : "download",
+        },
+      })
+      .catch(() => {})
+  }
+  streamStoredFile(req, res, file, {
+    disposition: req.query.inline === "1" ? "inline" : "attachment",
+  })
+})
+
+// Serve a file's preview thumbnail (a small JPEG). Generated on demand the
+// first time it's requested if the upload-time job hasn't produced it yet, so
+// this transparently backfills thumbnails for files uploaded before the
+// pipeline existed. Returns 404 when no thumbnail can be produced — the client
+// falls back to a type icon.
+// Bulk zip download: bundles selected files/folders (recursively, following
+// folder shortcuts the same way the folder-contents listing does) into a
+// single streamed .zip. POST + urlencoded body (not GET query) because a
+// large selection's item list can exceed safe URL length; the client submits
+// a hidden form so the browser handles it as a normal attachment download.
+const ZipItemsSchema = z
+  .array(z.object({ type: z.enum(["file", "folder"]), id: z.string() }))
+  .min(1)
+  .max(2000)
+
+function uniqueEntryName(used: Map<string, number>, name: string): string {
+  const count = used.get(name) ?? 0
+  used.set(name, count + 1)
+  if (count === 0) return name
+  const ext = path.extname(name)
+  const base = ext ? name.slice(0, -ext.length) : name
+  return `${base} (${count})${ext}`
+}
+
+function appendFileEntry(
+  archive: Archiver,
+  file: { name: string; storageKey: string },
+  entryPath: string
+) {
   const abs = absolutePath(file.storageKey)
-  if (!fs.existsSync(abs)) return res.status(410).json({ error: "gone" })
-  // log access for recents / suggestions
-  prisma.fileAccess
-    .create({
-      data: {
-        userId: user.id,
-        fileId: file.id,
-        action: req.query.inline === "1" ? "view" : "download",
-      },
+  if (!fs.existsSync(abs)) return
+  archive.file(abs, { name: entryPath })
+}
+
+// Recursively mirrors a folder's contents into the archive under `prefix`.
+// Empty folders get an explicit directory entry so they still show up.
+async function appendFolderToArchive(
+  archive: Archiver,
+  folderId: string,
+  prefix: string,
+  downloadedFileIds: string[]
+): Promise<void> {
+  const [subfolders, realFiles, shortcuts] = await Promise.all([
+    prisma.folder.findMany({
+      where: { parentId: folderId, isTrashed: false },
+      orderBy: { name: "asc" },
+    }),
+    prisma.file.findMany({
+      where: { folderId, isTrashed: false },
+      orderBy: { name: "asc" },
+    }),
+    prisma.fileShortcut.findMany({
+      where: { folderId, file: { isTrashed: false } },
+      include: { file: true },
+    }),
+  ])
+
+  const files = [...realFiles, ...shortcuts.map((s) => s.file)]
+  if (files.length === 0 && subfolders.length === 0) {
+    archive.append(Buffer.alloc(0), { name: `${prefix}/` })
+    return
+  }
+
+  const used = new Map<string, number>()
+  for (const file of files) {
+    const entryName = uniqueEntryName(used, file.name)
+    appendFileEntry(archive, file, `${prefix}/${entryName}`)
+    downloadedFileIds.push(file.id)
+  }
+  for (const sub of subfolders) {
+    const entryName = uniqueEntryName(used, sub.name)
+    await appendFolderToArchive(archive, sub.id, `${prefix}/${entryName}`, downloadedFileIds)
+  }
+}
+
+filesRouter.post(
+  "/zip",
+  express.urlencoded({ extended: false, limit: "256kb" }),
+  async (req, res) => {
+    const user = currentUser(req)
+
+    let parsedItems: unknown
+    try {
+      parsedItems = JSON.parse(String(req.body?.items ?? ""))
+    } catch {
+      return res.status(400).json({ error: "invalid_items" })
+    }
+    const result = ZipItemsSchema.safeParse(parsedItems)
+    if (!result.success) return res.status(400).json({ error: "invalid_items" })
+    const items = result.data
+
+    // Tolerate partial access failures (an item trashed/unshared mid-flight)
+    // rather than failing the whole batch — same spirit as the bulk star/move
+    // actions on the client, which apply per-item.
+    const resolved = (
+      await Promise.all(
+        items.map(async (it) => {
+          if (it.type === "file") {
+            const file = await getFileWithAccess(user.id, it.id, "read", { role: user.role })
+            return file ? ({ type: "file" as const, file }) : null
+          }
+          const folder = await getFolderWithAccess(user.id, it.id, "read", { role: user.role })
+          return folder ? ({ type: "folder" as const, folder }) : null
+        })
+      )
+    ).filter((x): x is NonNullable<typeof x> => x !== null)
+
+    if (resolved.length === 0) return res.status(404).json({ error: "not_found" })
+
+    const rawName = typeof req.body?.name === "string" ? req.body.name : ""
+    const zipName = (rawName.trim() || "Download").slice(0, 150)
+
+    res.setHeader("Content-Type", "application/zip")
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${encodeURIComponent(zipName)}.zip"`
+    )
+    res.setHeader("Cache-Control", "no-store")
+
+    const archive = new ZipArchive({ zlib: { level: 6 } })
+    archive.on("warning", (err: Error) => console.warn("[zip] warning:", err))
+    archive.on("error", (err: Error) => {
+      console.error("[zip] error:", err)
+      res.destroy(err)
     })
-    .catch(() => {})
-  res.setHeader("Content-Type", file.mimeType)
-  res.setHeader(
-    "Content-Disposition",
-    `${req.query.inline === "1" ? "inline" : "attachment"}; filename="${encodeURIComponent(file.name)}"`
-  )
+    res.on("close", () => archive.destroy())
+    archive.pipe(res)
+
+    const downloadedFileIds: string[] = []
+    const rootUsed = new Map<string, number>()
+    try {
+      for (const item of resolved) {
+        if (item.type === "file") {
+          const entryName = uniqueEntryName(rootUsed, item.file.name)
+          appendFileEntry(archive, item.file, entryName)
+          downloadedFileIds.push(item.file.id)
+        } else {
+          const entryName = uniqueEntryName(rootUsed, item.folder.name)
+          await appendFolderToArchive(archive, item.folder.id, entryName, downloadedFileIds)
+        }
+      }
+    } catch (err) {
+      console.error("[zip] failed building archive:", err)
+      res.destroy()
+      return
+    }
+
+    archive.finalize()
+
+    if (downloadedFileIds.length > 0) {
+      prisma.fileAccess
+        .createMany({
+          data: downloadedFileIds.map((fileId) => ({
+            userId: user.id,
+            fileId,
+            action: "download",
+          })),
+        })
+        .catch(() => {})
+    }
+  }
+)
+
+filesRouter.get("/:id/thumbnail", async (req, res) => {
+  const user = currentUser(req)
+  const file = await getFileWithAccess(user.id, req.params.id, "read", { role: user.role })
+  if (!file) return res.status(404).json({ error: "not_found" })
+  if (!canThumbnail(file)) return res.status(415).json({ error: "unsupported" })
+
+  let key = file.thumbnailKey
+  // Don't keep retrying files we've already determined can't be thumbnailed.
+  if (!key && file.thumbnailState !== "failed" && file.thumbnailState !== "unsupported") {
+    key = await generateThumbnail(file.id)
+  }
+  if (!key) return res.status(404).json({ error: "no_thumbnail" })
+
+  const abs = absolutePath(key)
+  if (!fs.existsSync(abs)) return res.status(404).json({ error: "gone" })
+
+  res.setHeader("Content-Type", "image/jpeg")
+  // Thumbnails are content-addressed by storage key, so a given URL is stable;
+  // private since the file may live in a non-public space.
+  res.setHeader("Cache-Control", "private, max-age=86400")
   fs.createReadStream(abs).pipe(res)
+})
+
+// List sidecar subtitle tracks for a video: sibling files in the same folder
+// whose base name matches the video (e.g. Movie.mkv ↔ Movie.en.srt).
+filesRouter.get("/:id/subtitles", async (req, res) => {
+  const user = currentUser(req)
+  const file = await getFileWithAccess(user.id, req.params.id, "read", { role: user.role })
+  if (!file) return res.status(404).json({ error: "not_found" })
+
+  const siblings = await prisma.file.findMany({
+    where: { folderId: file.folderId, isTrashed: false, id: { not: file.id } },
+    select: { id: true, name: true },
+  })
+  const tracks = listSubtitleSiblings(file.name, siblings).map((t) => ({
+    id: t.id,
+    label: t.label,
+    lang: t.lang,
+    src: `/api/files/${t.id}/subtitle.vtt`,
+  }))
+  res.json({ tracks })
+})
+
+// Serve a subtitle file as WebVTT (converting SRT on the fly) so it can be
+// attached to a <video> via a <track> element. Browsers only render VTT.
+filesRouter.get("/:id/subtitle.vtt", async (req, res) => {
+  const user = currentUser(req)
+  const file = await getFileWithAccess(user.id, req.params.id, "read", { role: user.role })
+  if (!file) return res.status(404).json({ error: "not_found" })
+  if (!isSubtitleFile(file.name)) {
+    return res.status(415).json({ error: "unsupported_subtitle" })
+  }
+  const abs = absolutePath(file.storageKey)
+  let raw: string
+  try {
+    raw = fs.readFileSync(abs, "utf8")
+  } catch {
+    return res.status(410).json({ error: "gone" })
+  }
+  allowFrameEmbedding(res)
+  res.setHeader("Content-Type", "text/vtt; charset=utf-8")
+  res.setHeader("Cache-Control", "no-store")
+  res.send(toVtt(raw, file.name))
+})
+
+// File activity: view/download counts and a recent event log.
+filesRouter.get("/:id/activity", async (req, res) => {
+  const user = currentUser(req)
+  const file = await getFileWithAccess(user.id, req.params.id, "read", { role: user.role })
+  if (!file) return res.status(404).json({ error: "not_found" })
+
+  const [views, downloads, recent] = await Promise.all([
+    prisma.fileAccess.count({ where: { fileId: file.id, action: "view" } }),
+    prisma.fileAccess.count({ where: { fileId: file.id, action: "download" } }),
+    prisma.fileAccess.findMany({
+      where: { fileId: file.id },
+      orderBy: { accessedAt: "desc" },
+      take: 30,
+      select: {
+        action: true,
+        accessedAt: true,
+        user: { select: { name: true, avatarUrl: true } },
+      },
+    }),
+  ])
+
+  res.json({
+    stats: {
+      views,
+      downloads,
+      lastAccessed: recent[0]?.accessedAt ?? null,
+    },
+    recent: recent.map((a) => ({
+      action: a.action,
+      accessedAt: a.accessedAt.toISOString(),
+      user: { name: a.user.name, avatarUrl: a.user.avatarUrl ?? null },
+    })),
+  })
 })
 
 filesRouter.patch("/:id", async (req, res) => {
@@ -355,13 +733,19 @@ filesRouter.patch("/:id", async (req, res) => {
   res.json({ ...updated, size: Number(updated.size) })
 })
 
+// "Permanent" delete from the user's point of view: the file leaves their bin
+// and every normal listing. It is NOT destroyed — it is soft-deleted into the
+// admin-only recycle bin (stamped with deletedAt) so an admin can still restore
+// or purge it. The blob on disk is retained until an admin purges. Keeping
+// isTrashed=true preserves the invariant that deleted items never surface in
+// any isTrashed:false query.
 filesRouter.delete("/:id", async (req, res) => {
   const user = currentUser(req)
   const file = await getFileWithAccess(user.id, req.params.id, "admin")
   if (!file) return res.status(403).json({ error: "forbidden" })
-  await prisma.file.delete({ where: { id: file.id } })
-  try {
-    removeFile(file.storageKey)
-  } catch {}
+  await prisma.file.update({
+    where: { id: file.id },
+    data: { deletedAt: new Date(), deletedById: user.id, isTrashed: true },
+  })
   res.json({ ok: true })
 })

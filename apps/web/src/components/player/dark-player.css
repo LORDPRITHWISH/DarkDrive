@@ -1,0 +1,434 @@
+/* ==========================================================================
+   DarkVids YouTube-Style Player Skin Overrides
+   ========================================================================== */
+
+/* ---- Wrapper (fills parent container) ---- */
+.dark-player-wrapper {
+  position: relative;
+}
+
+/* ---- Loading State ---- */
+.dark-player-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  background: #0f0f0f;
+  border-radius: 0.75rem;
+}
+
+.dark-player-loading__spinner {
+  width: 3rem;
+  height: 3rem;
+  border: 3px solid rgba(255, 255, 255, 0.1);
+  border-top-color: rgba(255, 255, 255, 0.6);
+  border-radius: 50%;
+  animation: dark-player-spin 0.8s linear infinite;
+}
+
+@keyframes dark-player-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+/* ---- Root Container ---- */
+.dark-player-wrapper .media-default-skin,
+.dark-player-wrapper .media-default-skin--video {
+  --media-border-radius: 0.75rem;
+  --media-video-border-radius: 0.75rem;
+  border-radius: 0.75rem;
+  background: #0f0f0f;
+  overflow: hidden;
+}
+
+/* Remove the inner border ring */
+.dark-player-wrapper .media-default-skin--video::after {
+  display: none;
+}
+
+/* ---- Video Element ---- */
+.dark-player-wrapper .media-default-skin video {
+  border-radius: 0.75rem;
+}
+
+/* ---- Controls Bar ---- */
+.dark-player-wrapper .media-default-skin--video .media-controls {
+  /* Remove glassmorphism / surface styling */
+  background: transparent;
+  backdrop-filter: none;
+  box-shadow: none;
+  border-radius: 0;
+  bottom: 0;
+  inset-inline: 0;
+  padding: 0.25rem 0.75rem 0.5rem;
+  color: #fff;
+  z-index: 10;
+
+  /* YouTube-style gradient behind controls */
+  background: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 0.85) 0%,
+    rgba(0, 0, 0, 0.5) 50%,
+    transparent 100%
+  );
+}
+
+/* Remove glass surface from controls */
+.dark-player-wrapper .media-default-skin .media-controls.media-surface {
+  background-color: transparent;
+  backdrop-filter: none;
+  box-shadow: none;
+}
+.dark-player-wrapper .media-default-skin .media-controls.media-surface::after {
+  display: none;
+}
+
+/* On larger screens, same style */
+@container media-root (width > 42rem) {
+  .dark-player-wrapper .media-default-skin--video .media-controls {
+    bottom: 0;
+    inset-inline: 0;
+    border-radius: 0;
+    padding: 0.25rem 0.75rem 0.5rem;
+  }
+}
+
+/* ---- Buttons ---- */
+.dark-player-wrapper .media-default-skin .media-button {
+  color: #fff;
+  border-radius: 50%;
+  padding: 0.4rem;
+  transition:
+    background-color 150ms ease,
+    opacity 150ms ease;
+}
+
+.dark-player-wrapper .media-default-skin .media-button:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.dark-player-wrapper .media-default-skin .media-button--icon {
+  width: 2.25rem;
+  height: 2.25rem;
+}
+
+.dark-player-wrapper .media-default-skin .media-button--primary {
+  background: #fff;
+  color: #0f0f0f;
+}
+
+/* ---- Slider / Progress Bar ---- */
+/* Only thin the horizontal (seek) track — leave volume alone */
+.dark-player-wrapper
+  .media-default-skin--video
+  .media-slider__track[data-orientation="horizontal"] {
+  background-color: rgba(255, 255, 255, 0.2);
+  height: 0.1875rem;
+  box-shadow: none;
+  transition: height 150ms ease;
+}
+
+/* Expand horizontal track on hover */
+.dark-player-wrapper
+  .media-default-skin
+  .media-slider:hover
+  .media-slider__track[data-orientation="horizontal"] {
+  height: 0.3rem;
+}
+
+/* Buffer bar */
+.dark-player-wrapper .media-default-skin .media-slider__buffer {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Progress fill — blue (scoped to time/seek slider only) */
+.dark-player-wrapper
+  .media-default-skin
+  .media-time-controls
+  .media-slider__fill {
+  background-color: #0049eb;
+  color: #0240a2;
+}
+
+/* Thumb (seek dot) — blue (scoped to time/seek slider only) */
+.dark-player-wrapper
+  .media-default-skin
+  .media-time-controls
+  .media-slider__thumb {
+  background-color: #0049eb;
+  color: #0240a2;
+  width: 0.75rem;
+  height: 0.75rem;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.4);
+}
+
+.dark-player-wrapper
+  .media-default-skin
+  .media-time-controls
+  .media-slider__thumb::after {
+  box-shadow: none;
+}
+
+.dark-player-wrapper
+  .media-default-skin
+  .media-time-controls
+  .media-slider:active
+  .media-slider__thumb {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+/* ---- Volume Slider ---- */
+.dark-player-wrapper
+  .media-default-skin
+  .media-popover--volume
+  .media-slider__fill {
+  background-color: #fff;
+  color: #fff;
+}
+
+.dark-player-wrapper
+  .media-default-skin
+  .media-popover--volume
+  .media-slider__thumb {
+  background-color: #fff;
+  color: #fff;
+  width: 0.75rem;
+  height: 0.75rem;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.4);
+}
+
+/* ---- Time Display ---- */
+.dark-player-wrapper .media-default-skin .media-time {
+  color: #ddd;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  text-shadow: none;
+}
+
+.dark-player-wrapper .media-default-skin .media-time-controls {
+  gap: 0.375rem;
+}
+
+/* ---- Playback Rate ---- */
+.dark-player-wrapper .media-default-skin .media-button--playback-rate {
+  color: #fff;
+  font-size: 0.8125rem;
+}
+
+/* ---- Tooltips ---- */
+.dark-player-wrapper .media-default-skin .media-tooltip {
+  background-color: rgba(28, 28, 28, 0.9);
+  color: #fff;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  padding: 0.3rem 0.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  backdrop-filter: none;
+}
+
+.dark-player-wrapper .media-default-skin .media-tooltip.media-surface::after {
+  display: none;
+}
+
+/* ---- Popover (settings/volume) ---- */
+.dark-player-wrapper .media-default-skin .media-popover {
+  background-color: rgba(28, 28, 28, 0.95);
+  color: #fff;
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  backdrop-filter: none;
+}
+
+.dark-player-wrapper .media-default-skin .media-popover.media-surface::after {
+  display: none;
+}
+
+/* Volume popover */
+.dark-player-wrapper .media-default-skin .media-popover--volume {
+  background-color: rgba(28, 28, 28, 0.95);
+  border-radius: 1.5rem;
+}
+
+/* ---- Preview Thumbnails ---- */
+.dark-player-wrapper .media-default-skin .media-preview {
+  background-color: rgba(0, 0, 0, 0.95);
+  border-radius: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* ---- Buffering Indicator ---- */
+.dark-player-wrapper .media-default-skin .media-buffering-indicator {
+  color: #fff;
+}
+
+/* ---- Error Dialog ---- */
+.dark-player-wrapper .media-default-skin--video .media-error__dialog {
+  background-color: rgba(28, 28, 28, 0.95);
+  border-radius: 0.75rem;
+  color: #fff;
+}
+
+/* ---- Overlay (big play button background) ---- */
+.dark-player-wrapper .media-default-skin .media-overlay {
+  color: #fff;
+}
+
+/* ---- Caption Track ---- */
+.dark-player-wrapper
+  .media-default-skin
+  video::-webkit-media-text-track-container {
+  font-family: "Roboto", "Arial", sans-serif;
+}
+
+/* ---- Fullscreen adjustments ---- */
+.dark-player-wrapper .media-default-skin--video:fullscreen {
+  border-radius: 0;
+}
+
+.dark-player-wrapper .media-default-skin--video:fullscreen video {
+  border-radius: 0;
+}
+
+/* ---- Icon sizing ---- */
+.dark-player-wrapper .media-default-skin .media-icon {
+  width: 20px;
+  height: 20px;
+}
+
+/* ==========================================================================
+   Subtitle / Audio track settings menu (custom overlay)
+   ========================================================================== */
+
+.dark-track-settings {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 20;
+}
+
+/* Click-away layer behind the open panel */
+.dark-track-settings__scrim {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: default;
+  pointer-events: auto;
+}
+
+.dark-track-settings__gear {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 0;
+  border-radius: 50%;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+  pointer-events: auto;
+  opacity: 0;
+  transition:
+    background-color 150ms ease,
+    opacity 150ms ease;
+}
+
+/* Reveal the gear when the player area is hovered or the menu is open */
+.dark-player-wrapper:hover .dark-track-settings__gear,
+.dark-track-settings__gear:focus-visible,
+.dark-track-settings__gear[aria-expanded="true"] {
+  opacity: 1;
+}
+
+.dark-track-settings__gear:hover {
+  background: rgba(0, 0, 0, 0.7);
+}
+
+.dark-track-settings__gear[aria-expanded="true"] svg {
+  transform: rotate(30deg);
+  transition: transform 200ms ease;
+}
+
+.dark-track-settings__panel {
+  position: absolute;
+  top: 3.25rem;
+  right: 0.75rem;
+  min-width: 12rem;
+  max-width: 16rem;
+  max-height: 60%;
+  overflow-y: auto;
+  padding: 0.375rem;
+  border-radius: 0.5rem;
+  background: rgba(28, 28, 28, 0.97);
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  pointer-events: auto;
+}
+
+.dark-track-settings__section + .dark-track-settings__section {
+  margin-top: 0.25rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.dark-track-settings__heading {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.5rem 0.25rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.dark-track-settings__item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.4rem 0.5rem;
+  border: 0;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: #fff;
+  font-size: 0.8125rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dark-track-settings__item:hover,
+.dark-track-settings__item:focus-visible {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.dark-track-settings__check {
+  display: grid;
+  place-items: center;
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+  color: #4d8bff;
+}
+
+.dark-track-settings__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- Subtle button hover in controls ---- */
+.dark-player-wrapper .media-default-skin .media-button--subtle:hover,
+.dark-player-wrapper .media-default-skin .media-button--subtle:focus-visible,
+.dark-player-wrapper
+  .media-default-skin
+  .media-button--subtle[aria-expanded="true"] {
+  background-color: rgba(255, 255, 255, 0.1);
+}

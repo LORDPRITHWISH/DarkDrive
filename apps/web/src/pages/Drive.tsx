@@ -1,13 +1,18 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { ArrowCounterClockwiseIcon, MagnifyingGlassMinusIcon, MagnifyingGlassPlusIcon, UploadSimpleIcon } from "@phosphor-icons/react"
 import { useNavigate, useParams } from "react-router-dom"
-import { useDrive } from "@/store/drive"
+import { useDrive, ZOOM_MIN, ZOOM_MAX, ZOOM_DEFAULT } from "@/store/drive"
 import { Sidebar } from "@/components/Sidebar"
+import { SidebarToggle } from "@/components/SidebarToggle"
+import { HeaderActions } from "@/components/HeaderActions"
 import { Toolbar } from "@/components/Toolbar"
 import { Breadcrumbs } from "@/components/Breadcrumbs"
 import { FileGrid } from "@/components/FileGrid"
 import { NavButtons } from "@/components/NavButtons"
 import { ShortcutsDialog } from "@/components/ShortcutsDialog"
 import { sortFiles, sortFolders } from "@/lib/sort"
+import { entriesFromDataTransfer } from "@/lib/dropEntries"
+import { isInternalDrag } from "@/components/file-grid/dnd"
 
 // Tags where keyboard shortcuts should stay silent — otherwise typing into
 // a rename input would trigger Del=trash, etc.
@@ -41,12 +46,21 @@ export function DrivePage() {
     sort,
     selection,
     select,
+    selectAll,
     clearSelection,
     preview,
     setPreview,
-    trashItem,
+    trashItems,
+    view,
+    zoom,
+    setZoom,
   } = useDrive()
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  const [showDropOverlay, setShowDropOverlay] = useState(false)
+  // dragenter/dragleave fire on every child element crossed, so a plain
+  // boolean flickers the overlay off when the pointer passes over a card.
+  // A counter only zeroes out once the drag has actually left the window.
+  const dragDepth = useRef(0)
 
   useEffect(() => {
     if (folderId) void loadFolder(folderId)
@@ -82,6 +96,12 @@ export function DrivePage() {
           e.preventDefault()
           clearSelection()
         }
+        return
+      }
+
+      if ((e.key === "a" || e.key === "A") && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault()
+        selectAll(ordered.map((x) => x.id))
         return
       }
 
@@ -131,7 +151,7 @@ export function DrivePage() {
             })
         }
         clearSelection()
-        for (const t of targets) void trashItem(t.type, t.id)
+        void trashItems(targets)
       }
     }
     window.addEventListener("keydown", onKey)
@@ -143,35 +163,120 @@ export function DrivePage() {
     shortcutsOpen,
     clearSelection,
     select,
+    selectAll,
     setPreview,
-    trashItem,
+    trashItems,
     nav,
   ])
 
   return (
     <div
-      className="flex h-screen"
+      className="relative flex h-screen"
+      onDragEnter={(e) => {
+        if (isInternalDrag(e)) return
+        if (!Array.from(e.dataTransfer.types).includes("Files")) return
+        dragDepth.current++
+        setShowDropOverlay(true)
+      }}
       onDragOver={(e) => {
         e.preventDefault()
       }}
+      onDragLeave={(e) => {
+        if (isInternalDrag(e)) return
+        dragDepth.current = Math.max(0, dragDepth.current - 1)
+        if (dragDepth.current === 0) setShowDropOverlay(false)
+      }}
       onDrop={(e) => {
         e.preventDefault()
-        if (e.dataTransfer?.files?.length) void upload(e.dataTransfer.files)
+        dragDepth.current = 0
+        setShowDropOverlay(false)
+        if (isInternalDrag(e)) return
+        const dataTransfer = e.dataTransfer
+        if (!dataTransfer?.items?.length && !dataTransfer?.files?.length) return
+        // Walk dropped entries so folders (and their subfolders) keep their
+        // structure instead of collapsing into a flat file list.
+        void entriesFromDataTransfer(dataTransfer).then((entries) => {
+          if (entries.length) void upload(entries)
+        })
       }}
     >
+      {showDropOverlay && (
+        // z-40, not z-50 — isModalOpen() keys off ".fixed.inset-0.z-50" to
+        // detect real dialogs, and this overlay isn't one.
+        <div className="bg-primary/10 border-primary pointer-events-none fixed inset-0 z-40 flex items-center justify-center border-4 border-dashed backdrop-blur-[1px]">
+          <div className="bg-background flex flex-col items-center gap-2 rounded-xl border px-8 py-6 text-center shadow-lg">
+            <UploadSimpleIcon size={28} className="text-primary" />
+            <div className="text-lg font-semibold">Drop to upload</div>
+            <div className="text-muted-foreground text-sm">
+              Files and folders will be added to this folder
+            </div>
+          </div>
+        </div>
+      )}
       <Sidebar />
       <main className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between gap-3 border-b px-4 py-3">
-          <Breadcrumbs />
-          {folder?.spaceId && (
-            <span className="bg-accent text-accent-foreground rounded-full px-2 py-0.5 text-xs">
-              shared space
-            </span>
-          )}
+          <div className="flex items-center gap-3">
+            <SidebarToggle />
+            <Breadcrumbs />
+          </div>
+          <div className="flex items-center gap-3">
+            {folder?.spaceId && (
+              <span className="bg-accent text-accent-foreground rounded-full px-2 py-0.5 text-xs">
+                shared space
+              </span>
+            )}
+            {view === "grid" && (
+              <div className="hidden items-center gap-2 sm:flex">
+                {zoom !== ZOOM_DEFAULT && (
+                  <button
+                    onClick={() => setZoom(ZOOM_DEFAULT)}
+                    className="text-muted-foreground hover:text-foreground shrink-0 transition-colors"
+                    title={`Reset zoom to ${ZOOM_DEFAULT}%`}
+                  >
+                    <ArrowCounterClockwiseIcon size={14} />
+                  </button>
+                )}
+                <button
+                  onClick={() => setZoom(Math.max(ZOOM_MIN, zoom - 10))}
+                  disabled={zoom <= ZOOM_MIN}
+                  className="text-muted-foreground hover:text-foreground disabled:opacity-30 shrink-0 transition-colors"
+                  title="Zoom out"
+                >
+                  <MagnifyingGlassMinusIcon size={16} />
+                </button>
+                <input
+                  type="range"
+                  min={ZOOM_MIN}
+                  max={ZOOM_MAX}
+                  value={zoom}
+                  onChange={(e) => setZoom(Number(e.target.value))}
+                  className="accent-primary h-1 w-32 cursor-pointer"
+                  title={`Zoom ${zoom}%`}
+                />
+                <button
+                  onClick={() => setZoom(Math.min(ZOOM_MAX, zoom + 10))}
+                  disabled={zoom >= ZOOM_MAX}
+                  className="text-muted-foreground hover:text-foreground disabled:opacity-30 shrink-0 transition-colors"
+                  title="Zoom in"
+                >
+                  <MagnifyingGlassPlusIcon size={16} />
+                </button>
+                <span className="text-muted-foreground w-[3.5ch] text-right text-xs leading-none tabular-nums">
+                  {zoom}%
+                </span>
+              </div>
+            )}
+            <div className="flex items-center gap-1">
+              <HeaderActions />
+            </div>
+          </div>
         </header>
-        <div className="flex items-center gap-3 border-b p-3">
-          <NavButtons />
-          <div className="bg-border h-6 w-px" />
+        <div className="flex items-center gap-2 border-b p-2 md:gap-3 md:p-3">
+          <div className="hidden md:block">
+            <NavButtons />
+          </div>
+          <div className="bg-border hidden h-6 w-px md:block" />
           <Toolbar />
         </div>
         <div className="flex-1 overflow-auto">

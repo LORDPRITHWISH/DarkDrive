@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react"
 import {
-  XIcon,
   UploadIcon,
   TrashIcon,
   PencilSimpleIcon,
@@ -8,6 +7,16 @@ import {
   ShapesIcon,
 } from "@phosphor-icons/react"
 import { Button } from "@workspace/ui/components/button"
+import { Input } from "@workspace/ui/components/input"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@workspace/ui/components/dialog"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@workspace/ui/components/tabs"
 import { apiUpload } from "@/lib/api"
 import { useDrive } from "@/store/drive"
 import type { Space } from "@/lib/types"
@@ -71,15 +80,6 @@ export function SpaceEditorDialog({
     setUploadingLogo(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key])
-
-  useEffect(() => {
-    if (!mode) return
-    const h = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose()
-    }
-    window.addEventListener("keydown", h)
-    return () => window.removeEventListener("keydown", h)
-  }, [mode, onClose])
 
   if (!mode) return null
 
@@ -150,33 +150,16 @@ export function SpaceEditorDialog({
   }
 
   return (
-    <div
-      className="animate-in fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm duration-150"
-      onClick={onClose}
-    >
-      <div
-        className="bg-card animate-in fade-in zoom-in-95 relative flex w-full max-w-md flex-col overflow-hidden rounded-2xl border shadow-2xl duration-200"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-2 border-b p-4">
-          <div>
-            <h3 className="text-lg font-bold tracking-tight">
-              {isCreate ? "New space" : "Edit space"}
-            </h3>
-            <p className="text-muted-foreground mt-0.5 text-xs">
-              {isCreate
-                ? "Give your space a name, a color, and an optional logo."
-                : "Update the name, color, or logo."}
-            </p>
-          </div>
-          <button
-            className="hover:bg-accent shrink-0 rounded-lg p-1.5 transition-colors"
-            onClick={onClose}
-            aria-label="Close"
-          >
-            <XIcon size={16} />
-          </button>
-        </div>
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-md gap-0 p-0">
+        <DialogHeader className="border-b p-4">
+          <DialogTitle>{isCreate ? "New space" : "Edit space"}</DialogTitle>
+          <DialogDescription>
+            {isCreate
+              ? "Give your space a name, a color, and an optional logo."
+              : "Update the name, color, or logo."}
+          </DialogDescription>
+        </DialogHeader>
 
         <div className="space-y-5 p-5">
           {/* Logo preview + picker */}
@@ -187,38 +170,28 @@ export function SpaceEditorDialog({
               className="ring-background shrink-0 ring-4"
             />
             <div className="min-w-0 flex-1">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <div className="text-sm font-semibold">Logo</div>
-                <div className="bg-muted inline-flex shrink-0 rounded-lg p-0.5 text-xs font-medium">
-                  <button
-                    type="button"
-                    onClick={() => setLogoTab("icon")}
-                    className={`inline-flex items-center gap-1 rounded-md px-2 py-1 transition-colors ${
-                      logoTab === "icon"
-                        ? "bg-background shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    <ShapesIcon size={12} weight="bold" />
-                    Icon
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setLogoTab("image")}
-                    className={`inline-flex items-center gap-1 rounded-md px-2 py-1 transition-colors ${
-                      logoTab === "image"
-                        ? "bg-background shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    <ImageIcon size={12} weight="bold" />
-                    Image
-                  </button>
+              <Tabs value={logoTab} onValueChange={(v) => setLogoTab(v as "icon" | "image")}>
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="text-sm font-semibold">Logo</div>
+                  <TabsList className="bg-muted h-auto shrink-0 gap-0 rounded-lg border-none p-0.5">
+                    <TabsTrigger
+                      value="icon"
+                      className="gap-1 rounded-md border-none px-2 py-1 text-xs data-active:bg-background data-active:shadow-sm"
+                    >
+                      <ShapesIcon size={12} weight="bold" />
+                      Icon
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="image"
+                      className="gap-1 rounded-md border-none px-2 py-1 text-xs data-active:bg-background data-active:shadow-sm"
+                    >
+                      <ImageIcon size={12} weight="bold" />
+                      Image
+                    </TabsTrigger>
+                  </TabsList>
                 </div>
-              </div>
 
-              {logoTab === "icon" ? (
-                <div>
+                <TabsContent value="icon">
                   <div className="text-muted-foreground mb-2 text-xs">
                     Pick an icon from the set below. It's tinted with the
                     space color.
@@ -253,9 +226,9 @@ export function SpaceEditorDialog({
                       Clear icon
                     </button>
                   )}
-                </div>
-              ) : (
-                <div>
+                </TabsContent>
+
+                <TabsContent value="image">
                   <div className="text-muted-foreground mb-2 text-xs">
                     {logoKey
                       ? "Click to replace."
@@ -286,8 +259,8 @@ export function SpaceEditorDialog({
                       </button>
                     )}
                   </div>
-                </div>
-              )}
+                </TabsContent>
+              </Tabs>
             </div>
             <input
               ref={fileInput}
@@ -307,9 +280,8 @@ export function SpaceEditorDialog({
               <PencilSimpleIcon size={12} />
               Name
             </label>
-            <input
+            <Input
               autoFocus
-              className="bg-background focus-visible:ring-primary/40 w-full rounded-xl border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none"
               placeholder="Marketing, Engineering, Design…"
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -376,7 +348,7 @@ export function SpaceEditorDialog({
           )}
         </div>
 
-        <div className="bg-muted/30 flex items-center justify-end gap-2 border-t px-4 py-3">
+        <DialogFooter className="bg-muted/30 border-t px-4 py-3">
           <Button variant="ghost" size="sm" onClick={onClose}>
             Cancel
           </Button>
@@ -388,8 +360,8 @@ export function SpaceEditorDialog({
           >
             {busy ? "Saving…" : isCreate ? "Create space" : "Save changes"}
           </Button>
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

@@ -1,5 +1,7 @@
+import { useState } from "react"
 import {
   CaretDownIcon,
+  CaretRightIcon,
   CheckCircleIcon,
   ProhibitIcon,
   XCircleIcon,
@@ -9,6 +11,7 @@ import {
   Card,
   CardHeader,
   CardTitle,
+  CardDescription,
   CardContent,
 } from "@workspace/ui/components/card"
 import {
@@ -33,6 +36,7 @@ import {
 import { PopConfirm } from "@workspace/ui/components/popconfirm"
 import { formatBytes, formatDate } from "@/lib/format"
 import type { AdminUser } from "@/lib/types"
+import { UserDetail } from "./UserDetail"
 
 const PRESETS = [
   { label: "1 GB", bytes: 1 * 1024 ** 3 },
@@ -59,10 +63,14 @@ export function UsersTable({
   meId?: string
   onUpdate: UpdateFn
 }) {
+  const [selectedId, setSelectedId] = useState<string | null>(null)
   return (
     <Card className="gap-0 p-0">
       <CardHeader className="p-4">
         <CardTitle>Users</CardTitle>
+        <CardDescription>
+          Click a user to see everything they've stored and done.
+        </CardDescription>
       </CardHeader>
       <CardContent className="gap-0 p-0">
         <Table className="table-fixed">
@@ -83,11 +91,20 @@ export function UsersTable({
                 user={u}
                 isSelf={meId === u.id}
                 onUpdate={onUpdate}
+                onSelect={() => setSelectedId(u.id)}
               />
             ))}
           </TableBody>
         </Table>
       </CardContent>
+      {selectedId && (
+        <UserDetail
+          userId={selectedId}
+          meId={meId}
+          onUpdate={onUpdate}
+          onClose={() => setSelectedId(null)}
+        />
+      )}
     </Card>
   )
 }
@@ -96,10 +113,12 @@ function UserRow({
   user: u,
   isSelf,
   onUpdate,
+  onSelect,
 }: {
   user: AdminUser
   isSelf: boolean
   onUpdate: UpdateFn
+  onSelect: () => void
 }) {
   const pct =
     u.storageQuotaBytes > 0
@@ -109,14 +128,21 @@ function UserRow({
   return (
     <TableRow className={isDisabled ? "opacity-60" : undefined}>
       <TableCell className="pl-4">
-        <div className="flex items-center gap-3">
-          <Avatar className="h-8 w-8">
+        <button
+          type="button"
+          onClick={onSelect}
+          title={`View ${u.name}'s full activity`}
+          className="group hover:bg-accent/40 -my-1 -ml-2 flex w-[calc(100%+0.5rem)] items-center gap-3 rounded-md py-1 pl-2 pr-1 text-left"
+        >
+          <Avatar className="h-8 w-8 shrink-0">
             {u.avatarUrl && <AvatarImage src={u.avatarUrl} alt="" />}
             <AvatarFallback>{u.name[0]?.toUpperCase() ?? "?"}</AvatarFallback>
           </Avatar>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <span className="truncate font-medium">{u.name}</span>
+              <span className="truncate font-medium group-hover:underline">
+                {u.name}
+              </span>
               {isSelf && <Badge variant="muted">you</Badge>}
               {u.upgradeRequestedAt && (
                 <Badge variant="default" title={formatDate(u.upgradeRequestedAt)}>
@@ -126,7 +152,11 @@ function UserRow({
             </div>
             <div className="text-muted-foreground truncate text-xs">{u.email}</div>
           </div>
-        </div>
+          <CaretRightIcon
+            size={14}
+            className="text-muted-foreground shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+          />
+        </button>
       </TableCell>
 
       <TableCell>

@@ -1,7 +1,21 @@
 import { useEffect, useState } from "react"
-import { XIcon, CopyIcon, TrashIcon } from "@phosphor-icons/react"
+import { CopyIcon, TrashIcon } from "@phosphor-icons/react"
 import { apiGet, apiJson } from "@/lib/api"
 import { Button } from "@workspace/ui/components/button"
+import { Input } from "@workspace/ui/components/input"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@workspace/ui/components/dialog"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@workspace/ui/components/select"
 import type { Share } from "@/lib/types"
 
 type Props = {
@@ -30,8 +44,6 @@ export function ShareDialog({ open, onClose, resourceType, resourceId, resourceN
     if (open) void load()
   }, [open, resourceId])
 
-  if (!open) return null
-
   async function createLink() {
     setLoading(true)
     try {
@@ -56,42 +68,34 @@ export function ShareDialog({ open, onClose, resourceType, resourceId, resourceN
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4"
-      onClick={onClose}
-    >
-      <div
-        className="bg-card text-card-foreground w-full max-w-xl rounded-lg border shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between border-b p-4">
-          <div>
-            <div className="text-sm text-muted-foreground">Share</div>
-            <div className="truncate font-medium">{resourceName}</div>
-          </div>
-          <button onClick={onClose} className="hover:bg-accent rounded-md p-1">
-            <XIcon size={18} />
-          </button>
-        </div>
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-xl gap-0 p-0">
+        <DialogHeader className="border-b p-4">
+          <div className="text-sm text-muted-foreground">Share</div>
+          <DialogTitle className="truncate">{resourceName}</DialogTitle>
+        </DialogHeader>
 
         <div className="space-y-3 p-4">
           <div className="grid grid-cols-2 gap-2">
             <label className="text-sm">
               <div className="text-muted-foreground mb-1 text-xs">Permission</div>
-              <select
-                className="bg-background w-full rounded-md border px-2 py-1.5 text-sm"
+              <Select
                 value={permission}
-                onChange={(e) => setPermission(e.target.value as "VIEW" | "EDIT")}
+                onValueChange={(v) => setPermission(v as "VIEW" | "EDIT")}
               >
-                <option value="VIEW">View</option>
-                <option value="EDIT">Edit (download)</option>
-              </select>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="VIEW">View</SelectItem>
+                  <SelectItem value="EDIT">Edit (download)</SelectItem>
+                </SelectContent>
+              </Select>
             </label>
             <label className="text-sm">
               <div className="text-muted-foreground mb-1 text-xs">Expires</div>
-              <input
+              <Input
                 type="datetime-local"
-                className="bg-background w-full rounded-md border px-2 py-1.5 text-sm"
                 value={expiresAt}
                 onChange={(e) => setExpiresAt(e.target.value)}
               />
@@ -99,9 +103,8 @@ export function ShareDialog({ open, onClose, resourceType, resourceId, resourceN
           </div>
           <label className="text-sm block">
             <div className="text-muted-foreground mb-1 text-xs">Password (optional)</div>
-            <input
+            <Input
               type="password"
-              className="bg-background w-full rounded-md border px-2 py-1.5 text-sm"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
@@ -126,33 +129,32 @@ export function ShareDialog({ open, onClose, resourceType, resourceId, resourceN
                     key={s.id}
                     className="bg-accent/40 flex items-center gap-2 rounded-md p-2"
                   >
-                    <input
-                      readOnly
-                      value={url}
-                      className="bg-background flex-1 rounded border px-2 py-1 font-mono text-xs"
-                    />
+                    <Input readOnly value={url} className="flex-1 font-mono text-xs" />
                     <span className="text-muted-foreground text-xs">{s.permission}</span>
-                    <button
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
                       onClick={() => navigator.clipboard.writeText(url)}
-                      className="hover:bg-accent rounded p-1"
                       title="Copy"
                     >
                       <CopyIcon size={16} />
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      className="text-muted-foreground hover:text-destructive"
                       onClick={() => deleteShare(s.id)}
-                      className="hover:bg-destructive/20 rounded p-1"
                       title="Revoke"
                     >
                       <TrashIcon size={16} />
-                    </button>
+                    </Button>
                   </li>
                 )
               })}
             </ul>
           )}
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }

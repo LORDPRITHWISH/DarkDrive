@@ -2,7 +2,6 @@ import { Router } from "express"
 import { z } from "zod"
 import { prisma } from "../db/prisma.js"
 import { currentUser, requireAuth } from "../middleware/auth.js"
-import { removeFile } from "../storage/local.js"
 
 declare module "express-session" {
   interface SessionData {
@@ -176,13 +175,16 @@ meRouter.get("/starred", async (req, res) => {
 
 meRouter.get("/trash", async (req, res) => {
   const user = currentUser(req)
+  // `deletedAt: null` excludes items the user has already permanently deleted —
+  // those live on in the admin recycle bin and must not reappear in the user's
+  // own bin.
   const [folders, files] = await Promise.all([
     prisma.folder.findMany({
-      where: { ownerId: user.id, isTrashed: true },
+      where: { ownerId: user.id, isTrashed: true, deletedAt: null },
       orderBy: { updatedAt: "desc" },
     }),
     prisma.file.findMany({
-      where: { ownerId: user.id, isTrashed: true },
+      where: { ownerId: user.id, isTrashed: true, deletedAt: null },
       orderBy: { updatedAt: "desc" },
     }),
   ])
@@ -192,65 +194,62 @@ meRouter.get("/trash", async (req, res) => {
   })
 })
 
-// Permanently delete everything in the user's bin: files marked isTrashed
-// plus all descendants of trashed folders. Storage files are removed after
-// the DB rows are gone so cascades can run cleanly.
+// Empty the user's bin. From the user's point of view this permanently deletes
+// everything in the bin (files marked isTrashed plus all descendants of trashed
+// folders). Nothing is actually destroyed, though — every affected file and
+// folder is soft-deleted into the admin-only recycle bin (stamped deletedAt) so
+// an admin can still restore or purge it. Storage blobs are retained.
 meRouter.post("/trash/empty", async (req, res) => {
   const user = currentUser(req)
   const [trashedFiles, trashedFolders] = await Promise.all([
     prisma.file.findMany({
-      where: { ownerId: user.id, isTrashed: true },
-      select: { id: true, storageKey: true },
+      where: { ownerId: user.id, isTrashed: true, deletedAt: null },
+      select: { id: true },
     }),
     prisma.folder.findMany({
-      where: { ownerId: user.id, isTrashed: true },
+      where: { ownerId: user.id, isTrashed: true, deletedAt: null },
       select: { id: true },
     }),
   ])
 
-  // Walk the trashed-folder subtree to collect every descendant file's
-  // storage key before the cascade delete runs. Without this, orphaned blobs
-  // would be left on disk.
-  const descendantKeys: string[] = []
-  const visited = new Set<string>(trashedFolders.map((f) => f.id))
+  // Walk the trashed-folder subtree so every descendant folder (and its files)
+  // is stamped too — the DB has no cascade for a non-destructive update.
+  const folderIds = new Set<string>(trashedFolders.map((f) => f.id))
   let frontier = trashedFolders.map((f) => f.id)
   while (frontier.length > 0) {
-    const [files, children] = await Promise.all([
-      prisma.file.findMany({
-        where: { folderId: { in: frontier } },
-        select: { storageKey: true },
-      }),
-      prisma.folder.findMany({
-        where: { parentId: { in: frontier } },
-        select: { id: true },
-      }),
-    ])
-    for (const f of files) descendantKeys.push(f.storageKey)
-    const next = children.map((c) => c.id).filter((id) => !visited.has(id))
-    next.forEach((id) => visited.add(id))
+    const children = await prisma.folder.findMany({
+      where: { parentId: { in: frontier } },
+      select: { id: true },
+    })
+    const next = children.map((c) => c.id).filter((id) => !folderIds.has(id))
+    next.forEach((id) => folderIds.add(id))
     frontier = next
   }
 
-  await prisma.$transaction([
-    prisma.file.deleteMany({
+  const now = new Date()
+  const data = { deletedAt: now, deletedById: user.id, isTrashed: true }
+  const allFolderIds = [...folderIds]
+  const [directFiles, descendantFiles] = await prisma.$transaction([
+    // Files sitting directly in the bin.
+    prisma.file.updateMany({
       where: { id: { in: trashedFiles.map((f) => f.id) } },
+      data,
     }),
-    prisma.folder.deleteMany({
-      where: { id: { in: trashedFolders.map((f) => f.id) } },
+    // Files anywhere inside a trashed folder subtree.
+    prisma.file.updateMany({
+      where: { folderId: { in: allFolderIds }, deletedAt: null },
+      data,
+    }),
+    prisma.folder.updateMany({
+      where: { id: { in: allFolderIds }, deletedAt: null },
+      data,
     }),
   ])
 
-  const allKeys = [...trashedFiles.map((f) => f.storageKey), ...descendantKeys]
-  for (const key of allKeys) {
-    try {
-      removeFile(key)
-    } catch {}
-  }
-
   res.json({
     ok: true,
-    files: trashedFiles.length + descendantKeys.length,
-    folders: trashedFolders.length,
+    files: directFiles.count + descendantFiles.count,
+    folders: allFolderIds.length,
   })
 })
 

@@ -21,6 +21,7 @@ import {
 import type { ComponentType } from "react"
 import { Button } from "@workspace/ui/components/button"
 import { apiUrl } from "@/lib/config"
+import { apiGet, apiJson } from "@/lib/api"
 
 type IconC = ComponentType<{
   size?: number
@@ -79,6 +80,39 @@ export function LoginPage() {
     | { idx: number; startX: number; startY: number; baseDx: number; baseDy: number }
     | null
   >(null)
+
+  // Dev-only login-by-email, shown when the API reports it's enabled
+  // (NODE_ENV=development + ENABLE_DEV_LOGIN=true there).
+  const [devLoginEnabled, setDevLoginEnabled] = useState(false)
+  const [devEmail, setDevEmail] = useState("")
+  const [devSubmitting, setDevSubmitting] = useState(false)
+  const [devError, setDevError] = useState<string | null>(null)
+
+  useEffect(() => {
+    apiGet<{ enabled: boolean }>("/api/auth/dev-login/status")
+      .then((r) => setDevLoginEnabled(r.enabled))
+      .catch(() => setDevLoginEnabled(false))
+  }, [])
+
+  async function submitDevLogin(e: React.FormEvent) {
+    e.preventDefault()
+    setDevSubmitting(true)
+    setDevError(null)
+    try {
+      await apiJson("/api/auth/dev-login", "POST", { email: devEmail })
+      // Full reload, not react-router navigate: the Zustand auth store's
+      // fetchMe() short-circuits once hasFetched is true (set by Root's
+      // mount-time call), so a client-side nav here would land on Home
+      // still holding the stale pre-login `user: null` and bounce back to
+      // /login. The Google OAuth callback avoids this the same way — a
+      // server-side redirect that reloads the page and resets the store.
+      window.location.assign("/home")
+    } catch {
+      setDevError("Dev login failed")
+    } finally {
+      setDevSubmitting(false)
+    }
+  }
 
   // Cycle the feature chip every 2.4s.
   useEffect(() => {
@@ -366,6 +400,33 @@ export function LoginPage() {
                 />
                 Continue with Google
               </Button>
+
+              {devLoginEnabled && (
+                <form
+                  onSubmit={submitDevLogin}
+                  className="mt-4 rounded-xl border border-dashed p-4"
+                >
+                  <div className="text-muted-foreground text-xs font-medium uppercase tracking-widest">
+                    Dev login (local only)
+                  </div>
+                  <div className="mt-2 flex gap-2">
+                    <input
+                      type="email"
+                      required
+                      placeholder="you@example.com"
+                      value={devEmail}
+                      onChange={(e) => setDevEmail(e.target.value)}
+                      className="bg-background min-w-0 flex-1 rounded-md border px-3 py-2 text-sm"
+                    />
+                    <Button type="submit" size="sm" disabled={devSubmitting}>
+                      {devSubmitting ? "..." : "Go"}
+                    </Button>
+                  </div>
+                  {devError && (
+                    <div className="text-destructive mt-2 text-xs">{devError}</div>
+                  )}
+                </form>
+              )}
 
               <div className="my-6 flex items-center gap-3">
                 <div className="bg-border h-px flex-1" />

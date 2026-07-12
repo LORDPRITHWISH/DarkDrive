@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react"
 import { useMe } from "@/store/me"
 import { Sidebar } from "@/components/Sidebar"
+import { SidebarToggle } from "@/components/SidebarToggle"
+import { HeaderActions } from "@/components/HeaderActions"
 import { FilePreview } from "@/components/FilePreview"
 import { formatBytes, formatDate } from "@/lib/format"
 import { apiUrl } from "@/lib/config"
@@ -14,6 +16,14 @@ import {
   ListBulletsIcon,
 } from "@phosphor-icons/react"
 import { Button } from "@workspace/ui/components/button"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@workspace/ui/components/table"
 import { iconFor } from "@/lib/fileIcon"
 
 type Bucket = { key: string; label: string; order: number }
@@ -96,7 +106,10 @@ export function RecentPage() {
       <Sidebar />
       <main className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between gap-3 border-b px-4 py-3">
-          <div className="text-sm font-semibold">Recent</div>
+          <div className="flex items-center gap-3">
+            <SidebarToggle />
+            <div className="text-sm font-semibold">Recent</div>
+          </div>
           <div className="flex items-center gap-1">
             <Button
               size="sm"
@@ -114,9 +127,10 @@ export function RecentPage() {
             >
               <SquaresFourIcon size={16} />
             </Button>
+            <HeaderActions />
           </div>
         </header>
-        <div className="flex items-center gap-2 border-b px-6 py-3">
+        <div className="flex items-center gap-2 overflow-x-auto border-b px-4 py-3 md:px-6">
           <FilterChip active={filter === "all"} onClick={() => setFilter("all")}>
             All
           </FilterChip>
@@ -133,7 +147,7 @@ export function RecentPage() {
             <FileIcon size={14} /> Other
           </FilterChip>
         </div>
-        <div className="flex-1 overflow-auto px-6 py-5">
+        <div className="flex-1 overflow-auto px-4 py-5 md:px-6">
           {grouped.length === 0 ? (
             <div className="text-muted-foreground py-20 text-center text-sm">
               Nothing here yet. Files you open will show up here.
@@ -152,43 +166,48 @@ export function RecentPage() {
                   </div>
                 ) : (
                   <div className="overflow-hidden rounded-lg border">
-                    <table className="w-full text-sm">
-                      <thead className="text-muted-foreground border-b text-xs uppercase">
-                        <tr>
-                          <th className="py-2 pl-3 text-left font-medium">Name</th>
-                          <th className="py-2 text-left font-medium">Action</th>
-                          <th className="py-2 text-left font-medium">Accessed</th>
-                          <th className="py-2 pr-3 text-left font-medium">Size</th>
-                        </tr>
-                      </thead>
-                      <tbody>
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="hover:bg-transparent">
+                          <TableHead className="p-0 py-2 pl-3">Name</TableHead>
+                          <TableHead className="p-0 py-2">Action</TableHead>
+                          <TableHead className="p-0 py-2">Accessed</TableHead>
+                          <TableHead className="p-0 py-2 pr-3">Size</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
                         {files.map((f) => (
-                          <tr
+                          <TableRow
                             key={f.id}
-                            className="hover:bg-accent/40 cursor-pointer border-b last:border-b-0"
+                            className="cursor-pointer last:border-b-0"
                             onClick={() => setPreview(f)}
                             onDoubleClick={() => setPreview(f)}
                           >
-                            <td className="py-2 pl-3">
+                            <TableCell className="p-0 py-2 pl-3">
                               <div className="flex items-center gap-2">
                                 {iconFor(f.mimeType, 18, f.name)}
                                 <span className="truncate">{f.name}</span>
                               </div>
-                            </td>
-                            <td className="py-2 capitalize">{f.action}</td>
-                            <td className="py-2">{formatDate(f.accessedAt)}</td>
-                            <td className="py-2 pr-3">{formatBytes(f.size)}</td>
-                          </tr>
+                            </TableCell>
+                            <TableCell className="p-0 py-2 capitalize">{f.action}</TableCell>
+                            <TableCell className="p-0 py-2">{formatDate(f.accessedAt)}</TableCell>
+                            <TableCell className="p-0 py-2 pr-3">{formatBytes(f.size)}</TableCell>
+                          </TableRow>
                         ))}
-                      </tbody>
-                    </table>
+                      </TableBody>
+                    </Table>
                   </div>
                 )}
               </section>
             ))
           )}
         </div>
-        <FilePreview file={preview} onClose={() => setPreview(null)} />
+        <FilePreview
+          file={preview}
+          onClose={() => setPreview(null)}
+          items={filtered}
+          onNavigate={setPreview}
+        />
       </main>
     </div>
   )

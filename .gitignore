@@ -30,3 +30,6 @@ npm-debug.log*
 *.pem
 apps/web/.env.production
 .codex
+
+.superpowers
+.playwright-mcp

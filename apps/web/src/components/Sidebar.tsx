@@ -21,7 +21,6 @@ import { SpaceManageDialog } from "@/components/SpaceManageDialog"
 import { SpaceEditorDialog } from "@/components/SpaceEditorDialog"
 import { SpaceLogo } from "@/components/SpaceLogo"
 import { UpgradeRequestDialog } from "@/components/UpgradeRequestDialog"
-import { NotificationBell } from "@/components/NotificationBell"
 import { useEffect, useRef, useState } from "react"
 import { useAuth } from "@/store/auth"
 import { useDrive } from "@/store/drive"
@@ -126,9 +125,9 @@ export function Sidebar() {
         {/* Header: logo + upload */}
         <div className={`flex items-center gap-2 px-1 py-3 ${collapsed ? "flex-col" : ""}`}>
           <Link
-            to="/landing"
+            to="/home"
             className="hover:text-primary flex shrink-0 items-center gap-2 transition-colors"
-            title="About DarkDrive"
+            title="Home"
           >
             <img src="/DarkDrive.png" alt="DarkDrive" className="h-8 w-8 shrink-0 rounded-md" />
             {!collapsed && <div className="font-semibold tracking-tight">DarkDrive</div>}
@@ -182,8 +181,6 @@ export function Sidebar() {
                 </div>
               )}
             </div>
-
-            <NotificationBell collapsed={collapsed} />
 
             <button
               onClick={() => setMobileOpen(false)}

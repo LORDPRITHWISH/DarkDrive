@@ -4,6 +4,7 @@ import {
   Navigate,
   Route,
   Routes,
+  useLocation,
   useNavigate,
 } from "react-router-dom"
 import { useAuth } from "@/store/auth"
@@ -11,6 +12,7 @@ import { LoginPage } from "@/pages/Login"
 import { DrivePage } from "@/pages/Drive"
 import { SpacePage } from "@/pages/Space"
 import { SpacesPage } from "@/pages/Spaces"
+import { InvitePage } from "@/pages/Invite"
 import { SharePage } from "@/pages/SharePage"
 import { RecentPage } from "@/pages/Recent"
 import { SearchPage } from "@/pages/Search"
@@ -26,11 +28,33 @@ import { useNotifications } from "@/store/notifications"
 import { toast } from "@/store/toast"
 import type { AppNotification } from "@/lib/types"
 
+// Login is a hard server/page redirect (Google OAuth callback, dev-login),
+// so a normal router return-URL doesn't survive it. We stash the path in
+// localStorage instead — only for /invite links, the one case where landing
+// back on /home after login would silently drop what the user came to do.
+const RETURN_TO_KEY = "dd.returnTo"
+
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, loading, fetchMe } = useAuth()
+  const loc = useLocation()
+  const nav = useNavigate()
   useEffect(() => {
     void fetchMe()
   }, [fetchMe])
+  useEffect(() => {
+    if (loading) return
+    if (!user) {
+      if (loc.pathname.startsWith("/invite/")) {
+        localStorage.setItem(RETURN_TO_KEY, loc.pathname)
+      }
+      return
+    }
+    const returnTo = localStorage.getItem(RETURN_TO_KEY)
+    if (returnTo && returnTo !== loc.pathname) {
+      localStorage.removeItem(RETURN_TO_KEY)
+      nav(returnTo, { replace: true })
+    }
+  }, [user, loading, loc.pathname, nav])
   if (loading) return <div className="grid min-h-svh place-items-center">Loading…</div>
   if (!user) return <Navigate to="/login" replace />
   return <>{children}</>
@@ -102,6 +126,14 @@ export function App() {
           element={
             <Protected>
               <SpacePage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/invite/:token"
+          element={
+            <Protected>
+              <InvitePage />
             </Protected>
           }
         />

@@ -3,6 +3,7 @@ import { z } from "zod"
 import fs from "node:fs"
 import path from "node:path"
 import multer from "multer"
+import { nanoid } from "nanoid"
 import { prisma } from "../db/prisma.js"
 import { currentUser, requireAuth } from "../middleware/auth.js"
 import { notify } from "../lib/notify.js"
@@ -49,6 +50,7 @@ function projectMembers(
     members: {
       userId: string
       role: string
+      editorRequestedAt: Date | null
       user: {
         name: string
         email: string
@@ -68,6 +70,7 @@ function projectMembers(
       name: m.user.name,
       email: m.user.email,
       avatarUrl: m.user.avatarUrl,
+      editorRequestedAt: m.editorRequestedAt,
     }))
   if (space.owner) {
     members.unshift({
@@ -76,6 +79,7 @@ function projectMembers(
       name: space.owner.name,
       email: space.owner.email,
       avatarUrl: space.owner.avatarUrl,
+      editorRequestedAt: null,
     })
   }
   return members
@@ -391,6 +395,31 @@ spacesRouter.patch("/:id/pin", async (req, res) => {
   res.json(member)
 })
 
+// Self-service — a VIEWER asks the owner to be promoted to EDITOR (upload
+// rights). Notifies the owner; see approve/deny-editor below for the
+// owner's side.
+spacesRouter.post("/:id/request-editor", async (req, res) => {
+  const user = currentUser(req)
+  const space = await prisma.space.findUnique({ where: { id: req.params.id } })
+  if (!space) return res.status(404).json({ error: "not_found" })
+  if (space.ownerId === user.id) return res.status(400).json({ error: "already_owner" })
+  const member = await prisma.spaceMember.findUnique({
+    where: { spaceId_userId: { spaceId: space.id, userId: user.id } },
+  })
+  if (!member) return res.status(403).json({ error: "not_a_member" })
+  if (member.role === "EDITOR") return res.status(400).json({ error: "already_editor" })
+  const updated = await prisma.spaceMember.update({
+    where: { spaceId_userId: { spaceId: space.id, userId: user.id } },
+    data: { editorRequestedAt: new Date() },
+  })
+  void notify(space.ownerId, {
+    type: "space_access_requested",
+    title: `${user.name} requested upload access to "${space.name}"`,
+    link: `/spaces/${space.id}`,
+  })
+  res.json(updated)
+})
+
 spacesRouter.post("/:id/members", async (req, res) => {
   const user = currentUser(req)
   const { email, role } = z
@@ -444,12 +473,40 @@ spacesRouter.patch("/:id/members/:userId", async (req, res) => {
     return res.status(400).json({ error: "cannot_modify_owner" })
   const m = await prisma.spaceMember.update({
     where: { spaceId_userId: { spaceId: space.id, userId: req.params.userId } },
-    data: { role },
+    // Any role change (including approving an upload-access request via the
+    // dedicated button, which just calls this same endpoint) resolves a
+    // pending request, so it's always safe to clear it here.
+    data: { role, editorRequestedAt: null },
   })
   void notify(req.params.userId, {
     type: "space_role_changed",
-    title: `Your role in "${space.name}" changed to ${role}`,
+    title:
+      role === "EDITOR"
+        ? `You can now upload to "${space.name}"`
+        : `Your role in "${space.name}" changed to ${role}`,
     link: `/drive/${space.rootFolderId}`,
+  })
+  res.json(m)
+})
+
+// Deny a pending upload-access request (owner-only) — clears the flag
+// without changing the member's role. Approving is just the role-PATCH
+// above with role: "EDITOR", which also clears it.
+spacesRouter.post("/:id/members/:userId/deny-editor", async (req, res) => {
+  const user = currentUser(req)
+  const space = await prisma.space.findUnique({ where: { id: req.params.id } })
+  if (!space) return res.status(404).json({ error: "not_found" })
+  if (space.ownerId !== user.id) return res.status(403).json({ error: "forbidden" })
+  const m = await prisma.spaceMember
+    .update({
+      where: { spaceId_userId: { spaceId: space.id, userId: req.params.userId } },
+      data: { editorRequestedAt: null },
+    })
+    .catch(() => null)
+  if (!m) return res.status(404).json({ error: "not_found" })
+  void notify(req.params.userId, {
+    type: "space_access_denied",
+    title: `Your upload request for "${space.name}" was denied`,
   })
   res.json(m)
 })
@@ -472,6 +529,89 @@ spacesRouter.delete("/:id/members/:userId", async (req, res) => {
     title: `You were removed from "${space.name}"`,
   })
   res.json({ ok: true })
+})
+
+// Create an invite link (owner-only). expiresAt/maxUses are both optional —
+// omit either for "never expires" / "unlimited uses".
+// Invite links always grant VIEWER — upload rights (EDITOR) can only be
+// gained by request, approved by the owner. See /:id/request-editor below.
+spacesRouter.post("/:id/invites", async (req, res) => {
+  const user = currentUser(req)
+  const body = z
+    .object({
+      expiresAt: z.string().datetime().nullable().optional(),
+      maxUses: z.number().int().positive().nullable().optional(),
+    })
+    .parse(req.body)
+  const space = await prisma.space.findUnique({ where: { id: req.params.id } })
+  if (!space) return res.status(404).json({ error: "not_found" })
+  if (space.ownerId !== user.id) return res.status(403).json({ error: "forbidden" })
+  const invite = await prisma.spaceInvite.create({
+    data: {
+      spaceId: space.id,
+      token: nanoid(20),
+      role: "VIEWER",
+      createdById: user.id,
+      expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,
+      maxUses: body.maxUses ?? null,
+    },
+  })
+  res.status(201).json(invite)
+})
+
+// List invite links for a space (owner-only) — powers the management UI.
+spacesRouter.get("/:id/invites", async (req, res) => {
+  const user = currentUser(req)
+  const space = await prisma.space.findUnique({ where: { id: req.params.id } })
+  if (!space) return res.status(404).json({ error: "not_found" })
+  if (space.ownerId !== user.id) return res.status(403).json({ error: "forbidden" })
+  const invites = await prisma.spaceInvite.findMany({
+    where: { spaceId: space.id },
+    orderBy: { createdAt: "desc" },
+  })
+  res.json({ invites })
+})
+
+spacesRouter.delete("/:id/invites/:inviteId", async (req, res) => {
+  const user = currentUser(req)
+  const space = await prisma.space.findUnique({ where: { id: req.params.id } })
+  if (!space) return res.status(404).json({ error: "not_found" })
+  if (space.ownerId !== user.id) return res.status(403).json({ error: "forbidden" })
+  await prisma.spaceInvite.deleteMany({
+    where: { id: req.params.inviteId, spaceId: space.id },
+  })
+  res.json({ ok: true })
+})
+
+// Accept an invite link and join the space at the role it grants. Token is
+// globally unique so this isn't nested under a space id — the client only
+// has the link. Re-using an already-accepted link is a no-op (doesn't count
+// twice against maxUses).
+spacesRouter.post("/invites/:token/accept", async (req, res) => {
+  const user = currentUser(req)
+  const invite = await prisma.spaceInvite.findUnique({ where: { token: req.params.token } })
+  if (!invite) return res.status(404).json({ error: "not_found" })
+  if (invite.expiresAt && invite.expiresAt < new Date())
+    return res.status(410).json({ error: "expired" })
+  if (invite.maxUses != null && invite.useCount >= invite.maxUses)
+    return res.status(410).json({ error: "exhausted" })
+  const space = await prisma.space.findUnique({ where: { id: invite.spaceId } })
+  if (!space) return res.status(404).json({ error: "not_found" })
+  if (space.ownerId === user.id) return res.json({ spaceId: space.id })
+
+  const existing = await prisma.spaceMember.findUnique({
+    where: { spaceId_userId: { spaceId: space.id, userId: user.id } },
+  })
+  if (!existing) {
+    await prisma.spaceMember.create({
+      data: { spaceId: space.id, userId: user.id, role: invite.role },
+    })
+    await prisma.spaceInvite.update({
+      where: { id: invite.id },
+      data: { useCount: { increment: 1 } },
+    })
+  }
+  res.json({ spaceId: space.id, spaceName: space.name })
 })
 
 spacesRouter.delete("/:id", async (req, res) => {

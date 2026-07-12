@@ -7,6 +7,8 @@ export type NotificationType =
   | "space_invite"
   | "space_role_changed"
   | "space_removed"
+  | "space_access_requested"
+  | "space_access_denied"
   | "quota_upgrade_approved"
   | "quota_upgrade_denied"
   | "quota_changed"

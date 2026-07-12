@@ -36,6 +36,10 @@ export async function notify(
 }
 
 const QUOTA_NEAR_LIMIT_THRESHOLD = 0.9
+// Hundredths of a percent of headroom when scaling the bigint ratio down to a
+// JS number — precise enough that the 90% threshold can't be tipped by
+// Number()'s 2^53 precision loss on multi-terabyte byte counts.
+const PCT_SCALE = 10_000n
 // Don't re-notify on every upload once a user is already over the
 // threshold — only once per rolling day.
 const QUOTA_NEAR_LIMIT_COOLDOWN_MS = 24 * 60 * 60 * 1000
@@ -48,7 +52,9 @@ export async function maybeNotifyQuotaNearLimit(
   quotaBytes: bigint
 ) {
   if (quotaBytes <= BigInt(0)) return
-  const pct = Number(usedBytes) / Number(quotaBytes)
+  // Ratio stays in bigint math until the very end — only the small scaled
+  // integer (0..~PCT_SCALE-ish) is converted to a Number.
+  const pct = Number((usedBytes * PCT_SCALE) / quotaBytes) / Number(PCT_SCALE)
   if (pct < QUOTA_NEAR_LIMIT_THRESHOLD) return
 
   const recent = await prisma.notification.findFirst({

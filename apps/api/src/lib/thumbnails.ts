@@ -121,7 +121,7 @@ function probeDuration(src: string): Promise<number> {
 // --- per-kind renderers ----------------------------------------------------
 // Each writes a JPEG to `outJpg` and resolves true on success.
 
-async function renderImage(src: string, outJpg: string): Promise<boolean> {
+export async function renderImage(src: string, outJpg: string): Promise<boolean> {
   // `[0]` takes the first frame/page of multi-frame inputs (animated GIF, TIFF).
   // `-thumbnail WxH>` only shrinks (the `>`), preserving aspect ratio.
   return run(

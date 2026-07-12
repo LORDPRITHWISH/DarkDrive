@@ -263,6 +263,8 @@ type DriveState = {
   joinSpace: (spaceId: string) => Promise<void>
   leaveSpace: (spaceId: string) => Promise<void>
   togglePinSpace: (spaceId: string, pinned: boolean) => Promise<void>
+  requestEditorAccess: (spaceId: string) => Promise<void>
+  denyEditorRequest: (spaceId: string, userId: string) => Promise<void>
 }
 
 export const useDrive = create<DriveState>((set, get) => ({
@@ -720,5 +722,19 @@ export const useDrive = create<DriveState>((set, get) => ({
       toast.error(e instanceof Error ? e.message : "Couldn't update pin.")
       throw e
     }
+  },
+  requestEditorAccess: async (spaceId) => {
+    try {
+      await apiJson(`/api/spaces/${spaceId}/request-editor`, "POST")
+      await get().loadSpaces()
+      toast.success("Upload access requested.")
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't send request.")
+      throw e
+    }
+  },
+  denyEditorRequest: async (spaceId, userId) => {
+    await apiJson(`/api/spaces/${spaceId}/members/${userId}/deny-editor`, "POST")
+    await get().loadSpaces()
   },
 }))

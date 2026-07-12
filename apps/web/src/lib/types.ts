@@ -22,6 +22,8 @@ export type NotificationType =
   | "space_invite"
   | "space_role_changed"
   | "space_removed"
+  | "space_access_requested"
+  | "space_access_denied"
   | "quota_upgrade_approved"
   | "quota_upgrade_denied"
   | "quota_changed"
@@ -359,6 +361,8 @@ export type SpaceMember = {
   name: string
   email: string
   avatarUrl?: string | null
+  // Set when this member has an open request to be promoted to EDITOR.
+  editorRequestedAt?: string | null
 }
 
 export type Space = {
@@ -413,5 +417,17 @@ export type Share = {
   fileId?: string | null
   folderId?: string | null
   expiresAt?: string | null
+  createdAt: string
+}
+
+export type SpaceInvite = {
+  id: string
+  spaceId: string
+  token: string
+  role: "VIEWER" | "EDITOR"
+  createdById: string
+  maxUses: number | null
+  useCount: number
+  expiresAt: string | null
   createdAt: string
 }

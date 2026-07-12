@@ -15,6 +15,8 @@ import {
   SignOutIcon,
   PushPinIcon,
   PushPinSlashIcon,
+  UploadSimpleIcon,
+  ClockIcon,
 } from "@phosphor-icons/react"
 import { useAuth } from "@/store/auth"
 import { useDrive } from "@/store/drive"
@@ -39,7 +41,7 @@ export function SpacePage() {
   // loadSpaces) flow back into the dialogs live. Falls back to the overview
   // payload for public spaces the viewer hasn't joined.
   const storeSpace = useDrive((s) => s.spaces.find((sp) => sp.id === id))
-  const { joinSpace, leaveSpace, togglePinSpace } = useDrive()
+  const { joinSpace, leaveSpace, togglePinSpace, requestEditorAccess } = useDrive()
   const [data, setData] = useState<SpaceOverview | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -75,6 +77,7 @@ export function SpacePage() {
   const isMember = !!data && data.space.members.some((m) => m.userId === me?.id)
   const isJoinedNonOwner = isMember && !isOwner
   const owner = data?.space.members.find((m) => m.userId === data.space.ownerId)
+  const myMembership = data?.space.members.find((m) => m.userId === me?.id)
 
   async function handleJoin() {
     if (!id || busy) return
@@ -104,6 +107,17 @@ export function SpacePage() {
     setBusy(true)
     try {
       await togglePinSpace(id, !data.space.pinned)
+      await load()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleRequestEditor() {
+    if (!id || busy) return
+    setBusy(true)
+    try {
+      await requestEditorAccess(id)
       await load()
     } finally {
       setBusy(false)
@@ -225,6 +239,28 @@ export function SpacePage() {
                       >
                         <GearSixIcon size={15} />
                         Members
+                      </Button>
+                    )}
+                    {isJoinedNonOwner && myMembership?.role === "VIEWER" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="rounded-lg"
+                        disabled={busy || !!myMembership.editorRequestedAt}
+                        onClick={() => void handleRequestEditor()}
+                        title="Ask the owner for upload access"
+                      >
+                        {myMembership.editorRequestedAt ? (
+                          <>
+                            <ClockIcon size={15} />
+                            Request pending
+                          </>
+                        ) : (
+                          <>
+                            <UploadSimpleIcon size={15} weight="bold" />
+                            Request upload access
+                          </>
+                        )}
                       </Button>
                     )}
                     {isMember && (

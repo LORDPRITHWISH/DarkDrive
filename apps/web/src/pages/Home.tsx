@@ -5,6 +5,7 @@ import { useAuth } from "@/store/auth"
 import { useMe } from "@/store/me"
 import { Sidebar } from "@/components/Sidebar"
 import { SidebarToggle } from "@/components/SidebarToggle"
+import { HeaderActions } from "@/components/HeaderActions"
 import { FilePreview } from "@/components/FilePreview"
 import { formatBytes, formatDate } from "@/lib/format"
 import { apiUrl } from "@/lib/config"
@@ -81,6 +82,9 @@ export function HomePage() {
         <header className="flex items-center gap-3 border-b px-4 py-3">
           <SidebarToggle />
           <div className="text-sm font-semibold">Home</div>
+          <div className="ml-auto flex items-center gap-1">
+            <HeaderActions />
+          </div>
         </header>
         <div className="flex-1 overflow-auto px-4 py-5 md:px-6">
           <div>

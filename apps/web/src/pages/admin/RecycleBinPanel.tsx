@@ -15,6 +15,14 @@ import {
 } from "@workspace/ui/components/card"
 import { Button } from "@workspace/ui/components/button"
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@workspace/ui/components/table"
+import {
   Avatar,
   AvatarImage,
   AvatarFallback,
@@ -190,18 +198,18 @@ export function RecycleBinPanel({ users }: { users: AdminUser[] }) {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-sm">
-              <thead className="text-muted-foreground border-b text-[10px] uppercase tracking-wider">
-                <tr>
-                  <th className="py-2 pr-3 text-left font-medium">Name</th>
-                  <th className="py-2 pr-3 text-left font-medium">Owner</th>
-                  <th className="py-2 pr-3 text-left font-medium">Deleted by</th>
-                  <th className="py-2 pr-3 text-left font-medium">Deleted</th>
-                  <th className="py-2 pr-3 text-right font-medium">Size</th>
-                  <th className="py-2" />
-                </tr>
-              </thead>
-              <tbody>
+            <Table className="min-w-[640px]">
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="p-0 py-2 pr-3 text-[10px] uppercase tracking-wider">Name</TableHead>
+                  <TableHead className="p-0 py-2 pr-3 text-[10px] uppercase tracking-wider">Owner</TableHead>
+                  <TableHead className="p-0 py-2 pr-3 text-[10px] uppercase tracking-wider">Deleted by</TableHead>
+                  <TableHead className="p-0 py-2 pr-3 text-[10px] uppercase tracking-wider">Deleted</TableHead>
+                  <TableHead className="p-0 py-2 pr-3 text-right text-[10px] uppercase tracking-wider">Size</TableHead>
+                  <TableHead className="p-0 py-2" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {data!.folders.map((f) => (
                   <FolderRow
                     key={`folder-${f.id}`}
@@ -227,8 +235,8 @@ export function RecycleBinPanel({ users }: { users: AdminUser[] }) {
                     onPurge={() => purge("file", f.id, f.name)}
                   />
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         )}
       </CardContent>
@@ -348,11 +356,11 @@ function FolderRow({
 
   return (
     <>
-      <tr
-        className={`hover:bg-accent/40 border-b ${isEmptyFolder ? "" : "cursor-pointer"}`}
+      <TableRow
+        className={isEmptyFolder ? "" : "cursor-pointer"}
         onClick={() => !isEmptyFolder && setExpanded((v) => !v)}
       >
-        <td className="py-2 pr-3">
+        <TableCell className="p-0 py-2 pr-3">
           <div
             className="flex items-center gap-2"
             style={{ paddingLeft: depth * 20 }}
@@ -381,23 +389,23 @@ function FolderRow({
               </div>
             </div>
           </div>
-        </td>
-        <td className="py-2 pr-3">
+        </TableCell>
+        <TableCell className="p-0 py-2 pr-3">
           <PersonCell person={folder.owner} />
-        </td>
-        <td className="py-2 pr-3">
+        </TableCell>
+        <TableCell className="p-0 py-2 pr-3">
           <PersonCell person={folder.deletedBy} />
-        </td>
-        <td
-          className="text-muted-foreground py-2 pr-3 whitespace-nowrap"
+        </TableCell>
+        <TableCell
+          className="text-muted-foreground p-0 py-2 pr-3 whitespace-nowrap"
           title={formatDate(folder.deletedAt)}
         >
           {relativeTime(folder.deletedAt)}
-        </td>
-        <td className="py-2 pr-3 text-right tabular-nums whitespace-nowrap">
+        </TableCell>
+        <TableCell className="p-0 py-2 pr-3 text-right tabular-nums whitespace-nowrap">
           {formatBytes(folder.sizeBytes)}
-        </td>
-        <td className="py-2">
+        </TableCell>
+        <TableCell className="p-0 py-2">
           <RowActions
             id={folder.id}
             busy={busy}
@@ -405,8 +413,8 @@ function FolderRow({
             onMove={onMove}
             onPurge={onPurge}
           />
-        </td>
-      </tr>
+        </TableCell>
+      </TableRow>
       {expanded && (
         <FolderContents
           folderId={folder.id}
@@ -464,29 +472,29 @@ function FolderContents({
 
   if (state.status === "loading") {
     return (
-      <tr>
-        <td colSpan={6} className="text-muted-foreground py-2 pr-3 text-xs">
+      <TableRow>
+        <TableCell colSpan={6} className="text-muted-foreground p-0 py-2 pr-3 text-xs">
           <div style={{ paddingLeft: depth * 20 + 20 }}>Loading…</div>
-        </td>
-      </tr>
+        </TableCell>
+      </TableRow>
     )
   }
   if (state.status === "error") {
     return (
-      <tr>
-        <td colSpan={6} className="text-destructive py-2 pr-3 text-xs">
+      <TableRow>
+        <TableCell colSpan={6} className="text-destructive p-0 py-2 pr-3 text-xs">
           <div style={{ paddingLeft: depth * 20 + 20 }}>{state.message}</div>
-        </td>
-      </tr>
+        </TableCell>
+      </TableRow>
     )
   }
   if (state.folders.length === 0 && state.files.length === 0) {
     return (
-      <tr>
-        <td colSpan={6} className="text-muted-foreground py-2 pr-3 text-xs">
+      <TableRow>
+        <TableCell colSpan={6} className="text-muted-foreground p-0 py-2 pr-3 text-xs">
           <div style={{ paddingLeft: depth * 20 + 20 }}>Empty.</div>
-        </td>
-      </tr>
+        </TableCell>
+      </TableRow>
     )
   }
 
@@ -502,12 +510,12 @@ function FolderContents({
         />
       ))}
       {state.files.map((f) => (
-        <tr
+        <TableRow
           key={f.id}
-          className="hover:bg-accent/40 cursor-pointer border-b"
+          className="cursor-pointer"
           onClick={() => onOpenFile(f.id)}
         >
-          <td className="py-2 pr-3">
+          <TableCell className="p-0 py-2 pr-3">
             <div
               className="flex items-center gap-2"
               style={{ paddingLeft: depth * 20 + 16 }}
@@ -520,13 +528,13 @@ function FolderContents({
                 {f.name}
               </span>
             </div>
-          </td>
-          <td className="py-2 pr-3" colSpan={3} />
-          <td className="py-2 pr-3 text-right tabular-nums whitespace-nowrap">
+          </TableCell>
+          <TableCell className="p-0 py-2 pr-3" colSpan={3} />
+          <TableCell className="p-0 py-2 pr-3 text-right tabular-nums whitespace-nowrap">
             {formatBytes(f.size)}
-          </td>
-          <td className="py-2" />
-        </tr>
+          </TableCell>
+          <TableCell className="p-0 py-2" />
+        </TableRow>
       ))}
     </>
   )
@@ -549,11 +557,11 @@ function NestedFolderRow({
   const [expanded, setExpanded] = useState(false)
   return (
     <>
-      <tr
-        className="hover:bg-accent/40 cursor-pointer border-b"
+      <TableRow
+        className="cursor-pointer"
         onClick={() => setExpanded((v) => !v)}
       >
-        <td className="py-2 pr-3" colSpan={6}>
+        <TableCell className="p-0 py-2 pr-3" colSpan={6}>
           <div
             className="flex items-center gap-2"
             style={{ paddingLeft: depth * 20 }}
@@ -573,8 +581,8 @@ function NestedFolderRow({
               {folder.name}
             </span>
           </div>
-        </td>
-      </tr>
+        </TableCell>
+      </TableRow>
       {expanded && (
         <FolderContents
           folderId={folder.id}
@@ -605,8 +613,8 @@ function FileRow({
   onPurge: () => void
 }) {
   return (
-    <tr className="hover:bg-accent/40 cursor-pointer border-b" onClick={onOpen}>
-      <td className="py-2 pr-3">
+    <TableRow className="cursor-pointer" onClick={onOpen}>
+      <TableCell className="p-0 py-2 pr-3">
         <div className="flex items-center gap-2">
           <span className="shrink-0">{iconFor(file.mimeType, 20, file.name)}</span>
           <span
@@ -616,23 +624,23 @@ function FileRow({
             {file.name}
           </span>
         </div>
-      </td>
-      <td className="py-2 pr-3">
+      </TableCell>
+      <TableCell className="p-0 py-2 pr-3">
         <PersonCell person={file.owner} />
-      </td>
-      <td className="py-2 pr-3">
+      </TableCell>
+      <TableCell className="p-0 py-2 pr-3">
         <PersonCell person={file.deletedBy} />
-      </td>
-      <td
-        className="text-muted-foreground py-2 pr-3 whitespace-nowrap"
+      </TableCell>
+      <TableCell
+        className="text-muted-foreground p-0 py-2 pr-3 whitespace-nowrap"
         title={formatDate(file.deletedAt)}
       >
         {relativeTime(file.deletedAt)}
-      </td>
-      <td className="py-2 pr-3 text-right tabular-nums whitespace-nowrap">
+      </TableCell>
+      <TableCell className="p-0 py-2 pr-3 text-right tabular-nums whitespace-nowrap">
         {formatBytes(file.size)}
-      </td>
-      <td className="py-2">
+      </TableCell>
+      <TableCell className="p-0 py-2">
         <RowActions
           id={file.id}
           busy={busy}
@@ -640,7 +648,7 @@ function FileRow({
           onMove={onMove}
           onPurge={onPurge}
         />
-      </td>
-    </tr>
+      </TableCell>
+    </TableRow>
   )
 }

@@ -24,6 +24,14 @@ import { FilePreview } from "@/components/FilePreview"
 import { FileThumb } from "@/components/file-grid/FileThumb"
 import { SearchFolderDialog } from "@/components/SearchFolderDialog"
 import { Button } from "@workspace/ui/components/button"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@workspace/ui/components/table"
 import { apiGet, apiJson } from "@/lib/api"
 import { formatBytes, formatDate } from "@/lib/format"
 import { triggerDownload } from "@/lib/download"
@@ -323,23 +331,23 @@ export function SearchPage() {
             </div>
           ) : (
             <div className="overflow-hidden rounded-lg border">
-              <table className="w-full text-sm">
-                <thead className="text-muted-foreground border-b text-xs uppercase">
-                  <tr>
-                    <th className="py-2 pl-3 text-left font-medium">Name</th>
-                    <th className="py-2 text-left font-medium">Location</th>
-                    <th className="py-2 text-left font-medium">Modified</th>
-                    <th className="py-2 pr-3 text-left font-medium">Size</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className="p-0 py-2 pl-3">Name</TableHead>
+                    <TableHead className="p-0 py-2">Location</TableHead>
+                    <TableHead className="p-0 py-2">Modified</TableHead>
+                    <TableHead className="p-0 py-2 pr-3">Size</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {folders.map((f) => (
-                    <tr
+                    <TableRow
                       key={f.id}
-                      className="hover:bg-accent/40 cursor-pointer border-b last:border-b-0"
+                      className="cursor-pointer last:border-b-0"
                       onClick={() => nav(`/drive/${f.id}`)}
                     >
-                      <td className="py-2 pl-3">
+                      <TableCell className="p-0 py-2 pl-3">
                         <div className="flex items-center gap-2">
                           <FolderIcon
                             size={18}
@@ -352,9 +360,9 @@ export function SearchPage() {
                             <StarIcon size={14} weight="fill" className="text-yellow-500" />
                           )}
                         </div>
-                      </td>
-                      <td
-                        className="text-muted-foreground py-2 hover:underline"
+                      </TableCell>
+                      <TableCell
+                        className="text-muted-foreground p-0 py-2 hover:underline"
                         onClick={(e) => {
                           if (!f.parentId) return
                           e.stopPropagation()
@@ -362,18 +370,18 @@ export function SearchPage() {
                         }}
                       >
                         {f.parentName ?? "My Drive"}
-                      </td>
-                      <td className="py-2">{formatDate(f.updatedAt)}</td>
-                      <td className="py-2 pr-3">—</td>
-                    </tr>
+                      </TableCell>
+                      <TableCell className="p-0 py-2">{formatDate(f.updatedAt)}</TableCell>
+                      <TableCell className="p-0 py-2 pr-3">—</TableCell>
+                    </TableRow>
                   ))}
                   {files.map((f) => (
-                    <tr
+                    <TableRow
                       key={f.id}
-                      className="hover:bg-accent/40 cursor-pointer border-b last:border-b-0"
+                      className="cursor-pointer last:border-b-0"
                       onClick={() => setPreview(f)}
                     >
-                      <td className="py-2 pl-3">
+                      <TableCell className="p-0 py-2 pl-3">
                         <div className="flex items-center gap-2">
                           {iconForRow(f)}
                           <span>{f.name}</span>
@@ -381,22 +389,22 @@ export function SearchPage() {
                             <StarIcon size={14} weight="fill" className="text-yellow-500" />
                           )}
                         </div>
-                      </td>
-                      <td
-                        className="text-muted-foreground py-2 hover:underline"
+                      </TableCell>
+                      <TableCell
+                        className="text-muted-foreground p-0 py-2 hover:underline"
                         onClick={(e) => {
                           e.stopPropagation()
                           nav(`/drive/${f.folderId}`)
                         }}
                       >
                         {f.folderName ?? "—"}
-                      </td>
-                      <td className="py-2">{formatDate(f.updatedAt)}</td>
-                      <td className="py-2 pr-3">{formatBytes(f.size)}</td>
-                    </tr>
+                      </TableCell>
+                      <TableCell className="p-0 py-2">{formatDate(f.updatedAt)}</TableCell>
+                      <TableCell className="p-0 py-2 pr-3">{formatBytes(f.size)}</TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
           )}
           {result?.truncated && !isEmpty && (

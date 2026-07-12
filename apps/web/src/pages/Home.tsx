@@ -10,6 +10,7 @@ import { FilePreview } from "@/components/FilePreview"
 import { formatBytes, formatDate } from "@/lib/format"
 import { apiUrl } from "@/lib/config"
 import { iconFor } from "@/lib/fileIcon"
+import { Table, TableBody, TableCell, TableRow } from "@workspace/ui/components/table"
 import type { FileItem } from "@/lib/types"
 
 function greeting() {
@@ -231,27 +232,27 @@ export function HomePage() {
                   </Link>
                 </div>
                 <div className="overflow-hidden rounded-lg border">
-                  <table className="w-full text-sm">
-                    <tbody>
+                  <Table>
+                    <TableBody>
                       {recent.map((f) => (
-                        <tr
+                        <TableRow
                           key={f.id}
-                          className="hover:bg-accent/40 cursor-pointer border-b last:border-b-0"
+                          className="cursor-pointer last:border-b-0"
                           onClick={() => setPreview(f)}
                         >
-                          <td className="py-2 pl-3">
+                          <TableCell className="p-0 py-2 pl-3">
                             <div className="flex items-center gap-2">
                               {iconFor(f.mimeType, 18, f.name)}
                               <span className="truncate">{f.name}</span>
                             </div>
-                          </td>
-                          <td className="text-muted-foreground py-2 pr-3 text-right text-xs">
+                          </TableCell>
+                          <TableCell className="text-muted-foreground p-0 py-2 pr-3 text-right text-xs">
                             {formatDate(f.accessedAt)}
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       ))}
-                    </tbody>
-                  </table>
+                    </TableBody>
+                  </Table>
                 </div>
               </section>
             )}

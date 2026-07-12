@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState } from "react"
-import { FolderIcon, TrashIcon, UploadIcon, XIcon } from "@phosphor-icons/react"
+import { FolderIcon, TrashIcon, UploadIcon } from "@phosphor-icons/react"
 import { Button } from "@workspace/ui/components/button"
+import { Input } from "@workspace/ui/components/input"
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@workspace/ui/components/dialog"
 import { apiJson, apiUpload } from "@/lib/api"
 import { apiUrl } from "@/lib/config"
 import { useDrive } from "@/store/drive"
@@ -45,15 +53,6 @@ export function FolderPropertiesDialog({
       if (pendingPreview) URL.revokeObjectURL(pendingPreview)
     }
   }, [pendingPreview])
-
-  useEffect(() => {
-    if (!folder) return
-    const h = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose()
-    }
-    window.addEventListener("keydown", h)
-    return () => window.removeEventListener("keydown", h)
-  }, [folder, onClose])
 
   if (!folder) return null
 
@@ -113,27 +112,13 @@ export function FolderPropertiesDialog({
         : null
 
   return (
-    <div
-      className="animate-in fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm duration-150"
-      onClick={onClose}
-    >
-      <div
-        className="bg-card animate-in fade-in zoom-in-95 w-full max-w-sm overflow-hidden rounded-2xl border shadow-2xl duration-150"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between border-b px-5 py-4">
-          <h3 className="text-base font-semibold">Folder properties</h3>
-          <button
-            className="hover:bg-accent rounded-lg p-1.5 transition-colors"
-            onClick={onClose}
-            aria-label="Close"
-          >
-            <XIcon size={16} />
-          </button>
-        </div>
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Folder properties</DialogTitle>
+        </DialogHeader>
 
-        <div className="space-y-5 p-5">
+        <div className="space-y-5">
           {/* Thumbnail */}
           <div className="flex items-start gap-4">
             {/* Preview */}
@@ -198,9 +183,8 @@ export function FolderPropertiesDialog({
             <span className="mb-1.5 block text-xs font-medium text-muted-foreground uppercase tracking-wider">
               Name
             </span>
-            <input
+            <Input
               autoFocus
-              className="bg-background focus-visible:ring-primary/40 w-full rounded-xl border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none"
               value={name}
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => {
@@ -237,16 +221,15 @@ export function FolderPropertiesDialog({
           {err && <div className="text-xs font-medium text-destructive">{err}</div>}
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-2 border-t bg-muted/30 px-5 py-3">
+        <DialogFooter>
           <Button variant="ghost" size="sm" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
           <Button size="sm" onClick={save} disabled={!name.trim() || busy}>
             {busy ? "Saving…" : "Save changes"}
           </Button>
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

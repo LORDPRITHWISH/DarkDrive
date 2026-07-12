@@ -1,6 +1,14 @@
 import { useEffect, useState } from "react"
-import { XIcon, GlobeIcon, MagnifyingGlassIcon, DoorOpenIcon } from "@phosphor-icons/react"
+import { GlobeIcon, MagnifyingGlassIcon, DoorOpenIcon } from "@phosphor-icons/react"
 import { Button } from "@workspace/ui/components/button"
+import { Input } from "@workspace/ui/components/input"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@workspace/ui/components/dialog"
 import { useDrive } from "@/store/drive"
 import { SpaceLogo } from "./SpaceLogo"
 
@@ -23,19 +31,8 @@ export function JoinSpaceDialog({
   }, [open, loadPublicSpaces])
 
   useEffect(() => {
-    if (!open) return
-    const h = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose()
-    }
-    window.addEventListener("keydown", h)
-    return () => window.removeEventListener("keydown", h)
-  }, [open, onClose])
-
-  useEffect(() => {
     if (open) setQ("")
   }, [open])
-
-  if (!open) return null
 
   const filtered = publicSpaces.filter((s) =>
     s.name.toLowerCase().includes(q.trim().toLowerCase())
@@ -51,32 +48,17 @@ export function JoinSpaceDialog({
   }
 
   return (
-    <div
-      className="animate-in fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm duration-150"
-      onClick={onClose}
-    >
-      <div
-        className="bg-card animate-in fade-in zoom-in-95 relative flex max-h-[80vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border shadow-2xl duration-200"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between gap-2 border-b p-4">
-          <div>
-            <h3 className="flex items-center gap-1.5 text-lg font-bold tracking-tight">
-              <GlobeIcon size={18} weight="fill" className="text-primary" />
-              Join a space
-            </h3>
-            <p className="text-muted-foreground mt-0.5 text-xs">
-              Browse public spaces anyone can join.
-            </p>
-          </div>
-          <button
-            className="hover:bg-accent shrink-0 rounded-lg p-1.5 transition-colors"
-            onClick={onClose}
-            aria-label="Close"
-          >
-            <XIcon size={16} />
-          </button>
-        </div>
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="flex max-h-[80vh] w-full max-w-lg flex-col gap-0 overflow-hidden p-0">
+        <DialogHeader className="border-b p-4">
+          <DialogTitle className="flex items-center gap-1.5">
+            <GlobeIcon size={18} weight="fill" className="text-primary" />
+            Join a space
+          </DialogTitle>
+          <DialogDescription>
+            Browse public spaces anyone can join.
+          </DialogDescription>
+        </DialogHeader>
 
         <div className="border-b p-3">
           <div className="relative">
@@ -84,9 +66,9 @@ export function JoinSpaceDialog({
               size={14}
               className="text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2"
             />
-            <input
+            <Input
               autoFocus
-              className="bg-background focus-visible:ring-primary/40 w-full rounded-xl border py-2 pl-8 pr-3 text-sm transition-shadow focus-visible:ring-2 focus-visible:outline-none"
+              className="pl-8"
               placeholder="Search public spaces…"
               value={q}
               onChange={(e) => setQ(e.target.value)}
@@ -134,7 +116,7 @@ export function JoinSpaceDialog({
             </ul>
           )}
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }

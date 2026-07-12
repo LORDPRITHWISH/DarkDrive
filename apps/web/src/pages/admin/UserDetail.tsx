@@ -18,7 +18,6 @@ import {
   UserPlusIcon,
   UsersThreeIcon,
   XCircleIcon,
-  XIcon,
 } from "@phosphor-icons/react"
 import { Avatar, AvatarImage, AvatarFallback } from "@workspace/ui/components/avatar"
 import { Badge } from "@workspace/ui/components/badge"
@@ -33,6 +32,16 @@ import {
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu"
 import { PopConfirm } from "@workspace/ui/components/popconfirm"
+import { Sheet, SheetContent } from "@workspace/ui/components/sheet"
+import { DialogTitle } from "@workspace/ui/components/dialog"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@workspace/ui/components/table"
 import { apiGet } from "@/lib/api"
 import { formatBytes, formatDate, relativeTime } from "@/lib/format"
 import { iconFor } from "@/lib/fileIcon"
@@ -125,15 +134,6 @@ export function UserDetail({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId])
 
-  // Escape closes the drawer, but only when a file preview isn't taking over.
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape" && !preview) onClose()
-    }
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
-  }, [preview, onClose])
-
   async function act(patch: Record<string, unknown>) {
     setBusy(true)
     try {
@@ -152,63 +152,59 @@ export function UserDetail({
 
   return (
     <>
-      <div
-        className="fixed inset-0 z-50 bg-black/50 backdrop-blur-[1px]"
-        onClick={onClose}
-      />
-      <div className="animate-in slide-in-from-right fixed inset-y-0 right-0 z-50 flex w-full max-w-3xl flex-col border-l bg-background shadow-xl duration-200">
-        {/* Header */}
-        <div className="flex items-start gap-3 border-b p-4">
-          {u ? (
-            <Avatar className="h-12 w-12 shrink-0">
-              {u.avatarUrl && <AvatarImage src={u.avatarUrl} alt="" />}
-              <AvatarFallback className="text-base">
-                {u.name[0]?.toUpperCase() ?? "?"}
-              </AvatarFallback>
-            </Avatar>
-          ) : (
-            <div className="bg-muted h-12 w-12 shrink-0 animate-pulse rounded-full" />
-          )}
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="truncate text-lg font-semibold">
-                {u?.name ?? "Loading…"}
-              </span>
+      <Sheet
+        open
+        onOpenChange={(o, details) => {
+          // Escape closes the drawer, but only when a file preview isn't
+          // taking over — FilePreview handles Escape itself in that case.
+          if (!o && details.reason === "escape-key" && preview) return
+          if (!o) onClose()
+        }}
+      >
+        <SheetContent className="max-w-3xl gap-0">
+          {/* Header */}
+          <div className="flex items-start gap-3 border-b p-4">
+            {u ? (
+              <Avatar className="h-12 w-12 shrink-0">
+                {u.avatarUrl && <AvatarImage src={u.avatarUrl} alt="" />}
+                <AvatarFallback className="text-base">
+                  {u.name[0]?.toUpperCase() ?? "?"}
+                </AvatarFallback>
+              </Avatar>
+            ) : (
+              <div className="bg-muted h-12 w-12 shrink-0 animate-pulse rounded-full" />
+            )}
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <DialogTitle className="truncate text-lg font-semibold">
+                  {u?.name ?? "Loading…"}
+                </DialogTitle>
+                {u && (
+                  <Badge variant={u.role === "ADMIN" ? "default" : "muted"}>
+                    {u.role}
+                  </Badge>
+                )}
+                {isSelf && <Badge variant="muted">you</Badge>}
+                {isDisabled && <Badge variant="destructive">Disabled</Badge>}
+                {u?.upgradeRequestedAt && (
+                  <Badge variant="default">upgrade requested</Badge>
+                )}
+              </div>
               {u && (
-                <Badge variant={u.role === "ADMIN" ? "default" : "muted"}>
-                  {u.role}
-                </Badge>
+                <div className="text-muted-foreground truncate text-sm">
+                  {u.email}
+                </div>
               )}
-              {isSelf && <Badge variant="muted">you</Badge>}
-              {isDisabled && <Badge variant="destructive">Disabled</Badge>}
-              {u?.upgradeRequestedAt && (
-                <Badge variant="default">upgrade requested</Badge>
+              {u && (
+                <div className="text-muted-foreground mt-0.5 text-xs">
+                  Member since {formatDate(u.createdAt)}
+                  {isDisabled && u.disabledAt
+                    ? ` · disabled ${relativeTime(u.disabledAt)}`
+                    : ""}
+                </div>
               )}
             </div>
-            {u && (
-              <div className="text-muted-foreground truncate text-sm">
-                {u.email}
-              </div>
-            )}
-            {u && (
-              <div className="text-muted-foreground mt-0.5 text-xs">
-                Member since {formatDate(u.createdAt)}
-                {isDisabled && u.disabledAt
-                  ? ` · disabled ${relativeTime(u.disabledAt)}`
-                  : ""}
-              </div>
-            )}
           </div>
-          <Button
-            size="icon"
-            variant="ghost"
-            onClick={onClose}
-            title="Close"
-            className="shrink-0"
-          >
-            <XIcon size={18} />
-          </Button>
-        </div>
 
         {/* Action bar */}
         {u && (
@@ -331,7 +327,8 @@ export function UserDetail({
             <Body data={data} loadingFileId={loadingId} onOpenFile={open} />
           )}
         </div>
-      </div>
+        </SheetContent>
+      </Sheet>
 
       <FilePreview file={preview} onClose={close} />
     </>
@@ -722,18 +719,18 @@ function LoginSection({ data }: { data: UserDetailData }) {
             No logins recorded.
           </div>
         ) : (
-          <table className="w-full min-w-105 text-sm">
-            <thead className="text-muted-foreground border-b text-[10px] uppercase tracking-wider">
-              <tr>
-                <th className="px-3 py-2 text-left font-medium">Device</th>
-                <th className="px-3 py-2 text-left font-medium">IP</th>
-                <th className="px-3 py-2 text-right font-medium">When</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table className="min-w-105">
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead>Device</TableHead>
+                <TableHead>IP</TableHead>
+                <TableHead className="text-right">When</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {l.recent.map((row) => (
-                <tr key={row.id} className="border-b last:border-0">
-                  <td className="px-3 py-2">
+                <TableRow key={row.id}>
+                  <TableCell>
                     <span className="flex items-center gap-2">
                       <DeviceMobileIcon
                         size={14}
@@ -741,23 +738,23 @@ function LoginSection({ data }: { data: UserDetailData }) {
                       />
                       {parseUA(row.userAgent)}
                     </span>
-                  </td>
-                  <td className="text-muted-foreground px-3 py-2">
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
                     <span className="flex items-center gap-1.5">
                       <GlobeIcon size={13} className="shrink-0" />
                       {row.ip ?? "—"}
                     </span>
-                  </td>
-                  <td
-                    className="text-muted-foreground px-3 py-2 text-right whitespace-nowrap"
+                  </TableCell>
+                  <TableCell
+                    className="text-muted-foreground text-right whitespace-nowrap"
                     title={formatDate(row.createdAt)}
                   >
                     {relativeTime(row.createdAt)}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         )}
       </div>
     </section>

@@ -1,5 +1,10 @@
-import { useEffect } from "react"
-import { XIcon, KeyboardIcon } from "@phosphor-icons/react"
+import { KeyboardIcon } from "@phosphor-icons/react"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@workspace/ui/components/dialog"
 
 const SHORTCUTS: { keys: string[]; label: string }[] = [
   { keys: ["↑", "↓"], label: "Move selection" },
@@ -19,40 +24,13 @@ export function ShortcutsDialog({
   open: boolean
   onClose: () => void
 }) {
-  useEffect(() => {
-    if (!open) return
-    const h = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose()
-    }
-    window.addEventListener("keydown", h)
-    return () => window.removeEventListener("keydown", h)
-  }, [open, onClose])
-
-  if (!open) return null
   return (
-    <div
-      className="animate-in fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm duration-150"
-      onClick={onClose}
-    >
-      <div
-        className="bg-card animate-in fade-in zoom-in-95 w-full max-w-sm rounded-2xl border shadow-2xl duration-200"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-2 border-b p-4">
-          <div className="flex items-center gap-2">
-            <KeyboardIcon size={18} />
-            <h3 className="text-base font-bold tracking-tight">
-              Keyboard shortcuts
-            </h3>
-          </div>
-          <button
-            className="hover:bg-accent shrink-0 rounded-lg p-1.5"
-            onClick={onClose}
-            aria-label="Close"
-          >
-            <XIcon size={14} />
-          </button>
-        </div>
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-sm gap-0 p-0">
+        <DialogHeader className="flex-row items-center gap-2 border-b p-4">
+          <KeyboardIcon size={18} />
+          <DialogTitle>Keyboard shortcuts</DialogTitle>
+        </DialogHeader>
         <ul className="flex flex-col p-2">
           {SHORTCUTS.map((s) => (
             <li
@@ -73,7 +51,7 @@ export function ShortcutsDialog({
             </li>
           ))}
         </ul>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }

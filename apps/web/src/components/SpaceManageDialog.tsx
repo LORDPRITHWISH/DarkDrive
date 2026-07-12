@@ -102,10 +102,7 @@ export function SpaceManageDialog({
     updateSpace,
     denyEditorRequest,
   } = useDrive()
-  // The prop is a snapshot taken when the dialog opened. Re-read from the
-  // live store so mutations (invite, role change, remove) reflect immediately
-  // once `loadSpaces()` refreshes. Fall back to the snapshot if the space is
-  // missing from the store (e.g. during a refresh race).
+
   const liveSpace = useDrive((s) =>
     initialSpace ? s.spaces.find((sp) => sp.id === initialSpace.id) : undefined
   )

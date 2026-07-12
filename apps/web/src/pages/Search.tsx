@@ -19,6 +19,7 @@ import {
 } from "@phosphor-icons/react"
 import { Sidebar } from "@/components/Sidebar"
 import { SidebarToggle } from "@/components/SidebarToggle"
+import { HeaderActions } from "@/components/HeaderActions"
 import { FilePreview } from "@/components/FilePreview"
 import { FileThumb } from "@/components/file-grid/FileThumb"
 import { SearchFolderDialog } from "@/components/SearchFolderDialog"
@@ -201,6 +202,7 @@ export function SearchPage() {
             >
               <SquaresFourIcon size={16} />
             </Button>
+            <HeaderActions />
           </div>
         </header>
 

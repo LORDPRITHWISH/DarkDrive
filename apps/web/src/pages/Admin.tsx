@@ -7,6 +7,7 @@ import {
 } from "@workspace/ui/components/tabs"
 import { Sidebar } from "@/components/Sidebar"
 import { SidebarToggle } from "@/components/SidebarToggle"
+import { HeaderActions } from "@/components/HeaderActions"
 import { apiGet, apiJson } from "@/lib/api"
 import { useAuth } from "@/store/auth"
 import type { AdminStats, AdminUser } from "@/lib/types"
@@ -79,6 +80,9 @@ export function AdminPage() {
               {stats.sharing.shortcuts} shortcuts
             </div>
           )}
+          <div className="flex items-center gap-1">
+            <HeaderActions />
+          </div>
         </header>
 
         <div className="flex-1 overflow-auto p-4">

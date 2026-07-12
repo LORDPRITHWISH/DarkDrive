@@ -8,6 +8,7 @@ import {
 } from "@phosphor-icons/react"
 import { Sidebar } from "@/components/Sidebar"
 import { SidebarToggle } from "@/components/SidebarToggle"
+import { HeaderActions } from "@/components/HeaderActions"
 import { Button } from "@workspace/ui/components/button"
 import { apiGet, apiJson } from "@/lib/api"
 import { useDrive } from "@/store/drive"
@@ -146,6 +147,7 @@ export function BinPage() {
             >
               <ListBulletsIcon size={16} />
             </Button>
+            <HeaderActions />
           </div>
         </header>
 

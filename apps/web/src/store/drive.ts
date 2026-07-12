@@ -260,6 +260,9 @@ type DriveState = {
   updateMemberRole: (spaceId: string, userId: string, role: "VIEWER" | "EDITOR") => Promise<void>
   removeMember: (spaceId: string, userId: string) => Promise<void>
   deleteSpace: (spaceId: string) => Promise<void>
+  joinSpace: (spaceId: string) => Promise<void>
+  leaveSpace: (spaceId: string) => Promise<void>
+  togglePinSpace: (spaceId: string, pinned: boolean) => Promise<void>
 }
 
 export const useDrive = create<DriveState>((set, get) => ({
@@ -686,6 +689,35 @@ export const useDrive = create<DriveState>((set, get) => ({
       toast.success("Space deleted.")
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Couldn't delete space.")
+      throw e
+    }
+  },
+  joinSpace: async (spaceId) => {
+    try {
+      await apiJson(`/api/spaces/${spaceId}/join`, "POST")
+      await Promise.all([get().loadSpaces(), get().loadPublicSpaces()])
+      toast.success("Joined space.")
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't join space.")
+      throw e
+    }
+  },
+  leaveSpace: async (spaceId) => {
+    try {
+      await apiJson(`/api/spaces/${spaceId}/leave`, "POST")
+      await Promise.all([get().loadSpaces(), get().loadPublicSpaces()])
+      toast.success("Left space.")
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't leave space.")
+      throw e
+    }
+  },
+  togglePinSpace: async (spaceId, pinned) => {
+    try {
+      await apiJson(`/api/spaces/${spaceId}/pin`, "PATCH", { pinned })
+      await get().loadSpaces()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't update pin.")
       throw e
     }
   },

@@ -11,6 +11,10 @@ import {
   FolderOpenIcon,
   ClockCounterClockwiseIcon,
   ShieldCheckIcon,
+  DoorOpenIcon,
+  SignOutIcon,
+  PushPinIcon,
+  PushPinSlashIcon,
 } from "@phosphor-icons/react"
 import { useAuth } from "@/store/auth"
 import { useDrive } from "@/store/drive"
@@ -35,12 +39,14 @@ export function SpacePage() {
   // loadSpaces) flow back into the dialogs live. Falls back to the overview
   // payload for public spaces the viewer hasn't joined.
   const storeSpace = useDrive((s) => s.spaces.find((sp) => sp.id === id))
+  const { joinSpace, leaveSpace, togglePinSpace } = useDrive()
   const [data, setData] = useState<SpaceOverview | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [preview, setPreview] = useState<FileItem | null>(null)
   const [manageOpen, setManageOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
 
   const load = useCallback(async () => {
     if (!id) return
@@ -66,7 +72,43 @@ export function SpacePage() {
 
   const space = storeSpace ?? data?.space ?? null
   const isOwner = !!space && space.ownerId === me?.id
+  const isMember = !!data && data.space.members.some((m) => m.userId === me?.id)
+  const isJoinedNonOwner = isMember && !isOwner
   const owner = data?.space.members.find((m) => m.userId === data.space.ownerId)
+
+  async function handleJoin() {
+    if (!id || busy) return
+    setBusy(true)
+    try {
+      await joinSpace(id)
+      await load()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleLeave() {
+    if (!id || busy) return
+    if (!confirm("Leave this space? You can rejoin any time since it's public.")) return
+    setBusy(true)
+    try {
+      await leaveSpace(id)
+      await load()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleTogglePin() {
+    if (!id || busy || !data) return
+    setBusy(true)
+    try {
+      await togglePinSpace(id, !data.space.pinned)
+      await load()
+    } finally {
+      setBusy(false)
+    }
+  }
 
   return (
     <div className="flex h-screen">
@@ -157,6 +199,17 @@ export function SpacePage() {
                   </div>
 
                   <div className="flex shrink-0 flex-wrap items-center gap-2">
+                    {!isOwner && !isMember && data.space.isPublic && (
+                      <Button
+                        size="sm"
+                        className="rounded-lg"
+                        disabled={busy}
+                        onClick={() => void handleJoin()}
+                      >
+                        <DoorOpenIcon size={15} weight="bold" />
+                        {busy ? "Joining…" : "Join"}
+                      </Button>
+                    )}
                     <Link to={`/drive/${data.space.rootFolderId}`}>
                       <Button size="sm" className="rounded-lg">
                         <FolderOpenIcon size={15} weight="bold" />
@@ -172,6 +225,36 @@ export function SpacePage() {
                       >
                         <GearSixIcon size={15} />
                         Members
+                      </Button>
+                    )}
+                    {isMember && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="rounded-lg"
+                        disabled={busy}
+                        onClick={() => void handleTogglePin()}
+                        title={data.space.pinned ? "Unpin from sidebar" : "Pin to sidebar"}
+                      >
+                        {data.space.pinned ? (
+                          <PushPinIcon size={15} weight="fill" />
+                        ) : (
+                          <PushPinSlashIcon size={15} />
+                        )}
+                        {data.space.pinned ? "Pinned" : "Pin"}
+                      </Button>
+                    )}
+                    {isJoinedNonOwner && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="rounded-lg"
+                        disabled={busy}
+                        onClick={() => void handleLeave()}
+                        title="Leave space"
+                      >
+                        <SignOutIcon size={15} />
+                        Leave
                       </Button>
                     )}
                     {isOwner && (

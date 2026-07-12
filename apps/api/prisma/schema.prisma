@@ -178,6 +178,10 @@ model Space {
   // When true, any authenticated DarkDrive user can read the space's contents.
   // Writes are still restricted to the owner and explicit EDITOR members.
   isPublic     Boolean  @default(false)
+  // Whether the owner has pinned this space to their own sidebar. Mirrors
+  // SpaceMember.pinned, which serves the same purpose for joined members —
+  // owners have no SpaceMember row so they need their own copy of the flag.
+  pinned       Boolean  @default(false)
   createdAt    DateTime @default(now())
 
   members      SpaceMember[]
@@ -198,6 +202,9 @@ model SpaceMember {
   userId   String
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   role     SpaceRole @default(EDITOR)
+  // Whether this member has pinned the space to their own sidebar. Only
+  // meaningful for non-owner members — owners always see their own spaces.
+  pinned   Boolean   @default(false)
   joinedAt DateTime  @default(now())
 
   @@unique([spaceId, userId])

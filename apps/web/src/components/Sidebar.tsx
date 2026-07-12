@@ -10,14 +10,12 @@ import {
   ShieldCheckIcon,
   StarIcon,
   TrashIcon,
-  GearSixIcon,
+  PushPinSlashIcon,
   UploadIcon,
   GlobeIcon,
   MagnifyingGlassIcon,
   XIcon,
 } from "@phosphor-icons/react"
-import type { Space } from "@/lib/types"
-import { SpaceManageDialog } from "@/components/SpaceManageDialog"
 import { SpaceEditorDialog } from "@/components/SpaceEditorDialog"
 import { SpaceLogo } from "@/components/SpaceLogo"
 import { UpgradeRequestDialog } from "@/components/UpgradeRequestDialog"
@@ -32,14 +30,7 @@ import { ThemeToggle } from "@/components/ThemeToggle"
 
 export function Sidebar() {
   const user = useAuth((s) => s.user)
-  const {
-    spaces,
-    publicSpaces,
-    loadSpaces,
-    loadPublicSpaces,
-    upload,
-    currentFolderId,
-  } = useDrive()
+  const { spaces, loadSpaces, togglePinSpace, upload, currentFolderId } = useDrive()
   const { quota, loadQuota, requestUpgrade } = useMe()
   const fileInput = useRef<HTMLInputElement>(null)
   const folderInput = useRef<HTMLInputElement>(null)
@@ -47,7 +38,6 @@ export function Sidebar() {
   const [uploadMenuOpen, setUploadMenuOpen] = useState(false)
   const [creatingSpace, setCreatingSpace] = useState(false)
   const [upgradeOpen, setUpgradeOpen] = useState(false)
-  const [manageSpace, setManageSpace] = useState<Space | null>(null)
   const desktopCollapsed = useSidebar((s) => s.collapsed)
   const mobileOpen = useSidebar((s) => s.mobileOpen)
   const setMobileOpen = useSidebar((s) => s.setMobileOpen)
@@ -80,9 +70,8 @@ export function Sidebar() {
 
   useEffect(() => {
     void loadSpaces()
-    void loadPublicSpaces()
     void loadQuota()
-  }, [loadSpaces, loadPublicSpaces, loadQuota])
+  }, [loadSpaces, loadQuota])
 
   const pct =
     quota && quota.total > 0
@@ -226,6 +215,7 @@ export function Sidebar() {
             "My Drive",
             <FolderIcon size={18} />
           )}
+        {navItem("/spaces", "Spaces", <UsersThreeIcon size={18} />)}
         {navItem("/search", "Search", <MagnifyingGlassIcon size={18} />)}
         {navItem("/recent", "Recent", <ClockCounterClockwiseIcon size={18} />)}
         {navItem("/starred", "Starred", <StarIcon size={18} />)}
@@ -234,7 +224,8 @@ export function Sidebar() {
           navItem("/admin", "Admin", <ShieldCheckIcon size={18} />)}
       </nav>
 
-      {/* Spaces */}
+      {/* Pinned spaces — the "/spaces" nav item above is the full gateway;
+          this is just quick access to the ones pinned from there. */}
       <div className="mt-2">
         <div
           className={`flex items-center px-2 ${
@@ -242,8 +233,8 @@ export function Sidebar() {
           }`}
         >
           {!collapsed && (
-            <div className="flex items-center gap-1.5 text-xs font-medium tracking-wider text-muted-foreground uppercase">
-              <UsersThreeIcon size={14} /> Spaces
+            <div className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
+              Pinned
             </div>
           )}
           <button
@@ -256,7 +247,9 @@ export function Sidebar() {
         </div>
 
         <div className="mt-1 flex flex-col">
-          {spaces.map((s) =>
+          {spaces
+            .filter((s) => s.pinned)
+            .map((s) =>
             collapsed ? (
               <Link
                 key={s.id}
@@ -294,65 +287,19 @@ export function Sidebar() {
                   onClick={(e) => {
                     e.preventDefault()
                     e.stopPropagation()
-                    setManageSpace(s)
+                    void togglePinSpace(s.id, false)
                   }}
                   className="mr-1 rounded p-1 text-muted-foreground opacity-0 group-hover/space:opacity-100 hover:bg-accent hover:text-foreground focus:opacity-100"
-                  title="Manage members"
-                  aria-label="Manage members"
+                  title="Unpin from sidebar"
+                  aria-label="Unpin from sidebar"
                 >
-                  <GearSixIcon size={14} />
+                  <PushPinSlashIcon size={14} />
                 </button>
               </div>
             )
           )}
         </div>
       </div>
-
-      {/* Public spaces */}
-      {publicSpaces.length > 0 && (
-        <div>
-          {!collapsed && (
-            <div className="flex items-center gap-1.5 px-2 text-xs font-medium tracking-wider text-muted-foreground uppercase">
-              <GlobeIcon size={14} /> Public
-            </div>
-          )}
-          <div className="mt-1 flex flex-col">
-            {publicSpaces.map((s) =>
-              collapsed ? (
-                <Link
-                  key={s.id}
-                  to={`/spaces/${s.id}`}
-                  title={s.ownerName ? `${s.name} · by ${s.ownerName}` : s.name}
-                  className="flex justify-center rounded-md py-1.5 hover:bg-accent/60"
-                >
-                  <SpaceLogo space={s} size={20} />
-                </Link>
-              ) : (
-                <Link
-                  key={s.id}
-                  to={`/spaces/${s.id}`}
-                  className="flex min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent/60 hover:text-foreground"
-                  title={s.ownerName ? `${s.name} · by ${s.ownerName}` : s.name}
-                >
-                  <SpaceLogo space={s} size={20} className="shrink-0" />
-                  <span className="truncate">{s.name}</span>
-                  <GlobeIcon
-                    size={10}
-                    weight="fill"
-                    className="text-primary ml-auto shrink-0"
-                  />
-                </Link>
-              )
-            )}
-          </div>
-        </div>
-      )}
-
-      <SpaceManageDialog space={manageSpace} onClose={() => setManageSpace(null)} />
-      <SpaceEditorDialog
-        mode={creatingSpace ? { kind: "create" } : null}
-        onClose={() => setCreatingSpace(false)}
-      />
 
       {/* Storage quota */}
       {quota && !collapsed && (
@@ -404,16 +351,6 @@ export function Sidebar() {
         </div>
       )}
 
-      {quota && (
-        <UpgradeRequestDialog
-          open={upgradeOpen}
-          currentQuotaBytes={quota.total}
-          usedBytes={quota.used}
-          onClose={() => setUpgradeOpen(false)}
-          onSubmit={(bytes) => requestUpgrade(bytes)}
-        />
-      )}
-
       {/* User row */}
       <div
         className={`flex items-center gap-2 border-t pt-3 ${
@@ -445,6 +382,23 @@ export function Sidebar() {
         </Button>
       </div>
       </aside>
+
+      {/* Rendered outside <aside> — it has a transform (translate-x-*) for
+          the mobile slide-in, which would otherwise scope these dialogs'
+          `fixed inset-0` to the sidebar's box instead of the viewport. */}
+      <SpaceEditorDialog
+        mode={creatingSpace ? { kind: "create" } : null}
+        onClose={() => setCreatingSpace(false)}
+      />
+      {quota && (
+        <UpgradeRequestDialog
+          open={upgradeOpen}
+          currentQuotaBytes={quota.total}
+          usedBytes={quota.used}
+          onClose={() => setUpgradeOpen(false)}
+          onSubmit={(bytes) => requestUpgrade(bytes)}
+        />
+      )}
     </>
   )
 }

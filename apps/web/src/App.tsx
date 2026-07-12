@@ -10,6 +10,7 @@ import { useAuth } from "@/store/auth"
 import { LoginPage } from "@/pages/Login"
 import { DrivePage } from "@/pages/Drive"
 import { SpacePage } from "@/pages/Space"
+import { SpacesPage } from "@/pages/Spaces"
 import { SharePage } from "@/pages/SharePage"
 import { RecentPage } from "@/pages/Recent"
 import { SearchPage } from "@/pages/Search"
@@ -85,6 +86,14 @@ export function App() {
           element={
             <Protected>
               <DrivePage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/spaces"
+          element={
+            <Protected>
+              <SpacesPage />
             </Protected>
           }
         />

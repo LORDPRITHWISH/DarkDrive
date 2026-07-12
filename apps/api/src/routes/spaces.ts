@@ -81,6 +81,16 @@ function projectMembers(
   return members
 }
 
+// The current viewer's own pin state for a space — Space.pinned for the
+// owner (who has no SpaceMember row), otherwise their own membership's flag.
+function viewerPinned(
+  space: { ownerId: string; pinned: boolean; members: { userId: string; pinned: boolean }[] },
+  userId: string
+) {
+  if (space.ownerId === userId) return space.pinned
+  return space.members.find((m) => m.userId === userId)?.pinned ?? false
+}
+
 spacesRouter.get("/", async (req, res) => {
   const user = currentUser(req)
   const spaces = await prisma.space.findMany({
@@ -105,6 +115,7 @@ spacesRouter.get("/", async (req, res) => {
       isPublic: s.isPublic,
       createdAt: s.createdAt,
       members: projectMembers(s),
+      pinned: viewerPinned(s, user.id),
     })),
   })
 })
@@ -220,6 +231,7 @@ spacesRouter.get("/:id/overview", async (req, res) => {
       isPublic: space.isPublic,
       createdAt: space.createdAt,
       members,
+      pinned: viewerPinned(space, user.id),
     },
     stats: {
       fileCount: files.length,
@@ -311,12 +323,72 @@ spacesRouter.post("/", async (req, res) => {
         icon: body.icon ?? null,
         ownerId: user.id,
         rootFolderId: root.id,
+        // A space you just created should show up where you'd look for it —
+        // in the sidebar — without an extra pin step.
+        pinned: true,
       },
     })
     await tx.folder.update({ where: { id: root.id }, data: { spaceId: s.id } })
     return s
   })
   res.status(201).json(space)
+})
+
+// Self-service join for public spaces — anyone can already read a public
+// space's contents, but joining creates a real membership so it shows up in
+// the joiner's own space list and (once pinned) their sidebar.
+spacesRouter.post("/:id/join", async (req, res) => {
+  const user = currentUser(req)
+  const space = await prisma.space.findUnique({ where: { id: req.params.id } })
+  if (!space) return res.status(404).json({ error: "not_found" })
+  if (!space.isPublic) return res.status(403).json({ error: "not_public" })
+  if (space.ownerId === user.id)
+    return res.status(400).json({ error: "already_owner" })
+  const member = await prisma.spaceMember.upsert({
+    where: { spaceId_userId: { spaceId: space.id, userId: user.id } },
+    update: {},
+    create: { spaceId: space.id, userId: user.id, role: "VIEWER" },
+  })
+  res.status(201).json(member)
+})
+
+// Self-service leave — removes the caller's own membership. Owners can't
+// leave their own space (they'd delete it instead).
+spacesRouter.post("/:id/leave", async (req, res) => {
+  const user = currentUser(req)
+  const space = await prisma.space.findUnique({ where: { id: req.params.id } })
+  if (!space) return res.status(404).json({ error: "not_found" })
+  if (space.ownerId === user.id)
+    return res.status(400).json({ error: "owner_cannot_leave" })
+  await prisma.spaceMember.deleteMany({
+    where: { spaceId: space.id, userId: user.id },
+  })
+  res.json({ ok: true })
+})
+
+// Self-service sidebar pin toggle. Only pinned spaces show in the sidebar —
+// for the owner that's Space.pinned (they have no SpaceMember row); for a
+// joined member it's their own membership row.
+spacesRouter.patch("/:id/pin", async (req, res) => {
+  const user = currentUser(req)
+  const { pinned } = z.object({ pinned: z.boolean() }).parse(req.body)
+  const space = await prisma.space.findUnique({ where: { id: req.params.id } })
+  if (!space) return res.status(404).json({ error: "not_found" })
+  if (space.ownerId === user.id) {
+    const updated = await prisma.space.update({
+      where: { id: space.id },
+      data: { pinned },
+    })
+    return res.json(updated)
+  }
+  const member = await prisma.spaceMember
+    .update({
+      where: { spaceId_userId: { spaceId: space.id, userId: user.id } },
+      data: { pinned },
+    })
+    .catch(() => null)
+  if (!member) return res.status(404).json({ error: "not_a_member" })
+  res.json(member)
 })
 
 spacesRouter.post("/:id/members", async (req, res) => {

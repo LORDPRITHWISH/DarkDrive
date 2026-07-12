@@ -372,6 +372,9 @@ export type Space = {
   isPublic: boolean
   createdAt: string
   members: SpaceMember[]
+  // Whether the current viewer has pinned this space to their sidebar.
+  // Only meaningful for joined (non-owned) spaces.
+  pinned: boolean
 }
 
 export type SpaceStats = {

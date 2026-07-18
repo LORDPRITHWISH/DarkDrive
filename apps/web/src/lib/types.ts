@@ -169,6 +169,23 @@ export type AdminUser = {
   avatarUrl: string | null
 }
 
+// A space as seen from the admin dashboard — every space on the instance,
+// not just ones the admin owns or has joined. Backed by GET /api/admin/spaces.
+export type AdminSpace = {
+  id: string
+  name: string
+  color: string | null
+  logoKey: string | null
+  icon: string | null
+  rootFolderId: string
+  ownerId: string
+  ownerName: string | null
+  ownerEmail: string | null
+  isPublic: boolean
+  memberCount: number
+  createdAt: string
+}
+
 // Full lifecycle of a single user — everything the admin can see about what
 // they've stored and done. Backed by GET /api/admin/users/:id/detail.
 export type UserDetail = {

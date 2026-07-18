@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { ArrowCounterClockwiseIcon, MagnifyingGlassMinusIcon, MagnifyingGlassPlusIcon, UploadSimpleIcon } from "@phosphor-icons/react"
-import { useNavigate, useParams } from "react-router-dom"
+import { Link, useNavigate, useParams } from "react-router-dom"
 import { useDrive, ZOOM_MIN, ZOOM_MAX, ZOOM_DEFAULT } from "@/store/drive"
 import { Sidebar } from "@/components/Sidebar"
 import { SidebarToggle } from "@/components/SidebarToggle"
@@ -222,9 +222,13 @@ export function DrivePage() {
           </div>
           <div className="flex items-center gap-3">
             {folder?.spaceId && (
-              <span className="bg-accent text-accent-foreground rounded-full px-2 py-0.5 text-xs">
+              <Link
+                to={`/spaces/${folder.spaceId}`}
+                className="bg-accent text-accent-foreground hover:opacity-80 rounded-full px-2 py-0.5 text-xs"
+                title="View space info & settings"
+              >
                 shared space
-              </span>
+              </Link>
             )}
             {view === "grid" && (
               <div className="hidden items-center gap-2 sm:flex">

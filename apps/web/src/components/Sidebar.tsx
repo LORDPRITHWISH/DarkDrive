@@ -253,7 +253,7 @@ export function Sidebar() {
             collapsed ? (
               <Link
                 key={s.id}
-                to={`/spaces/${s.id}`}
+                to={`/drive/${s.rootFolderId}`}
                 title={s.name}
                 className="flex justify-center rounded-md py-1.5 hover:bg-accent/60"
               >
@@ -265,7 +265,7 @@ export function Sidebar() {
                 className="group/space flex items-center rounded-md hover:bg-accent/60"
               >
                 <Link
-                  to={`/spaces/${s.id}`}
+                  to={`/drive/${s.rootFolderId}`}
                   className="flex min-w-0 flex-1 items-center gap-2 truncate px-2 py-1.5 text-sm text-muted-foreground hover:text-foreground"
                   title={s.name}
                 >

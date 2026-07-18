@@ -41,6 +41,13 @@ const logoUpload = multer({
 // no separate ADMIN member role.
 const MemberRole = z.enum(["VIEWER", "EDITOR"])
 
+// Settings/membership actions (rename, delete, invites, roster) are
+// owner-only — except system admins, who get the same override here as
+// they get for moderation elsewhere (recycle bin, user accounts).
+function canManageSpace(space: { ownerId: string }, user: { id: string; role: string }) {
+  return space.ownerId === user.id || user.role === "ADMIN"
+}
+
 // Owners aren't stored in SpaceMember — they're identified by Space.ownerId.
 // For the UI we synthesize a member row at response time so the list renders
 // cleanly.
@@ -166,7 +173,8 @@ spacesRouter.get("/:id/overview", async (req, res) => {
   if (!space) return res.status(404).json({ error: "not_found" })
   const isOwner = space.ownerId === user.id
   const isMember = space.members.some((m) => m.userId === user.id)
-  if (!isOwner && !isMember && !space.isPublic)
+  // System admins can view any space, same read-only bypass as folders/files.
+  if (!isOwner && !isMember && !space.isPublic && user.role !== "ADMIN")
     return res.status(403).json({ error: "forbidden" })
 
   // Folders that belong to the space (root included — filtered out of the
@@ -287,7 +295,7 @@ spacesRouter.patch("/:id", async (req, res) => {
     .parse(req.body)
   const space = await prisma.space.findUnique({ where: { id: req.params.id } })
   if (!space) return res.status(404).json({ error: "not_found" })
-  if (space.ownerId !== user.id)
+  if (!canManageSpace(space, user))
     return res.status(403).json({ error: "forbidden" })
   const updated = await prisma.space.update({
     where: { id: space.id },
@@ -429,7 +437,7 @@ spacesRouter.post("/:id/members", async (req, res) => {
     where: { id: req.params.id },
   })
   if (!space) return res.status(404).json({ error: "not_found" })
-  if (space.ownerId !== user.id)
+  if (!canManageSpace(space, user))
     return res.status(403).json({ error: "forbidden" })
   const target = await prisma.user.findUnique({ where: { email } })
   if (!target) return res.status(404).json({ error: "user_not_found" })
@@ -467,7 +475,7 @@ spacesRouter.patch("/:id/members/:userId", async (req, res) => {
     where: { id: req.params.id },
   })
   if (!space) return res.status(404).json({ error: "not_found" })
-  if (space.ownerId !== user.id)
+  if (!canManageSpace(space, user))
     return res.status(403).json({ error: "forbidden" })
   if (req.params.userId === space.ownerId)
     return res.status(400).json({ error: "cannot_modify_owner" })
@@ -496,7 +504,7 @@ spacesRouter.post("/:id/members/:userId/deny-editor", async (req, res) => {
   const user = currentUser(req)
   const space = await prisma.space.findUnique({ where: { id: req.params.id } })
   if (!space) return res.status(404).json({ error: "not_found" })
-  if (space.ownerId !== user.id) return res.status(403).json({ error: "forbidden" })
+  if (!canManageSpace(space, user)) return res.status(403).json({ error: "forbidden" })
   const m = await prisma.spaceMember
     .update({
       where: { spaceId_userId: { spaceId: space.id, userId: req.params.userId } },
@@ -517,7 +525,7 @@ spacesRouter.delete("/:id/members/:userId", async (req, res) => {
     where: { id: req.params.id },
   })
   if (!space) return res.status(404).json({ error: "not_found" })
-  if (space.ownerId !== user.id)
+  if (!canManageSpace(space, user))
     return res.status(403).json({ error: "forbidden" })
   if (req.params.userId === space.ownerId)
     return res.status(400).json({ error: "cannot_remove_owner" })
@@ -545,7 +553,7 @@ spacesRouter.post("/:id/invites", async (req, res) => {
     .parse(req.body)
   const space = await prisma.space.findUnique({ where: { id: req.params.id } })
   if (!space) return res.status(404).json({ error: "not_found" })
-  if (space.ownerId !== user.id) return res.status(403).json({ error: "forbidden" })
+  if (!canManageSpace(space, user)) return res.status(403).json({ error: "forbidden" })
   const invite = await prisma.spaceInvite.create({
     data: {
       spaceId: space.id,
@@ -564,7 +572,7 @@ spacesRouter.get("/:id/invites", async (req, res) => {
   const user = currentUser(req)
   const space = await prisma.space.findUnique({ where: { id: req.params.id } })
   if (!space) return res.status(404).json({ error: "not_found" })
-  if (space.ownerId !== user.id) return res.status(403).json({ error: "forbidden" })
+  if (!canManageSpace(space, user)) return res.status(403).json({ error: "forbidden" })
   const invites = await prisma.spaceInvite.findMany({
     where: { spaceId: space.id },
     orderBy: { createdAt: "desc" },
@@ -576,7 +584,7 @@ spacesRouter.delete("/:id/invites/:inviteId", async (req, res) => {
   const user = currentUser(req)
   const space = await prisma.space.findUnique({ where: { id: req.params.id } })
   if (!space) return res.status(404).json({ error: "not_found" })
-  if (space.ownerId !== user.id) return res.status(403).json({ error: "forbidden" })
+  if (!canManageSpace(space, user)) return res.status(403).json({ error: "forbidden" })
   await prisma.spaceInvite.deleteMany({
     where: { id: req.params.inviteId, spaceId: space.id },
   })
@@ -618,7 +626,7 @@ spacesRouter.delete("/:id", async (req, res) => {
   const user = currentUser(req)
   const space = await prisma.space.findUnique({ where: { id: req.params.id } })
   if (!space) return res.status(404).json({ error: "not_found" })
-  if (space.ownerId !== user.id) return res.status(403).json({ error: "forbidden" })
+  if (!canManageSpace(space, user)) return res.status(403).json({ error: "forbidden" })
   await prisma.space.delete({ where: { id: space.id } })
   res.json({ ok: true })
 })

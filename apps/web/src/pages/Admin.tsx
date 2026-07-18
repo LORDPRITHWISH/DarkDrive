@@ -10,7 +10,7 @@ import { SidebarToggle } from "@/components/SidebarToggle"
 import { HeaderActions } from "@/components/HeaderActions"
 import { apiGet, apiJson } from "@/lib/api"
 import { useAuth } from "@/store/auth"
-import type { AdminStats, AdminUser } from "@/lib/types"
+import type { AdminStats, AdminUser, AdminSpace } from "@/lib/types"
 import { StatCards } from "./admin/StatCards"
 import { UserGrowth } from "./admin/UserGrowth"
 import { StoragePanel } from "./admin/StoragePanel"
@@ -26,22 +26,26 @@ import { RecentActivity } from "./admin/RecentActivity"
 import { RecentLogins } from "./admin/RecentLogins"
 import { UsersTable } from "./admin/UsersTable"
 import { UpgradeRequests } from "./admin/UpgradeRequests"
+import { SpacesPanel } from "./admin/SpacesPanel"
 
 export function AdminPage() {
   const me = useAuth((s) => s.user)
   const [users, setUsers] = useState<AdminUser[]>([])
+  const [spaces, setSpaces] = useState<AdminSpace[]>([])
   const [stats, setStats] = useState<AdminStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
 
   async function reload() {
     try {
-      const [s, u] = await Promise.all([
+      const [s, u, sp] = await Promise.all([
         apiGet<AdminStats>("/api/admin/stats"),
         apiGet<{ users: AdminUser[] }>("/api/admin/users"),
+        apiGet<{ spaces: AdminSpace[] }>("/api/admin/spaces"),
       ])
       setStats(s)
       setUsers(u.users)
+      setSpaces(sp.spaces)
       setErr(null)
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : "failed")
@@ -91,7 +95,13 @@ export function AdminPage() {
           ) : err ? (
             <div className="text-destructive text-sm">{err}</div>
           ) : stats ? (
-            <Dashboard stats={stats} users={users} meId={me?.id} onUpdate={updateUser} />
+            <Dashboard
+              stats={stats}
+              users={users}
+              spaces={spaces}
+              meId={me?.id}
+              onUpdate={updateUser}
+            />
           ) : null}
         </div>
       </main>
@@ -102,11 +112,13 @@ export function AdminPage() {
 function Dashboard({
   stats,
   users,
+  spaces,
   meId,
   onUpdate,
 }: {
   stats: AdminStats
   users: AdminUser[]
+  spaces: AdminSpace[]
   meId?: string
   onUpdate: (id: string, patch: Record<string, unknown>) => void | Promise<void>
 }) {
@@ -126,6 +138,7 @@ function Dashboard({
               </span>
             )}
           </TabsTrigger>
+          <TabsTrigger value="spaces">Spaces</TabsTrigger>
           <TabsTrigger value="activity">Activity</TabsTrigger>
           <TabsTrigger value="server">Server</TabsTrigger>
           <TabsTrigger value="users">Users</TabsTrigger>
@@ -159,6 +172,10 @@ function Dashboard({
             <LargestFiles stats={stats} />
             <DuplicatesList stats={stats} />
           </div>
+        </TabsContent>
+
+        <TabsContent value="spaces">
+          <SpacesPanel spaces={spaces} />
         </TabsContent>
 
         <TabsContent value="recycle-bin">

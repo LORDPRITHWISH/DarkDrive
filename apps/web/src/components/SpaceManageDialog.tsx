@@ -95,7 +95,7 @@ export function SpaceManageDialog({
 }) {
   const me = useAuth((s) => s.user)
   const {
-    addMember,
+    addMember, 
     updateMemberRole,
     removeMember,
     deleteSpace,
@@ -123,7 +123,9 @@ export function SpaceManageDialog({
   const [inviteBusy, setInviteBusy] = useState(false)
 
   const spaceId = space?.id
-  const iAmOwner = space?.ownerId === me?.id
+  // Admins get the same manage view as the owner — matches the backend's
+  // canManageSpace override in apps/api/src/routes/spaces.ts.
+  const iAmOwner = space?.ownerId === me?.id || me?.role === "ADMIN"
   useEffect(() => {
     if (!spaceId) return
     setEmail("")

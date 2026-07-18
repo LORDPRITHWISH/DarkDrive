@@ -136,7 +136,7 @@ function SpaceCard({
   return (
     <div className="group bg-card hover:border-primary/60 relative flex items-center gap-3 rounded-xl border p-3 transition-colors">
       <Link
-        to={`/spaces/${space.id}`}
+        to={`/drive/${space.rootFolderId}`}
         className="flex min-w-0 flex-1 items-center gap-3"
       >
         <SpaceLogo space={space} size={40} className="shrink-0" />

@@ -74,6 +74,8 @@ export function SpacePage() {
 
   const space = storeSpace ?? data?.space ?? null
   const isOwner = !!space && space.ownerId === me?.id
+  // Admins can edit/manage any space, same override the backend grants.
+  const canManage = isOwner || me?.role === "ADMIN"
   const isMember = !!data && data.space.members.some((m) => m.userId === me?.id)
   const isJoinedNonOwner = isMember && !isOwner
   const owner = data?.space.members.find((m) => m.userId === data.space.ownerId)
@@ -293,7 +295,7 @@ export function SpacePage() {
                         Leave
                       </Button>
                     )}
-                    {isOwner && (
+                    {canManage && (
                       <Button
                         size="sm"
                         variant="outline"
@@ -466,7 +468,7 @@ export function SpacePage() {
               void load()
             }}
           />
-          {isOwner && (
+          {canManage && (
             <SpaceEditorDialog
               mode={editOpen ? { kind: "edit", space } : null}
               onClose={() => {

@@ -444,6 +444,33 @@ adminRouter.get("/stats", async (_req, res) => {
   })
 })
 
+// Every space on the instance, regardless of ownership/membership — powers
+// the admin "Spaces" tab so moderation isn't limited to spaces the admin
+// happens to belong to.
+adminRouter.get("/spaces", async (_req, res) => {
+  const spaces = await prisma.space.findMany({
+    orderBy: { createdAt: "desc" },
+    include: { owner: true, _count: { select: { members: true } } },
+  })
+  res.json({
+    spaces: spaces.map((s) => ({
+      id: s.id,
+      name: s.name,
+      color: s.color,
+      logoKey: s.logoKey,
+      icon: s.icon,
+      rootFolderId: s.rootFolderId,
+      ownerId: s.ownerId,
+      ownerName: s.owner?.name ?? null,
+      ownerEmail: s.owner?.email ?? null,
+      isPublic: s.isPublic,
+      // +1 for the owner, who has no SpaceMember row.
+      memberCount: s._count.members + 1,
+      createdAt: s.createdAt,
+    })),
+  })
+})
+
 adminRouter.get("/users", async (_req, res) => {
   const users = await prisma.user.findMany({
     orderBy: { createdAt: "desc" },

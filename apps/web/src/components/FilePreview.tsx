@@ -5,6 +5,7 @@ import { apiUrl } from "@/lib/config"
 import { apiGet } from "@/lib/api"
 import { formatBytes, formatDate } from "@/lib/format"
 import { DarkPlayer } from "./player"
+import { AudioPlayer } from "@/components/AudioPlayer"
 
 const LazyPdfViewer = lazy(async () => {
   const module = await import("@/components/PdfViewer")
@@ -500,9 +501,7 @@ export function FileViewer({
   }
   if (mime.startsWith("audio/")) {
     return (
-      <div className="flex w-md max-w-[80vw] items-center justify-center p-8">
-        <audio src={src} controls className="w-full" />
-      </div>
+      <AudioPlayer src={src} name={file.name} />
     )
   }
   if (isPdfFile(mime, file.name)) {

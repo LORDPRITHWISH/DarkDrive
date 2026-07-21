@@ -278,3 +278,79 @@
 .animate-pdf-page-flip-right {
   animation: pdf-page-flip-right 380ms cubic-bezier(0.22, 1, 0.36, 1);
 }
+
+/* ---- App-shell feel (touch / installed PWA) ----
+   These are what separate "website in a window" from "app": no rubber-band
+   scroll past the edges, no blue tap flash, no accidental text selection when
+   you long-press a file card, and content that clears the notch / home bar. */
+@media (pointer: coarse) {
+  html,
+  body {
+    overscroll-behavior-y: none; /* kills pull-to-refresh + bounce */
+  }
+  body {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    user-select: none; /* re-enabled per-element below */
+  }
+  /* Text people actually need to select or edit stays selectable. */
+  input,
+  textarea,
+  [contenteditable],
+  .selectable {
+    user-select: text;
+    -webkit-touch-callout: default;
+  }
+  /* Hover styles latch on after a tap on touch devices — a card stays "lit"
+     until you tap elsewhere, which reads as broken. Only apply them where a
+     real pointer exists. */
+  @media (hover: none) {
+    .hover\:bg-accent:hover {
+      background-color: transparent;
+    }
+  }
+}
+
+/* Safe-area helpers for the notch and the home indicator. */
+.pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.h-safe-bottom {
+  height: env(safe-area-inset-bottom);
+}
+
+/* The mobile tab bar is fixed, so it would sit on top of the last row of
+   files. Every page that renders it wraps content in <main>, so reserving the
+   space here covers all of them without touching each page. */
+@media (max-width: 767px) {
+  main {
+    padding-bottom: calc(3.25rem + env(safe-area-inset-bottom));
+  }
+}
+
+/* Window Controls Overlay (installed app on Windows/Linux): the browser hands
+   us the title bar strip and only reserves the min/max/close buttons. Every
+   page that gets one wraps its top row in <header>, so — same trick as <main>
+   above — one rule turns them all into a real draggable title bar. */
+@media (display-mode: window-controls-overlay) {
+  header {
+    app-region: drag;
+    -webkit-app-region: drag;
+    padding-left: env(titlebar-area-x, 0px);
+    padding-right: calc(
+      100vw - env(titlebar-area-width, 100vw) - env(titlebar-area-x, 0px)
+    );
+  }
+  /* Anything clickable has to opt back out, or dragging eats the click. */
+  header button,
+  header a,
+  header input,
+  header select,
+  header [role="button"] {
+    app-region: no-drag;
+    -webkit-app-region: no-drag;
+  }
+}

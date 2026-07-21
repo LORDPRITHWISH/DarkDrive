@@ -21,6 +21,7 @@ import { HomePage } from "@/pages/Home"
 import { BinPage } from "@/pages/Bin"
 import { LandingPage } from "@/pages/Landing"
 import { StarredPage } from "@/pages/Starred"
+import { ShareTargetPage } from "@/pages/ShareTarget"
 import { UploadToaster } from "@/components/UploadToaster"
 import { Toaster } from "@/components/Toaster"
 import { getSocket } from "@/lib/socket"
@@ -30,9 +31,11 @@ import type { AppNotification } from "@/lib/types"
 
 // Login is a hard server/page redirect (Google OAuth callback, dev-login),
 // so a normal router return-URL doesn't survive it. We stash the path in
-// localStorage instead — only for /invite links, the one case where landing
-// back on /home after login would silently drop what the user came to do.
+// localStorage instead — for the cases where landing back on /home after login
+// would silently drop what the user came to do: /invite links, and /share-target
+// (files are already parked in the SW cache and would otherwise be stranded).
 const RETURN_TO_KEY = "dd.returnTo"
+const RETURN_TO_PATHS = ["/invite/", "/share-target"]
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, loading, fetchMe } = useAuth()
@@ -44,7 +47,7 @@ function Protected({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (loading) return
     if (!user) {
-      if (loc.pathname.startsWith("/invite/")) {
+      if (RETURN_TO_PATHS.some((p) => loc.pathname.startsWith(p))) {
         localStorage.setItem(RETURN_TO_KEY, loc.pathname)
       }
       return
@@ -166,6 +169,14 @@ export function App() {
           element={
             <Protected>
               <BinPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/share-target"
+          element={
+            <Protected>
+              <ShareTargetPage />
             </Protected>
           }
         />

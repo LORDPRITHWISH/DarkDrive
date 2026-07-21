@@ -35,6 +35,9 @@
     "globals": "^17.2.0",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.54.0",
-    "vite": "^7.3.2"
+    "vite": "^7.3.2",
+    "vite-plugin-pwa": "^1.3.0",
+    "workbox-precaching": "^7.4.1",
+    "workbox-routing": "^7.4.1"
   }
 }

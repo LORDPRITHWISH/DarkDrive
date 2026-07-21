@@ -29,5 +29,9 @@
       "@workspace/ui/*": ["../../packages/ui/src/*"]
     }
   },
-  "include": ["src"]
+  "include": ["src"],
+  // Node self-check scripts, not shipped app code — they pull in node: builtins
+  // the app tsconfig has no types for. Run with:
+  //   node --experimental-strip-types src/lib/shareInbox.test.ts
+  "exclude": ["src/**/*.test.ts"]
 }

@@ -27,6 +27,7 @@ import { useSidebar } from "@/store/sidebar"
 import { formatBytes } from "@/lib/format"
 import { Button } from "@workspace/ui/components/button"
 import { ThemeToggle } from "@/components/ThemeToggle"
+import { MobileTabBar } from "@/components/MobileTabBar"
 
 export function Sidebar() {
   const user = useAuth((s) => s.user)
@@ -382,6 +383,8 @@ export function Sidebar() {
         </Button>
       </div>
       </aside>
+
+      <MobileTabBar />
 
       {/* Rendered outside <aside> — it has a transform (translate-x-*) for
           the mobile slide-in, which would otherwise scope these dialogs'

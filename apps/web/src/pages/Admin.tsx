@@ -85,7 +85,7 @@ export function AdminPage() {
             </div>
           )}
           <div className="flex items-center gap-1">
-            <HeaderActions />
+            <HeaderActions onReload={() => void reload()} />
           </div>
         </header>
 

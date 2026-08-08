@@ -127,7 +127,7 @@ export function RecentPage() {
             >
               <SquaresFourIcon size={16} />
             </Button>
-            <HeaderActions />
+            <HeaderActions onReload={() => void loadRecent(100)} />
           </div>
         </header>
         <div className="flex items-center gap-2 overflow-x-auto border-b px-4 py-3 md:px-6">

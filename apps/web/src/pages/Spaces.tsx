@@ -27,10 +27,14 @@ export function SpacesPage() {
   const [creating, setCreating] = useState(false)
   const [joining, setJoining] = useState(false)
 
-  useEffect(() => {
+  function reload() {
     void loadSpaces()
     void loadPublicSpaces()
-  }, [loadSpaces, loadPublicSpaces])
+  }
+
+  useEffect(() => {
+    reload()
+  }, [])
 
   const filtered = useMemo(() => {
     const query = q.trim().toLowerCase()
@@ -54,7 +58,7 @@ export function SpacesPage() {
           <SidebarToggle />
           <div className="text-sm font-semibold">Spaces</div>
           <div className="ml-auto flex items-center gap-1">
-            <HeaderActions />
+            <HeaderActions onReload={reload} />
           </div>
         </header>
 

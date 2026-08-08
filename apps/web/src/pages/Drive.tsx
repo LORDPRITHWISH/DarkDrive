@@ -272,7 +272,7 @@ export function DrivePage() {
               </div>
             )}
             <div className="flex items-center gap-1">
-              <HeaderActions />
+              <HeaderActions onReload={() => folderId && loadFolder(folderId)} />
             </div>
           </div>
         </header>

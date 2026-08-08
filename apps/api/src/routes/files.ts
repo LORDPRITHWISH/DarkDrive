@@ -25,6 +25,8 @@ import { streamStoredFile } from "../lib/stream.js"
 import { listSubtitleSiblings, isSubtitleFile, toVtt } from "../lib/subtitles.js"
 import { canThumbnail, generateThumbnail, queueThumbnail } from "../lib/thumbnails.js"
 import { maybeNotifyQuotaNearLimit } from "../lib/notify.js"
+import { importUrlToFile } from "../lib/urlImport.js"
+import { getIO } from "../realtime/socket.js"
 
 export const filesRouter = Router()
 
@@ -55,6 +57,10 @@ type UploadSession = {
 // restart — acceptable trade-off for the simpler implementation, and matches
 // the pre-chunking behavior (a single POST also fails on restart).
 const sessions = new Map<string, UploadSession>()
+// Caps concurrent URL imports per user so one user can't tie up unbounded
+// outbound bandwidth/connections on the server.
+const MAX_CONCURRENT_IMPORTS = 2
+const importsInFlight = new Map<string, number>()
 const PREVIEW_TTL_MS = 60 * 60 * 1000
 
 setInterval(() => {
@@ -388,6 +394,129 @@ filesRouter.delete("/upload/:uploadId", async (req, res) => {
     sessions.delete(req.params.uploadId)
   }
   res.json({ ok: true })
+})
+
+// Fetch a URL server-side and land it in the drive as a file — the "import
+// from the web" counterpart to /upload. Mirrors the upload/complete flow
+// below (quota check, File row, thumbnail kick-off) but sources bytes from
+// an HTTP(S) response instead of assembled chunks.
+filesRouter.post("/import-url", async (req, res) => {
+  const user = currentUser(req)
+  const body = z
+    .object({
+      folderId: z.string(),
+      url: z.string().url(),
+      name: z.string().min(1).max(255).optional(),
+      // Echoed back on progress events so the client can match them to the
+      // right upload-toaster entry — opaque to the server otherwise.
+      clientId: z.string().max(100).optional(),
+    })
+    .parse(req.body)
+
+  let parsedUrl: URL
+  try {
+    parsedUrl = new URL(body.url)
+  } catch {
+    return res.status(400).json({ error: "invalid_url" })
+  }
+  if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:")
+    return res.status(400).json({ error: "invalid_url" })
+
+  const folder = await getFolderWithAccess(user.id, body.folderId, "write")
+  if (!folder) return res.status(403).json({ error: "forbidden" })
+
+  const inFlight = importsInFlight.get(user.id) ?? 0
+  if (inFlight >= MAX_CONCURRENT_IMPORTS)
+    return res.status(429).json({ error: "too_many_imports" })
+  importsInFlight.set(user.id, inFlight + 1)
+
+  try {
+    const used = await prisma.file.aggregate({
+      _sum: { size: true },
+      where: { ownerId: user.id, isTrashed: false },
+    })
+    const quota = user.storageQuotaBytes ?? BigInt(0)
+    const usedBytes = BigInt(used._sum.size ?? BigInt(0))
+    const remaining = quota - usedBytes
+    if (remaining <= BigInt(0)) return res.status(413).json({ error: "quota_exceeded" })
+    const maxBytes = Math.min(env.MAX_UPLOAD_MB * 1024 * 1024, Number(remaining))
+
+    const fallbackName = decodeURIComponent(path.basename(parsedUrl.pathname)) || "download"
+    const name = (body.name?.trim() || fallbackName).slice(0, 255)
+    const key = newStorageKey(name)
+    const dest = ensureDirFor(key)
+
+    let result: { size: number; mimeType: string | null }
+    try {
+      result = await importUrlToFile(body.url, dest, {
+        maxBytes,
+        onProgress: body.clientId
+          ? (received, total) =>
+              getIO()
+                ?.to(`user:${user.id}`)
+                .emit("import:progress", { clientId: body.clientId, received, total })
+          : undefined,
+      })
+    } catch (err: any) {
+      try {
+        fs.unlinkSync(dest)
+      } catch {}
+      const msg = err?.message ?? "import_failed"
+      if (msg === "too_large") return res.status(413).json({ error: "too_large" })
+      if (msg === "blocked_address") return res.status(400).json({ error: "url_not_allowed" })
+      return res.status(502).json({ error: "fetch_failed" })
+    }
+
+    // Re-check quota with the authoritative downloaded size — mirrors the
+    // race guard in upload/complete above.
+    const used2 = await prisma.file.aggregate({
+      _sum: { size: true },
+      where: { ownerId: user.id, isTrashed: false },
+    })
+    const usedBytes2 = BigInt(used2._sum.size ?? BigInt(0))
+    if (usedBytes2 + BigInt(result.size) > quota) {
+      try {
+        fs.unlinkSync(dest)
+      } catch {}
+      return res.status(413).json({ error: "quota_exceeded" })
+    }
+
+    const mimeType = result.mimeType || mime.lookup(name) || "application/octet-stream"
+    const intoSharedSpace = !!folder.spaceId
+    const primaryFolderId = intoSharedSpace
+      ? await assertUserRootFolderId(user)
+      : folder.id
+    const primarySpaceId = intoSharedSpace ? null : folder.spaceId
+
+    const rec = await prisma.$transaction(async (tx) => {
+      const file = await tx.file.create({
+        data: {
+          name,
+          folderId: primaryFolderId,
+          ownerId: user.id,
+          spaceId: primarySpaceId,
+          size: BigInt(result.size),
+          mimeType,
+          storageKey: key,
+        },
+      })
+      if (intoSharedSpace) {
+        await tx.fileShortcut.create({
+          data: { fileId: file.id, folderId: folder.id },
+        })
+      }
+      return file
+    })
+
+    queueThumbnail(rec.id)
+    void maybeNotifyQuotaNearLimit(user.id, usedBytes2 + BigInt(result.size), quota)
+
+    res.status(201).json({ file: { ...rec, size: Number(rec.size) } })
+  } finally {
+    const n = (importsInFlight.get(user.id) ?? 1) - 1
+    if (n <= 0) importsInFlight.delete(user.id)
+    else importsInFlight.set(user.id, n)
+  }
 })
 
 // Create a shortcut of a file into another folder (e.g. add to space).

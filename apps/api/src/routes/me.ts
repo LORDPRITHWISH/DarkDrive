@@ -302,6 +302,24 @@ meRouter.get("/recently-added", async (req, res) => {
   res.json({ files: files.map((f) => ({ ...f, size: Number(f.size) })) })
 })
 
+// Every file owned by the user, newest first — a straightforward history of
+// what they've uploaded, paged by cursor since it only grows over time.
+meRouter.get("/uploads", async (req, res) => {
+  const user = currentUser(req)
+  const limit = Math.min(parseInt(String(req.query.limit ?? "50"), 10) || 50, 200)
+  const cursor = typeof req.query.cursor === "string" ? req.query.cursor : undefined
+  const files = await prisma.file.findMany({
+    where: { ownerId: user.id, isTrashed: false },
+    orderBy: { createdAt: "desc" },
+    take: limit,
+    ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+  })
+  res.json({
+    files: files.map((f) => ({ ...f, size: Number(f.size) })),
+    nextCursor: files.length === limit ? files[files.length - 1].id : null,
+  })
+})
+
 meRouter.get("/folder-suggestions", async (req, res) => {
   const user = currentUser(req)
   const limit = Math.min(parseInt(String(req.query.limit ?? "8"), 10) || 8, 30)

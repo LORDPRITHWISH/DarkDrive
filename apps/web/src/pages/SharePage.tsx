@@ -64,15 +64,20 @@ type Resolved =
       files: FileItem[]
     }
 
-function shareInlineUrl(token: string, fileId?: string) {
+function shareInlineUrl(token: string, fileId?: string, password?: string) {
+  const params = new URLSearchParams({ inline: "1" })
+  if (password) params.set("password", password)
   return apiUrl(
-    `/api/shares/${token}/download${fileId ? `/${fileId}` : ""}?inline=1`
+    `/api/shares/${token}/download${fileId ? `/${fileId}` : ""}?${params}`
   )
 }
 
-function shareDownloadUrl(token: string, fileId?: string) {
+function shareDownloadUrl(token: string, fileId?: string, password?: string) {
+  const params = new URLSearchParams()
+  if (password) params.set("password", password)
+  const qs = params.toString()
   return apiUrl(
-    `/api/shares/${token}/download${fileId ? `/${fileId}` : ""}`
+    `/api/shares/${token}/download${fileId ? `/${fileId}` : ""}${qs ? `?${qs}` : ""}`
   )
 }
 
@@ -159,14 +164,14 @@ export function SharePage() {
               </div>
             </div>
             <a
-              href={shareDownloadUrl(token!)}
+              href={shareDownloadUrl(token!, undefined, password)}
               className="bg-primary text-primary-foreground hover:bg-primary/80 inline-flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium"
             >
               <DownloadIcon size={14} /> Download
             </a>
           </div>
           <div className="bg-muted grid min-h-0 flex-1 place-items-center overflow-hidden rounded-xl border">
-            <FileViewer file={f} src={shareInlineUrl(token!)} layout="fill" />
+            <FileViewer file={f} src={shareInlineUrl(token!, undefined, password)} layout="fill" />
           </div>
         </div>
       </ShareShell>
@@ -208,7 +213,7 @@ export function SharePage() {
               <div className="bg-muted grid aspect-4/3 place-items-center overflow-hidden">
                 {isImg ? (
                   <img
-                    src={shareInlineUrl(token!, f.id)}
+                    src={shareInlineUrl(token!, f.id, password)}
                     alt=""
                     className="h-full w-full object-cover"
                     loading="lazy"
@@ -235,6 +240,7 @@ export function SharePage() {
         <SharedFileModal
           file={preview}
           token={token!}
+          password={password}
           onClose={() => setPreview(null)}
         />
       )}
@@ -246,17 +252,19 @@ export function SharePage() {
 function SharedFileModal({
   file,
   token,
+  password,
   onClose,
 }: {
   file: FileItem
   token: string
+  password: string
   onClose: () => void
 }) {
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="flex max-h-[90vh] w-full max-w-[95vw] gap-0 overflow-hidden p-0 sm:max-w-[95vw]">
         <div className="bg-muted flex min-w-0 items-center justify-center overflow-hidden">
-          <FileViewer file={file} src={shareInlineUrl(token, file.id)} />
+          <FileViewer file={file} src={shareInlineUrl(token, file.id, password)} />
         </div>
         <aside className="flex w-72 shrink-0 flex-col gap-3 overflow-auto border-l p-4">
           <div className="flex items-start justify-between gap-2">
@@ -268,7 +276,7 @@ function SharedFileModal({
             </DialogTitle>
           </div>
           <a
-            href={shareDownloadUrl(token, file.id)}
+            href={shareDownloadUrl(token, file.id, password)}
             className="text-primary inline-flex items-center gap-1.5 text-sm hover:underline"
           >
             <DownloadIcon size={14} /> Download

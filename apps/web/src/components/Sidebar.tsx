@@ -12,6 +12,7 @@ import {
   TrashIcon,
   PushPinSlashIcon,
   UploadIcon,
+  UploadSimpleIcon,
   GlobeIcon,
   MagnifyingGlassIcon,
   XIcon,
@@ -219,6 +220,7 @@ export function Sidebar() {
         {navItem("/spaces", "Spaces", <UsersThreeIcon size={18} />)}
         {navItem("/search", "Search", <MagnifyingGlassIcon size={18} />)}
         {navItem("/recent", "Recent", <ClockCounterClockwiseIcon size={18} />)}
+        {navItem("/uploads", "Uploads", <UploadSimpleIcon size={18} />)}
         {navItem("/starred", "Starred", <StarIcon size={18} />)}
         {navItem("/bin", "Bin", <TrashIcon size={18} />)}
         {user?.role === "ADMIN" &&

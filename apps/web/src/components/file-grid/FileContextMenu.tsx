@@ -3,6 +3,7 @@ import {
   DownloadIcon,
   EyeIcon as OpenEyeIcon,
   EyeSlashIcon,
+  FileZipIcon,
   InfoIcon,
   LinkBreakIcon,
   PencilSimpleIcon,
@@ -26,6 +27,7 @@ type Props = {
   menu: MenuPos
   onOpen: () => void
   onProperties: () => void
+  onExtract: () => void
   onDownload: () => void
   onRename: () => void
   onMove: () => void
@@ -42,6 +44,7 @@ export function FileContextMenu({
   menu,
   onOpen,
   onProperties,
+  onExtract,
   onDownload,
   onRename,
   onMove,
@@ -54,6 +57,7 @@ export function FileContextMenu({
   onAddToSpace,
 }: Props) {
   const isShortcut = !!menu.shortcutId
+  const isZip = menu.type === "file" && /\.zip$/i.test(menu.name)
   return (
     <ul
       className="bg-popover text-popover-foreground fixed z-50 w-56 rounded-md border p-1 text-sm shadow-lg"
@@ -68,6 +72,11 @@ export function FileContextMenu({
           <MenuItem icon={<InfoIcon size={16} />} onClick={onProperties}>
             Properties
           </MenuItem>
+          {isZip && (
+            <MenuItem icon={<FileZipIcon size={16} />} onClick={onExtract}>
+              Extract here
+            </MenuItem>
+          )}
         </>
       )}
       {menu.type === "folder" && !isShortcut && (

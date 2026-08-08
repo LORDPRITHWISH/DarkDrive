@@ -15,6 +15,7 @@ import { SpacesPage } from "@/pages/Spaces"
 import { InvitePage } from "@/pages/Invite"
 import { SharePage } from "@/pages/SharePage"
 import { RecentPage } from "@/pages/Recent"
+import { UploadHistoryPage } from "@/pages/UploadHistory"
 import { SearchPage } from "@/pages/Search"
 import { AdminPage } from "@/pages/Admin"
 import { HomePage } from "@/pages/Home"
@@ -150,6 +151,14 @@ export function App() {
           element={
             <Protected>
               <RecentPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/uploads"
+          element={
+            <Protected>
+              <UploadHistoryPage />
             </Protected>
           }
         />

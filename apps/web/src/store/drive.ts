@@ -214,6 +214,7 @@ type DriveState = {
   renameFolder: (id: string, name: string) => Promise<void>
   recolorFolder: (id: string, color: string | null) => Promise<void>
   renameFile: (id: string, name: string) => Promise<void>
+  extractZip: (id: string, name: string) => Promise<void>
   toggleHiddenItem: (type: "folder" | "file", id: string) => Promise<void>
   toggleStarred: (type: "folder" | "file", id: string) => Promise<void>
   trashItem: (type: "folder" | "file", id: string) => Promise<void>
@@ -386,6 +387,24 @@ export const useDrive = create<DriveState>((set, get) => ({
   renameFile: async (id, name) => {
     await apiJson(`/api/files/${id}`, "PATCH", { name })
     await get().refresh()
+  },
+  extractZip: async (id, name) => {
+    const folderId = get().currentFolderId
+    if (!folderId) return
+    try {
+      await apiJson(`/api/files/${id}/extract`, "POST", { folderId })
+      await get().refresh()
+      toast.success(`Extracted "${name}".`)
+    } catch (e: any) {
+      toast.error(
+        e?.body?.error === "quota_exceeded"
+          ? "Out of storage — request an upgrade from the sidebar."
+          : e instanceof Error
+            ? e.message
+            : "Couldn't extract zip."
+      )
+      throw e
+    }
   },
   toggleHiddenItem: async (type, id) => {
     const list = type === "folder" ? get().folders : get().files
@@ -630,11 +649,11 @@ export const useDrive = create<DriveState>((set, get) => ({
           ),
         })
       }
+      // clear this item 5s after it finishes, independent of the rest of the queue
+      setTimeout(() => set({ uploads: get().uploads.filter((u) => u.id !== uid) }), 5000)
     }
     await get().refresh()
     void useMe.getState().loadQuota()
-    // auto-clear after a short delay
-    setTimeout(() => set({ uploads: get().uploads.filter((u) => !u.done) }), 4000)
   },
 
   importUrl: async (url, name, explicitTargetId) => {

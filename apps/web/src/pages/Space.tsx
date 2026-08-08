@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
-import { Link, useParams } from "react-router-dom"
+import { Link, useNavigate, useParams } from "react-router-dom"
 import {
   FilesIcon,
   FolderIcon,
@@ -17,6 +17,10 @@ import {
   PushPinSlashIcon,
   UploadSimpleIcon,
   ClockIcon,
+  DotsThreeVerticalIcon,
+  ArrowSquareOutIcon,
+  LinkSimpleIcon,
+  UserSwitchIcon,
 } from "@phosphor-icons/react"
 import { useAuth } from "@/store/auth"
 import { useDrive } from "@/store/drive"
@@ -26,13 +30,24 @@ import { HeaderActions } from "@/components/HeaderActions"
 import { SpaceLogo } from "@/components/SpaceLogo"
 import { SpaceManageDialog } from "@/components/SpaceManageDialog"
 import { SpaceEditorDialog } from "@/components/SpaceEditorDialog"
+import { AddToSpaceDialog } from "@/components/AddToSpaceDialog"
+import { LinkFilesDialog } from "@/components/LinkFilesDialog"
 import { FilePreview } from "@/components/FilePreview"
 import { Button } from "@workspace/ui/components/button"
-import { apiGet } from "@/lib/api"
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@workspace/ui/components/dropdown-menu"
+import { apiGet, apiJson } from "@/lib/api"
 import { apiUrl } from "@/lib/config"
 import { iconFor } from "@/lib/fileIcon"
 import { formatBytes, formatDate, relativeTime } from "@/lib/format"
-import type { FileItem, SpaceOverview } from "@/lib/types"
+import type { FileItem, SpaceMember, SpaceOverview } from "@/lib/types"
 
 export function SpacePage() {
   const { id } = useParams()
@@ -46,6 +61,8 @@ export function SpacePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [preview, setPreview] = useState<FileItem | null>(null)
+  const [shortcutFile, setShortcutFile] = useState<FileItem | null>(null)
+  const [linkFilesOpen, setLinkFilesOpen] = useState(false)
   const [manageOpen, setManageOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -80,6 +97,8 @@ export function SpacePage() {
   const isJoinedNonOwner = isMember && !isOwner
   const owner = data?.space.members.find((m) => m.userId === data.space.ownerId)
   const myMembership = data?.space.members.find((m) => m.userId === me?.id)
+  // Same authority that already grants upload rights inside the space itself.
+  const canUpload = canManage || myMembership?.role === "EDITOR"
 
   async function handleJoin() {
     if (!id || busy) return
@@ -232,6 +251,18 @@ export function SpacePage() {
                         Browse files
                       </Button>
                     </Link>
+                    {canUpload && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="rounded-lg"
+                        onClick={() => setLinkFilesOpen(true)}
+                        title="Link files from your drive into this space"
+                      >
+                        <LinkSimpleIcon size={15} weight="bold" />
+                        Link files
+                      </Button>
+                    )}
                     {space && (
                       <Button
                         size="sm"
@@ -362,41 +393,18 @@ export function SpacePage() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-3">
-                    {data.recentFiles.map((f) => {
-                      const isImg = f.mimeType.startsWith("image/")
-                      return (
-                        <button
-                          key={f.id}
-                          onClick={() => setPreview(f)}
-                          className="bg-card hover:border-primary/60 overflow-hidden rounded-lg border text-left transition-colors"
-                        >
-                          <div className="bg-muted grid aspect-4/3 place-items-center overflow-hidden">
-                            {isImg ? (
-                              <img
-                                src={apiUrl(`/api/files/${f.id}/download?inline=1`)}
-                                alt=""
-                                className="h-full w-full object-cover"
-                                loading="lazy"
-                              />
-                            ) : (
-                              iconFor(f.mimeType, 52, f.name)
-                            )}
-                          </div>
-                          <div className="p-2">
-                            <div
-                              className="truncate text-sm font-medium"
-                              title={f.name}
-                            >
-                              {f.name}
-                            </div>
-                            <div className="text-muted-foreground flex items-center justify-between text-xs">
-                              <span>{formatBytes(f.size)}</span>
-                              <span>{relativeTime(f.createdAt)}</span>
-                            </div>
-                          </div>
-                        </button>
-                      )
-                    })}
+                    {data.recentFiles.map((f) => (
+                      <RecentFileCard
+                        key={f.id}
+                        file={f}
+                        me={me}
+                        members={data.space.members}
+                        spaceId={data.space.id}
+                        onPreview={() => setPreview(f)}
+                        onAddShortcut={() => setShortcutFile(f)}
+                        onChanged={() => void load()}
+                      />
+                    ))}
                   </div>
                 )}
               </section>
@@ -457,6 +465,23 @@ export function SpacePage() {
           items={data?.recentFiles}
           onNavigate={setPreview}
         />
+
+        <AddToSpaceDialog
+          open={!!shortcutFile}
+          items={shortcutFile ? [{ type: "file", id: shortcutFile.id }] : []}
+          displayName={shortcutFile?.name ?? ""}
+          onClose={() => setShortcutFile(null)}
+        />
+
+        {data && (
+          <LinkFilesDialog
+            open={linkFilesOpen}
+            targetFolderId={data.space.rootFolderId}
+            displayName={data.space.name}
+            onClose={() => setLinkFilesOpen(false)}
+            onLinked={() => void load()}
+          />
+        )}
       </main>
 
       {space && (
@@ -544,6 +569,131 @@ function MemberStack({
       {extra > 0 && (
         <span className="text-muted-foreground ml-2 text-xs">+{extra} more</span>
       )}
+    </div>
+  )
+}
+
+function RecentFileCard({
+  file: f,
+  me,
+  members,
+  spaceId,
+  onPreview,
+  onAddShortcut,
+  onChanged,
+}: {
+  file: FileItem
+  me: { id: string; role: "USER" | "ADMIN" } | null | undefined
+  members: SpaceMember[]
+  spaceId: string
+  onPreview: () => void
+  onAddShortcut: () => void
+  onChanged: () => void
+}) {
+  const navigate = useNavigate()
+  const [busy, setBusy] = useState(false)
+  const isImg = f.mimeType.startsWith("image/")
+  // Only the file's own owner or a system admin can jump to its home folder
+  // or reassign it — everyone else only reaches it via this space.
+  const canManage = f.ownerId === me?.id || me?.role === "ADMIN"
+  const uploader = members.find((m) => m.userId === f.ownerId)
+
+  async function changeOwner(userId: string) {
+    if (userId === f.ownerId || busy) return
+    setBusy(true)
+    try {
+      await apiJson(`/api/files/${f.id}/owner`, "PATCH", { ownerId: userId, spaceId })
+      onChanged()
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Couldn't change uploader.")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="bg-card hover:border-primary/60 group relative overflow-hidden rounded-lg border transition-colors">
+      <button onClick={onPreview} className="block w-full text-left">
+        <div className="bg-muted grid aspect-4/3 place-items-center overflow-hidden">
+          {isImg ? (
+            <img
+              src={apiUrl(`/api/files/${f.id}/download?inline=1`)}
+              alt=""
+              className="h-full w-full object-cover"
+              loading="lazy"
+            />
+          ) : (
+            iconFor(f.mimeType, 52, f.name)
+          )}
+        </div>
+        <div className="p-2">
+          <div className="truncate text-sm font-medium" title={f.name}>
+            {f.name}
+          </div>
+          <div className="text-muted-foreground flex items-center justify-between text-xs">
+            <span>{formatBytes(f.size)}</span>
+            <span>{relativeTime(f.createdAt)}</span>
+          </div>
+          {uploader && (
+            <div
+              className="text-muted-foreground mt-0.5 truncate text-[11px]"
+              title={`Uploaded by ${uploader.name}`}
+            >
+              by {uploader.name}
+            </div>
+          )}
+        </div>
+      </button>
+
+      <div
+        className="absolute right-1 top-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <button
+                className="bg-background/80 text-muted-foreground hover:text-foreground grid h-6 w-6 place-items-center rounded-md backdrop-blur"
+                title="File actions"
+              />
+            }
+          >
+            <DotsThreeVerticalIcon size={14} weight="bold" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={onAddShortcut}>
+              <LinkSimpleIcon size={14} />
+              Add shortcut…
+            </DropdownMenuItem>
+            {canManage && (
+              <DropdownMenuItem onClick={() => navigate(`/drive/${f.folderId}`)}>
+                <ArrowSquareOutIcon size={14} />
+                Go to original
+              </DropdownMenuItem>
+            )}
+            {canManage && members.length > 1 && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel>
+                  <span className="inline-flex items-center gap-1.5">
+                    <UserSwitchIcon size={12} />
+                    Uploaded by
+                  </span>
+                </DropdownMenuLabel>
+                {members.map((m) => (
+                  <DropdownMenuCheckboxItem
+                    key={m.userId}
+                    checked={m.userId === f.ownerId}
+                    onClick={() => void changeOwner(m.userId)}
+                  >
+                    {m.name}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     </div>
   )
 }

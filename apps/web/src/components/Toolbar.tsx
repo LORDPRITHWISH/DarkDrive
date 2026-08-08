@@ -14,11 +14,13 @@ import {
   CheckIcon,
   MagnifyingGlassIcon,
   LinkSimpleIcon,
+  LinkIcon,
 } from "@phosphor-icons/react"
 import { Button } from "@workspace/ui/components/button"
 import { useDrive, type SortKey } from "@/store/drive"
 import { NewFolderDialog } from "./NewFolderDialog"
 import { ImportUrlDialog } from "./ImportUrlDialog"
+import { LinkFilesDialog } from "./LinkFilesDialog"
 
 const SORT_LABELS: Record<SortKey, string> = {
   name: "Name",
@@ -33,6 +35,7 @@ export function Toolbar() {
   const folderInput = useRef<HTMLInputElement>(null)
   const [newFolderOpen, setNewFolderOpen] = useState(false)
   const [importUrlOpen, setImportUrlOpen] = useState(false)
+  const [linkFilesOpen, setLinkFilesOpen] = useState(false)
   const [sortOpen, setSortOpen] = useState(false)
   const sortRef = useRef<HTMLDivElement>(null)
   const {
@@ -46,6 +49,8 @@ export function Toolbar() {
     sort,
     setSort,
     currentFolderId,
+    folder,
+    refresh,
   } = useDrive()
 
   useEffect(() => {
@@ -108,6 +113,21 @@ export function Toolbar() {
         onClose={() => setImportUrlOpen(false)}
         onSubmit={(url, name) => importUrl(url, name)}
       />
+      {folder?.spaceId && currentFolderId && (
+        <>
+          <Button size="sm" variant="outline" onClick={() => setLinkFilesOpen(true)}>
+            <LinkIcon size={16} />
+            <span className="hidden md:inline">Link</span>
+          </Button>
+          <LinkFilesDialog
+            open={linkFilesOpen}
+            targetFolderId={currentFolderId}
+            displayName={folder.name}
+            onClose={() => setLinkFilesOpen(false)}
+            onLinked={() => void refresh()}
+          />
+        </>
+      )}
 
       <div className="ml-auto flex items-center gap-1">
         <Button

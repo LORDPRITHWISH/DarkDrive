@@ -9,6 +9,10 @@ const ERROR_COPY: Record<string, string> = {
   url_not_allowed: "That URL can't be used (blocked for security reasons).",
   fetch_failed: "Couldn't download from that URL.",
   too_many_imports: "Too many imports already running — try again shortly.",
+  not_a_zip: "That file isn't a zip archive.",
+  invalid_zip: "Couldn't read that zip file.",
+  too_many_entries: "Archive has too many files to extract.",
+  gone: "The zip file is missing from storage.",
 }
 
 function humanize(err: string) {
@@ -62,16 +66,26 @@ export function UploadToaster() {
             </div>
             <div className="text-muted-foreground flex items-center justify-between gap-2 text-[11px]">
               <span className="truncate">
-                {u.indeterminate
-                  ? u.done
-                    ? formatBytes(u.loaded)
-                    : u.loaded > 0
-                      ? `${formatBytes(u.loaded)} downloaded`
-                      : "Starting…"
-                  : `${formatBytes(u.loaded)} / ${formatBytes(u.size)}`}
+                {u.unit === "files"
+                  ? u.indeterminate
+                    ? "Starting…"
+                    : `${u.loaded} / ${u.size} files`
+                  : u.indeterminate
+                    ? u.done
+                      ? formatBytes(u.loaded)
+                      : u.loaded > 0
+                        ? `${formatBytes(u.loaded)} downloaded`
+                        : "Starting…"
+                    : `${formatBytes(u.loaded)} / ${formatBytes(u.size)}`}
               </span>
               <span className="shrink-0">
-                {u.done ? (u.error ? "failed" : "done") : formatSpeed(u.speed)}
+                {u.done
+                  ? u.error
+                    ? "failed"
+                    : "done"
+                  : u.unit === "files"
+                    ? "extracting…"
+                    : formatSpeed(u.speed)}
               </span>
             </div>
             {u.error && (

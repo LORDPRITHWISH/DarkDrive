@@ -442,20 +442,36 @@ filesRouter.post("/import-url", async (req, res) => {
     if (remaining <= BigInt(0)) return res.status(413).json({ error: "quota_exceeded" })
     const maxBytes = Math.min(env.MAX_UPLOAD_MB * 1024 * 1024, Number(remaining))
 
-    const fallbackName = decodeURIComponent(path.basename(parsedUrl.pathname)) || "download"
-    const name = (body.name?.trim() || fallbackName).slice(0, 255)
-    const key = newStorageKey(name)
+    // Signed CDN URLs (the common case here) tend to have one long opaque
+    // token as their path, not a real filename — only trust it as a name if
+    // it's short enough to plausibly be one; otherwise fall back later to
+    // whatever Content-Disposition or the mime type gives us.
+    let urlBasename: string | null = null
+    try {
+      const decoded = decodeURIComponent(path.basename(parsedUrl.pathname))
+      urlBasename = decoded && decoded.length <= 100 ? decoded : null
+    } catch {}
+    const preliminaryName = (body.name?.trim() || urlBasename || "download").slice(0, 255)
+    const key = newStorageKey(preliminaryName)
     const dest = ensureDirFor(key)
 
-    let result: { size: number; mimeType: string | null }
+    let result: { size: number; mimeType: string | null; suggestedName: string | null }
     try {
       result = await importUrlToFile(body.url, dest, {
         maxBytes,
         onProgress: body.clientId
-          ? (received, total) =>
+          ? (received, total, cdName) =>
               getIO()
                 ?.to(`user:${user.id}`)
-                .emit("import:progress", { clientId: body.clientId, received, total })
+                .emit("import:progress", {
+                  clientId: body.clientId,
+                  received,
+                  total,
+                  // Best name known so far — Content-Disposition only shows
+                  // up here (from response headers); the URL basename was
+                  // already resolved above, before the request even went out.
+                  name: body.name?.trim() || cdName?.trim() || urlBasename || undefined,
+                })
           : undefined,
       })
     } catch (err: any) {
@@ -482,7 +498,13 @@ filesRouter.post("/import-url", async (req, res) => {
       return res.status(413).json({ error: "quota_exceeded" })
     }
 
-    const mimeType = result.mimeType || mime.lookup(name) || "application/octet-stream"
+    const mimeType = result.mimeType || mime.lookup(preliminaryName) || "application/octet-stream"
+    const name = (
+      body.name?.trim() ||
+      result.suggestedName?.trim() ||
+      urlBasename ||
+      (mime.extension(mimeType) ? `download.${mime.extension(mimeType)}` : "download")
+    ).slice(0, 255)
     const intoSharedSpace = !!folder.spaceId
     const primaryFolderId = intoSharedSpace
       ? await assertUserRootFolderId(user)
@@ -763,7 +785,12 @@ function safeEntrySegments(entryPath: string): string[] | null {
   return parts
 }
 
-const ExtractSchema = z.object({ folderId: z.string() })
+const ExtractSchema = z.object({
+  folderId: z.string(),
+  // Echoed back on progress events so the client can match them to the right
+  // upload-toaster entry — same convention as /import-url's clientId.
+  clientId: z.string().max(100).optional(),
+})
 
 filesRouter.post("/:id/extract", async (req, res) => {
   const user = currentUser(req)
@@ -789,6 +816,8 @@ filesRouter.post("/:id/extract", async (req, res) => {
   }
   if (zip.files.length > MAX_ZIP_ENTRIES)
     return res.status(413).json({ error: "too_many_entries" })
+
+  const totalFiles = zip.files.reduce((n, e) => n + (e.type === "File" ? 1 : 0), 0)
 
   // ponytail: quota gate trusts the zip's declared uncompressedSize instead of
   // tracking bytes actually written — a crafted zip could under-report to
@@ -882,6 +911,11 @@ filesRouter.post("/:id/extract", async (req, res) => {
       }
       queueThumbnail(created.id)
       extracted++
+      if (body.clientId) {
+        getIO()
+          ?.to(`user:${user.id}`)
+          .emit("extract:progress", { clientId: body.clientId, extracted, total: totalFiles })
+      }
     }
   } catch (err) {
     // Tolerate a partial extract (e.g. a corrupt entry mid-archive) — whatever
@@ -1018,6 +1052,30 @@ filesRouter.patch("/:id", async (req, res) => {
     if (!target) return res.status(403).json({ error: "forbidden_target" })
   }
   const updated = await prisma.file.update({ where: { id: file.id }, data: body })
+  res.json({ ...updated, size: Number(updated.size) })
+})
+
+// Reassign who a file is attributed to within a space (its uploader/owner).
+// Restricted to the file's current owner or a system admin — the same
+// authority that can already act on any user's data.
+filesRouter.patch("/:id/owner", async (req, res) => {
+  const user = currentUser(req)
+  const { ownerId, spaceId } = z
+    .object({ ownerId: z.string(), spaceId: z.string() })
+    .parse(req.body)
+  const file = await getFileWithAccess(user.id, req.params.id, "read", { role: user.role })
+  if (!file) return res.status(403).json({ error: "forbidden" })
+  if (file.ownerId !== user.id && user.role !== "ADMIN")
+    return res.status(403).json({ error: "forbidden" })
+  // New owner must belong to the space this file is being reassigned within.
+  const space = await prisma.space.findUnique({
+    where: { id: spaceId },
+    include: { members: true },
+  })
+  const allowed =
+    space && (space.ownerId === ownerId || space.members.some((m) => m.userId === ownerId))
+  if (!allowed) return res.status(400).json({ error: "invalid_owner" })
+  const updated = await prisma.file.update({ where: { id: file.id }, data: { ownerId } })
   res.json({ ...updated, size: Number(updated.size) })
 })
 

@@ -57,11 +57,29 @@ async function resolveSafe(hostname: string): Promise<string> {
   return address
 }
 
-export type ImportResult = { size: number; mimeType: string | null }
+export type ImportResult = { size: number; mimeType: string | null; suggestedName: string | null }
 
 // How often to report progress, at most — the remote can push data far
 // faster than a socket event is worth emitting.
 const PROGRESS_INTERVAL_MS = 250
+
+// Pulls the real filename out of Content-Disposition — signed CDN URLs (the
+// kind this is mostly used for) have opaque token paths, so the URL itself
+// rarely has a usable name and this header is often the only real source.
+export function contentDispositionName(header?: string): string | null {
+  if (!header) return null
+  const utf8 = /filename\*=(?:UTF-8''|utf-8'')?([^;]+)/i.exec(header)
+  if (utf8) {
+    try {
+      return decodeURIComponent(utf8[1].trim().replace(/^"|"$/g, ""))
+    } catch {}
+  }
+  const quoted = /filename="([^"]*)"/i.exec(header)
+  if (quoted) return quoted[1]
+  const bare = /filename=([^;]+)/i.exec(header)
+  if (bare) return bare[1].trim()
+  return null
+}
 
 export async function importUrlToFile(
   startUrl: string,
@@ -69,7 +87,9 @@ export async function importUrlToFile(
   opts: {
     maxBytes: number
     timeoutMs?: number
-    onProgress?: (received: number, total: number | null) => void
+    // `name` is only ever passed on the very first call (once headers are
+    // in) — later throttled ticks just report bytes.
+    onProgress?: (received: number, total: number | null, name?: string) => void
   }
 ): Promise<ImportResult> {
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS
@@ -128,10 +148,11 @@ export async function importUrlToFile(
     }
     const total = Number.isFinite(contentLength) && contentLength > 0 ? contentLength : null
     const mimeType = response.headers["content-type"]?.split(";")[0]?.trim() || null
+    const suggestedName = contentDispositionName(response.headers["content-disposition"])
 
     let received = 0
     let lastProgressAt = 0
-    opts.onProgress?.(0, total)
+    opts.onProgress?.(0, total, suggestedName ?? undefined)
     const out = fs.createWriteStream(destPath)
     try {
       await new Promise<void>((resolve, reject) => {
@@ -159,6 +180,6 @@ export async function importUrlToFile(
       throw err
     }
 
-    return { size: received, mimeType }
+    return { size: received, mimeType, suggestedName }
   }
 }

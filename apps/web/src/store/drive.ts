@@ -195,6 +195,9 @@ type DriveState = {
     // Set for URL imports — the server does the downloading, so there's no
     // byte-level progress to report, just "still going" vs "done".
     indeterminate?: boolean
+    // "files" counts extracted entries instead of bytes — set for zip
+    // extraction, where loaded/size are entry counts, not byte counts.
+    unit?: "bytes" | "files"
   }[]
 
   setView: (v: "grid" | "list") => void
@@ -391,19 +394,61 @@ export const useDrive = create<DriveState>((set, get) => ({
   extractZip: async (id, name) => {
     const folderId = get().currentFolderId
     if (!folderId) return
+    const uid = crypto.randomUUID()
+    set({
+      uploads: [
+        ...get().uploads,
+        {
+          id: uid,
+          name,
+          size: 0,
+          loaded: 0,
+          progress: 0,
+          speed: 0,
+          done: false,
+          indeterminate: true,
+          unit: "files",
+        },
+      ],
+    })
+
+    // Extraction runs server-side, so progress comes over the socket as
+    // entries land — same relay as importUrl's "import:progress" above.
+    const socket = getSocket()
+    const onProgress = (p: { clientId: string; extracted: number; total: number }) => {
+      if (p.clientId !== uid) return
+      const progress = p.total ? (p.extracted / p.total) * 100 : 0
+      set({
+        uploads: get().uploads.map((u) =>
+          u.id === uid
+            ? { ...u, loaded: p.extracted, size: p.total, progress, indeterminate: false }
+            : u
+        ),
+      })
+    }
+    socket.on("extract:progress", onProgress)
+
     try {
-      await apiJson(`/api/files/${id}/extract`, "POST", { folderId })
+      await apiJson(`/api/files/${id}/extract`, "POST", { folderId, clientId: uid })
+      set({
+        uploads: get().uploads.map((u) =>
+          u.id === uid
+            ? { ...u, progress: 100, loaded: u.size || u.loaded, done: true, indeterminate: false }
+            : u
+        ),
+      })
       await get().refresh()
-      toast.success(`Extracted "${name}".`)
     } catch (e: any) {
-      toast.error(
-        e?.body?.error === "quota_exceeded"
-          ? "Out of storage — request an upgrade from the sidebar."
-          : e instanceof Error
-            ? e.message
-            : "Couldn't extract zip."
-      )
-      throw e
+      set({
+        uploads: get().uploads.map((u) =>
+          u.id === uid ? { ...u, error: e?.body?.error || e?.message, done: true } : u
+        ),
+      })
+    } finally {
+      socket.off("extract:progress", onProgress)
+      // only this item, only after it's actually done — never clears a
+      // still-in-progress neighbor in the tracker
+      setTimeout(() => set({ uploads: get().uploads.filter((u) => u.id !== uid) }), 5000)
     }
   },
   toggleHiddenItem: async (type, id) => {
@@ -681,7 +726,12 @@ export const useDrive = create<DriveState>((set, get) => ({
     // as uploadFileChunked above, just fed by "import:progress" events.
     const socket = getSocket()
     const samples: { t: number; loaded: number }[] = [{ t: performance.now(), loaded: 0 }]
-    const onProgress = (p: { clientId: string; received: number; total: number | null }) => {
+    const onProgress = (p: {
+      clientId: string
+      received: number
+      total: number | null
+      name?: string
+    }) => {
       if (p.clientId !== uid) return
       const now = performance.now()
       samples.push({ t: now, loaded: p.received })
@@ -696,6 +746,10 @@ export const useDrive = create<DriveState>((set, get) => ({
           u.id === uid
             ? {
                 ...u,
+                // Server resolves the real filename (Content-Disposition,
+                // URL, or mime type) once headers are in — swap the raw URL
+                // placeholder for it as soon as it's known.
+                name: p.name?.trim() || u.name,
                 loaded: p.received,
                 size: p.total ?? u.size,
                 progress,
@@ -709,7 +763,7 @@ export const useDrive = create<DriveState>((set, get) => ({
     socket.on("import:progress", onProgress)
 
     try {
-      await apiJson("/api/files/import-url", "POST", {
+      const res = await apiJson<{ file: { name: string } }>("/api/files/import-url", "POST", {
         folderId,
         url,
         name: name?.trim() || undefined,
@@ -718,7 +772,15 @@ export const useDrive = create<DriveState>((set, get) => ({
       set({
         uploads: get().uploads.map((u) =>
           u.id === uid
-            ? { ...u, progress: 100, loaded: u.size || u.loaded, speed: 0, done: true, indeterminate: false }
+            ? {
+                ...u,
+                name: res.file.name,
+                progress: 100,
+                loaded: u.size || u.loaded,
+                speed: 0,
+                done: true,
+                indeterminate: false,
+              }
             : u
         ),
       })
@@ -732,7 +794,7 @@ export const useDrive = create<DriveState>((set, get) => ({
       })
     } finally {
       socket.off("import:progress", onProgress)
-      setTimeout(() => set({ uploads: get().uploads.filter((u) => !u.done) }), 4000)
+      setTimeout(() => set({ uploads: get().uploads.filter((u) => u.id !== uid) }), 5000)
     }
   },
 

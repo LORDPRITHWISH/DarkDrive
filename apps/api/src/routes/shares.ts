@@ -6,6 +6,7 @@ import { prisma } from "../db/prisma.js"
 import { currentUser, requireAuth } from "../middleware/auth.js"
 import { getFileWithAccess, getFolderWithAccess } from "../lib/access.js"
 import { streamStoredFile } from "../lib/stream.js"
+import { env } from "../env.js"
 
 export const sharesRouter = Router()
 
@@ -125,6 +126,18 @@ sharesRouter.get("/:token/download/:fileId?", async (req, res) => {
   else if (s.resourceType === "FOLDER") fileId = req.params.fileId
 
   if (!fileId) return res.status(400).json({ error: "file_required" })
+
+  // Password gate — same check /resolve does. Skipped only in local dev so a
+  // developer can hit the raw download URL without wiring up the prompt every
+  // time; production always enforces it.
+  if (s.passwordHash && env.NODE_ENV !== "development") {
+    const password = Array.isArray(req.query.password)
+      ? req.query.password[0]
+      : req.query.password
+    if (typeof password !== "string" || !(await bcrypt.compare(password, s.passwordHash))) {
+      return res.status(401).json({ error: "password_required" })
+    }
+  }
 
   const file = await prisma.file.findUnique({ where: { id: fileId } })
   if (!file) return res.status(404).json({ error: "not_found" })

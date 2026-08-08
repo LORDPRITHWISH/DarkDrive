@@ -8,12 +8,16 @@ type MeState = {
   recentlyAdded: FileItem[]
   suggestions: FileItem[]
   folderSuggestions: Folder[]
+  uploadHistory: FileItem[]
+  uploadHistoryCursor: string | null
+  uploadHistoryLoading: boolean
   nav: NavState | null
 
   loadQuota: () => Promise<void>
   loadRecent: (limit?: number) => Promise<void>
   loadRecentlyAdded: (limit?: number) => Promise<void>
   dismissRecentlyAdded: (fileId: string) => void
+  loadUploadHistory: (opts?: { more?: boolean }) => Promise<void>
   loadSuggestions: (limit?: number) => Promise<void>
   loadFolderSuggestions: (limit?: number) => Promise<void>
   requestUpgrade: (bytes: number) => Promise<void>
@@ -30,6 +34,9 @@ export const useMe = create<MeState>((set, get) => ({
   recentlyAdded: [],
   suggestions: [],
   folderSuggestions: [],
+  uploadHistory: [],
+  uploadHistoryCursor: null,
+  uploadHistoryLoading: false,
   nav: null,
 
   loadQuota: async () => {
@@ -48,6 +55,23 @@ export const useMe = create<MeState>((set, get) => ({
   },
   dismissRecentlyAdded: (fileId) => {
     set({ recentlyAdded: get().recentlyAdded.filter((f) => f.id !== fileId) })
+  },
+  loadUploadHistory: async (opts) => {
+    const more = opts?.more ?? false
+    const cursor = more ? get().uploadHistoryCursor : null
+    if (more && !cursor) return
+    set({ uploadHistoryLoading: true })
+    try {
+      const r = await apiGet<{ files: FileItem[]; nextCursor: string | null }>(
+        `/api/me/uploads?limit=50${cursor ? `&cursor=${cursor}` : ""}`
+      )
+      set({
+        uploadHistory: more ? [...get().uploadHistory, ...r.files] : r.files,
+        uploadHistoryCursor: r.nextCursor,
+      })
+    } finally {
+      set({ uploadHistoryLoading: false })
+    }
   },
   loadSuggestions: async (limit = 12) => {
     const r = await apiGet<{ files: FileItem[] }>(`/api/me/suggestions?limit=${limit}`)

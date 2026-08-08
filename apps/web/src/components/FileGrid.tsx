@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import {
   ArrowsOutCardinalIcon,
@@ -25,6 +25,8 @@ import { FileListView } from "./file-grid/FileListView"
 import { FileContextMenu, type MenuPos } from "./file-grid/FileContextMenu"
 import { startItemDrag, type DragItem } from "./file-grid/dnd"
 
+const PAGE_SIZE = 60
+
 export function FileGrid() {
   const {
     currentFolderId,
@@ -44,6 +46,7 @@ export function FileGrid() {
     toggleStarred,
     setStarred,
     renameFile,
+    extractZip,
     renameFolder,
     moveItems,
     removeShortcut,
@@ -51,6 +54,27 @@ export function FileGrid() {
   const sortedFolders = useMemo(() => sortFolders(folders, sort), [folders, sort])
   const sortedFiles = useMemo(() => sortFiles(files, sort), [files, sort])
   const { minWidth, iconSize } = useMemo(() => zoomToGrid(zoom), [zoom])
+
+  // Reveal items in pages instead of dumping the whole folder at once —
+  // more loads as the sentinel below scrolls into view.
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
+  useEffect(() => setVisibleCount(PAGE_SIZE), [currentFolderId])
+  const totalCount = sortedFolders.length + sortedFiles.length
+  const visibleFolders = sortedFolders.slice(0, visibleCount)
+  const visibleFiles = sortedFiles.slice(0, Math.max(0, visibleCount - sortedFolders.length))
+  const sentinelRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = sentinelRef.current
+    if (!el || visibleCount >= totalCount) return
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) setVisibleCount((c) => Math.min(totalCount, c + PAGE_SIZE))
+      },
+      { rootMargin: "600px" }
+    )
+    io.observe(el)
+    return () => io.disconnect()
+  }, [visibleCount, totalCount])
   // Same order as what's on screen, so shift-click range-select spans what
   // the user actually sees regardless of grid vs list view.
   const orderedIds = useMemo(
@@ -263,7 +287,7 @@ export function FileGrid() {
             gridTemplateColumns: `repeat(auto-fill, minmax(${minWidth}px, 1fr))`,
           }}
         >
-          {sortedFolders.map((f) => (
+          {visibleFolders.map((f) => (
             <FolderCard
               key={f.id}
               folder={f}
@@ -281,7 +305,7 @@ export function FileGrid() {
               onRenameCancel={() => setRenaming(null)}
             />
           ))}
-          {sortedFiles.map((f) => (
+          {visibleFiles.map((f) => (
             <FileCard
               key={f.id}
               file={f}
@@ -301,8 +325,8 @@ export function FileGrid() {
         </div>
       ) : (
         <FileListView
-          folders={sortedFolders}
-          files={sortedFiles}
+          folders={visibleFolders}
+          files={visibleFiles}
           selection={selection}
           onSelect={(id, e) => clickSelect(e, id)}
           onOpenFolder={(id) => nav(`/drive/${id}`)}
@@ -311,6 +335,11 @@ export function FileGrid() {
           onDragStart={dragStart}
           onMoveDrop={handleMoveDrop}
         />
+      )}
+      {visibleCount < totalCount && (
+        <div ref={sentinelRef} className="text-muted-foreground grid h-16 place-items-center text-xs">
+          Loading more…
+        </div>
       )}
 
       {menu && (
@@ -325,6 +354,10 @@ export function FileGrid() {
             const f = files.find((x) => x.id === menu.id)
             if (f) setPropertiesFile(f)
             closeMenu()
+          }}
+          onExtract={() => {
+            closeMenu()
+            void extractZip(menu.id, menu.name)
           }}
           onDownload={() => {
             const ids = selectionOrSingle(menu.id)

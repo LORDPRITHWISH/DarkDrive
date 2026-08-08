@@ -6,6 +6,7 @@ import multer from "multer"
 import path from "node:path"
 import mime from "mime-types"
 import { ZipArchive, type Archiver } from "archiver"
+import unzipper from "unzipper"
 import { prisma } from "../db/prisma.js"
 import { currentUser, requireAuth } from "../middleware/auth.js"
 import { env } from "../env.js"
@@ -740,6 +741,164 @@ filesRouter.post(
     }
   }
 )
+
+// Zip extraction: unpacks an uploaded .zip in place, mirroring its directory
+// structure as real folders under the target folder. Caps entry count so an
+// adversarial archive can't flood the DB/filesystem with millions of rows.
+const MAX_ZIP_ENTRIES = 5000
+
+function isZipFile(file: { mimeType: string; name: string }) {
+  return (
+    /\.zip$/i.test(file.name) ||
+    file.mimeType === "application/zip" ||
+    file.mimeType === "application/x-zip-compressed"
+  )
+}
+
+// Splits a zip entry's internal path into safe segments, rejecting anything
+// that would climb outside the extraction root ("zip slip").
+function safeEntrySegments(entryPath: string): string[] | null {
+  const parts = entryPath.split("/").filter((p) => p.length > 0 && p !== ".")
+  if (parts.some((p) => p === "..")) return null
+  return parts
+}
+
+const ExtractSchema = z.object({ folderId: z.string() })
+
+filesRouter.post("/:id/extract", async (req, res) => {
+  const user = currentUser(req)
+  const body = ExtractSchema.parse(req.body)
+  const file = await getFileWithAccess(user.id, req.params.id, "read", { role: user.role })
+  if (!file) return res.status(404).json({ error: "not_found" })
+  if (!isZipFile(file)) return res.status(415).json({ error: "not_a_zip" })
+
+  // Extracts into whatever folder the client currently has open, not the
+  // zip's own storage-record folderId — the latter is the file's real home
+  // even when it's only visible here via a shortcut (see getFileWithAccess).
+  const folder = await getFolderWithAccess(user.id, body.folderId, "write")
+  if (!folder) return res.status(403).json({ error: "forbidden" })
+
+  const abs = absolutePath(file.storageKey)
+  if (!fs.existsSync(abs)) return res.status(410).json({ error: "gone" })
+
+  let zip: unzipper.CentralDirectory
+  try {
+    zip = await unzipper.Open.file(abs)
+  } catch {
+    return res.status(400).json({ error: "invalid_zip" })
+  }
+  if (zip.files.length > MAX_ZIP_ENTRIES)
+    return res.status(413).json({ error: "too_many_entries" })
+
+  // ponytail: quota gate trusts the zip's declared uncompressedSize instead of
+  // tracking bytes actually written — a crafted zip could under-report to
+  // slip past this. Upgrade path: accumulate real written bytes in the loop
+  // below and abort once they'd exceed quota.
+  const totalDeclaredSize = zip.files.reduce(
+    (sum, e) => sum + (e.type === "File" ? e.uncompressedSize : 0),
+    0
+  )
+  const used = await prisma.file.aggregate({
+    _sum: { size: true },
+    where: { ownerId: user.id, isTrashed: false },
+  })
+  const quota = user.storageQuotaBytes ?? BigInt(0)
+  if (BigInt(used._sum.size ?? BigInt(0)) + BigInt(totalDeclaredSize) > quota)
+    return res.status(413).json({ error: "quota_exceeded" })
+
+  const intoSharedSpace = !!folder.spaceId
+  const uploaderRootFolderId = intoSharedSpace ? await assertUserRootFolderId(user) : null
+  // Narrowed copies: TS can't carry the null-check on `folder` into the
+  // nested resolveDir closure below.
+  const treeOwnerId = folder.ownerId
+  const treeSpaceId = folder.spaceId
+
+  const baseName = file.name.replace(/\.zip$/i, "") || "Archive"
+  const rootFolder = await prisma.folder.create({
+    data: { name: baseName, parentId: folder.id, ownerId: treeOwnerId, spaceId: treeSpaceId },
+  })
+
+  // The physical folder tree mirrors the zip's directories and is owned the
+  // same way a manually-created subfolder here would be (see POST /folders).
+  // Files follow the upload convention instead: in a shared space they live
+  // flat under the uploader's own root with a shortcut into the tree, so
+  // quota is always charged to whoever triggered the extraction.
+  const dirFolderIds = new Map<string, string>([["", rootFolder.id]])
+  async function resolveDir(parts: string[]): Promise<string> {
+    const key = parts.join("/")
+    const cached = dirFolderIds.get(key)
+    if (cached) return cached
+    const parentId = await resolveDir(parts.slice(0, -1))
+    const created = await prisma.folder.create({
+      data: {
+        name: parts[parts.length - 1],
+        parentId,
+        ownerId: treeOwnerId,
+        spaceId: treeSpaceId,
+      },
+    })
+    dirFolderIds.set(key, created.id)
+    return created.id
+  }
+
+  let extracted = 0
+  try {
+    for (const entry of zip.files) {
+      const parts = safeEntrySegments(entry.path)
+      if (!parts || parts.length === 0) continue
+      if (entry.type === "Directory") {
+        await resolveDir(parts)
+        continue
+      }
+      const treeFolderId = await resolveDir(parts.slice(0, -1))
+      const name = parts[parts.length - 1]
+      const key = newStorageKey(name)
+      const dest = ensureDirFor(key)
+      await new Promise<void>((resolve, reject) => {
+        entry
+          .stream()
+          .pipe(fs.createWriteStream(dest))
+          .on("finish", resolve)
+          .on("error", reject)
+      })
+      const stat = fs.statSync(dest)
+      const mimeType = mime.lookup(name) || "application/octet-stream"
+
+      const created = await prisma.file.create({
+        data: {
+          name,
+          folderId: intoSharedSpace ? uploaderRootFolderId! : treeFolderId,
+          ownerId: user.id,
+          spaceId: intoSharedSpace ? null : folder.spaceId,
+          size: BigInt(stat.size),
+          mimeType,
+          storageKey: key,
+        },
+      })
+      if (intoSharedSpace) {
+        await prisma.fileShortcut.create({
+          data: { fileId: created.id, folderId: treeFolderId },
+        })
+      }
+      queueThumbnail(created.id)
+      extracted++
+    }
+  } catch (err) {
+    // Tolerate a partial extract (e.g. a corrupt entry mid-archive) — whatever
+    // made it in already has real DB rows and files on disk, so leaving it in
+    // place beats a complex multi-row/multi-file rollback.
+    console.error("[extract] failed partway through:", err)
+    return res.status(207).json({ error: "partial_extract", folder: rootFolder, extracted })
+  }
+
+  void maybeNotifyQuotaNearLimit(
+    user.id,
+    BigInt(used._sum.size ?? BigInt(0)) + BigInt(totalDeclaredSize),
+    quota
+  )
+
+  res.status(201).json({ folder: rootFolder, extracted })
+})
 
 filesRouter.get("/:id/thumbnail", async (req, res) => {
   const user = currentUser(req)

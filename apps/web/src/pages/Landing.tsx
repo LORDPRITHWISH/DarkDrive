@@ -185,7 +185,7 @@ export function LandingPage() {
       <header className="relative z-10 flex animate-in items-center justify-between border-b px-6 py-4 duration-700 fade-in slide-in-from-top-4">
         <div className="flex items-center gap-2.5">
           <img
-            src="/DarkDriveBrand.png"
+            src="/DarkDrive.png"
             alt="DarkDrive"
             className="h-9 w-9 rounded-md ring-2 ring-primary/20 transition-transform duration-300 hover:scale-110 hover:rotate-6"
           />

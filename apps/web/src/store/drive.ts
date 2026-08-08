@@ -1,5 +1,6 @@
 import { create } from "zustand"
 import { apiGet, apiJson, apiUpload } from "@/lib/api"
+import { getSocket } from "@/lib/socket"
 import type {
   Breadcrumb,
   FileItem,
@@ -191,6 +192,9 @@ type DriveState = {
     speed: number
     done: boolean
     error?: string
+    // Set for URL imports — the server does the downloading, so there's no
+    // byte-level progress to report, just "still going" vs "done".
+    indeterminate?: boolean
   }[]
 
   setView: (v: "grid" | "list") => void
@@ -235,6 +239,7 @@ type DriveState = {
     files: FileList | File[] | UploadEntry[],
     explicitTargetId?: string
   ) => Promise<void>
+  importUrl: (url: string, name?: string, explicitTargetId?: string) => Promise<void>
 
   loadSpaces: () => Promise<void>
   loadPublicSpaces: () => Promise<void>
@@ -630,6 +635,86 @@ export const useDrive = create<DriveState>((set, get) => ({
     void useMe.getState().loadQuota()
     // auto-clear after a short delay
     setTimeout(() => set({ uploads: get().uploads.filter((u) => !u.done) }), 4000)
+  },
+
+  importUrl: async (url, name, explicitTargetId) => {
+    const folderId = explicitTargetId ?? get().currentFolderId
+    if (!folderId) return
+    const uid = crypto.randomUUID()
+    set({
+      uploads: [
+        ...get().uploads,
+        {
+          id: uid,
+          name: name?.trim() || url,
+          size: 0,
+          loaded: 0,
+          progress: 0,
+          speed: 0,
+          done: false,
+          indeterminate: true,
+        },
+      ],
+    })
+
+    // The download runs server-side, so progress comes over the socket
+    // instead of XHR's upload.onprogress — same rolling-window speed calc
+    // as uploadFileChunked above, just fed by "import:progress" events.
+    const socket = getSocket()
+    const samples: { t: number; loaded: number }[] = [{ t: performance.now(), loaded: 0 }]
+    const onProgress = (p: { clientId: string; received: number; total: number | null }) => {
+      if (p.clientId !== uid) return
+      const now = performance.now()
+      samples.push({ t: now, loaded: p.received })
+      while (samples.length > 2 && now - samples[0].t > 2000) samples.shift()
+      const first = samples[0]
+      const last = samples[samples.length - 1]
+      const dt = (last.t - first.t) / 1000
+      const speed = dt > 0 ? (last.loaded - first.loaded) / dt : 0
+      const progress = p.total ? (p.received / p.total) * 100 : 0
+      set({
+        uploads: get().uploads.map((u) =>
+          u.id === uid
+            ? {
+                ...u,
+                loaded: p.received,
+                size: p.total ?? u.size,
+                progress,
+                speed,
+                indeterminate: p.total == null,
+              }
+            : u
+        ),
+      })
+    }
+    socket.on("import:progress", onProgress)
+
+    try {
+      await apiJson("/api/files/import-url", "POST", {
+        folderId,
+        url,
+        name: name?.trim() || undefined,
+        clientId: uid,
+      })
+      set({
+        uploads: get().uploads.map((u) =>
+          u.id === uid
+            ? { ...u, progress: 100, loaded: u.size || u.loaded, speed: 0, done: true, indeterminate: false }
+            : u
+        ),
+      })
+      await get().refresh()
+      void useMe.getState().loadQuota()
+    } catch (e: any) {
+      set({
+        uploads: get().uploads.map((u) =>
+          u.id === uid ? { ...u, error: e?.body?.error || e?.message, done: true, speed: 0 } : u
+        ),
+      })
+    } finally {
+      socket.off("import:progress", onProgress)
+      setTimeout(() => set({ uploads: get().uploads.filter((u) => !u.done) }), 4000)
+    }
   },
 
   loadSpaces: async () => {

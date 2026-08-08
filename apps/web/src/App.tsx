@@ -80,7 +80,13 @@ function Root() {
 
 export function App() {
   useEffect(() => {
+    // getSocket() is an app-wide singleton, not owned by this effect — under
+    // StrictMode's dev-only mount/cleanup/remount cycle, a disconnect() here
+    // would kill it for the rest of the session, since socket.io-client
+    // doesn't auto-reconnect after a manual disconnect. connect() is a no-op
+    // if already connected, and revives it otherwise.
     const s = getSocket()
+    s.connect()
     const onNotification = (n: AppNotification) => {
       useNotifications.getState().receive(n)
       toast.info(n.title)
@@ -88,7 +94,6 @@ export function App() {
     s.on("notification:new", onNotification)
     return () => {
       s.off("notification:new", onNotification)
-      s.disconnect()
     }
   }, [])
   return (

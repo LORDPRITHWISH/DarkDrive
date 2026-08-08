@@ -87,11 +87,11 @@ export function FileCard({
             onClick={(e) => e.stopPropagation()}
           />
         ) : (
-          <div className="truncate text-sm font-medium" title={file.name}>
+          <div className="truncate text-center text-sm font-medium" title={file.name}>
             {file.name}
           </div>
         )}
-        <div className="text-muted-foreground text-xs">{formatBytes(file.size)}</div>
+        <div className="text-muted-foreground text-center text-xs">{formatBytes(file.size)}</div>
       </div>
     </div>
   )

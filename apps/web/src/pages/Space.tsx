@@ -136,7 +136,7 @@ export function SpacePage() {
             {data?.space.name ?? "Space"}
           </div>
           <div className="ml-auto flex items-center gap-1">
-            <HeaderActions />
+            <HeaderActions onReload={() => void load()} />
           </div>
         </header>
 

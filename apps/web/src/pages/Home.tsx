@@ -47,12 +47,16 @@ export function HomePage() {
     navigate(`/drive/${folderId}`)
   }
 
-  useEffect(() => {
+  function reload() {
     void loadSuggestions(12)
     void loadFolderSuggestions(8)
     void loadRecent(8)
     void loadRecentlyAdded(12)
-  }, [loadSuggestions, loadFolderSuggestions, loadRecent, loadRecentlyAdded])
+  }
+
+  useEffect(() => {
+    reload()
+  }, [])
 
   function openFile(f: FileItem) {
     // Optimistically remove from "Recently added" — opening hits
@@ -84,7 +88,7 @@ export function HomePage() {
           <SidebarToggle />
           <div className="text-sm font-semibold">Home</div>
           <div className="ml-auto flex items-center gap-1">
-            <HeaderActions />
+            <HeaderActions onReload={reload} />
           </div>
         </header>
         <div className="flex-1 overflow-auto px-4 py-5 md:px-6">

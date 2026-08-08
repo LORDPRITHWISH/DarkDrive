@@ -155,7 +155,7 @@ export function BinPage() {
             >
               <ListBulletsIcon size={16} />
             </Button>
-            <HeaderActions />
+            <HeaderActions onReload={() => void reload()} />
           </div>
         </header>
 

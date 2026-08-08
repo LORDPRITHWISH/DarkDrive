@@ -74,6 +74,7 @@ export function SearchPage() {
   const [view, setView] = useState<"grid" | "list">("grid")
   const [preview, setPreview] = useState<FileItem | null>(null)
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [reloadTick, setReloadTick] = useState(0)
 
   // The URL is the committed query; the input can drift from it briefly
   // while the user types. Keep it in sync when the URL changes some other
@@ -149,7 +150,7 @@ export function SearchPage() {
     return () => {
       cancelled = true
     }
-  }, [active, urlQ, type, folderId])
+  }, [active, urlQ, type, folderId, reloadTick])
 
   async function toggleStar(kind: "file" | "folder", id: string, starred: boolean) {
     setResult((r) => {
@@ -210,7 +211,7 @@ export function SearchPage() {
             >
               <SquaresFourIcon size={16} />
             </Button>
-            <HeaderActions />
+            <HeaderActions onReload={() => setReloadTick((t) => t + 1)} />
           </div>
         </header>
 

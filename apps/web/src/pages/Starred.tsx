@@ -59,7 +59,7 @@ export function StarredPage() {
   const [preview, setPreview] = useState<FileItem | null>(null)
   const nav = useNavigate()
 
-  useEffect(() => {
+  function reload() {
     setLoading(true)
     apiGet<{ folders: Folder[]; files: FileItem[] }>("/api/me/starred")
       .then((r) => {
@@ -67,6 +67,10 @@ export function StarredPage() {
         setFiles(r.files)
       })
       .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    reload()
   }, [])
 
   const filteredFiles = useMemo(
@@ -107,7 +111,7 @@ export function StarredPage() {
             >
               <SquaresFourIcon size={16} />
             </Button>
-            <HeaderActions />
+            <HeaderActions onReload={reload} />
           </div>
         </header>
 

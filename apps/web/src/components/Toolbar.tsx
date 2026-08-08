@@ -13,10 +13,12 @@ import {
   SortDescendingIcon,
   CheckIcon,
   MagnifyingGlassIcon,
+  LinkSimpleIcon,
 } from "@phosphor-icons/react"
 import { Button } from "@workspace/ui/components/button"
 import { useDrive, type SortKey } from "@/store/drive"
 import { NewFolderDialog } from "./NewFolderDialog"
+import { ImportUrlDialog } from "./ImportUrlDialog"
 
 const SORT_LABELS: Record<SortKey, string> = {
   name: "Name",
@@ -30,6 +32,7 @@ export function Toolbar() {
   const fileInput = useRef<HTMLInputElement>(null)
   const folderInput = useRef<HTMLInputElement>(null)
   const [newFolderOpen, setNewFolderOpen] = useState(false)
+  const [importUrlOpen, setImportUrlOpen] = useState(false)
   const [sortOpen, setSortOpen] = useState(false)
   const sortRef = useRef<HTMLDivElement>(null)
   const {
@@ -39,6 +42,7 @@ export function Toolbar() {
     toggleHidden,
     createFolder,
     upload,
+    importUrl,
     sort,
     setSort,
     currentFolderId,
@@ -94,6 +98,15 @@ export function Toolbar() {
         open={newFolderOpen}
         onClose={() => setNewFolderOpen(false)}
         onSubmit={(name, color, thumbnail) => createFolder(name, color, thumbnail)}
+      />
+      <Button size="sm" variant="outline" onClick={() => setImportUrlOpen(true)}>
+        <LinkSimpleIcon size={16} />
+        <span className="hidden md:inline">Import from URL</span>
+      </Button>
+      <ImportUrlDialog
+        open={importUrlOpen}
+        onClose={() => setImportUrlOpen(false)}
+        onSubmit={(url, name) => importUrl(url, name)}
       />
 
       <div className="ml-auto flex items-center gap-1">

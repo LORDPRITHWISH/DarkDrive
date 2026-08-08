@@ -5,6 +5,10 @@ const ERROR_COPY: Record<string, string> = {
   too_large: "File exceeds the per-file size limit.",
   forbidden: "You don't have permission to upload here.",
   network_error: "Network error. Check your connection and try again.",
+  invalid_url: "That doesn't look like a valid URL.",
+  url_not_allowed: "That URL can't be used (blocked for security reasons).",
+  fetch_failed: "Couldn't download from that URL.",
+  too_many_imports: "Too many imports already running — try again shortly.",
 }
 
 function humanize(err: string) {
@@ -45,23 +49,29 @@ export function UploadToaster() {
               </span>
             </div>
             <div className="bg-muted mb-1.5 h-1.5 w-full overflow-hidden rounded-full">
-              <div
-                className={`h-full transition-all ${
-                  u.error ? "bg-destructive" : "bg-primary"
-                }`}
-                style={{ width: `${pct}%` }}
-              />
+              {u.indeterminate && !u.done ? (
+                <div className="bg-primary/60 h-full w-1/3 animate-pulse rounded-full" />
+              ) : (
+                <div
+                  className={`h-full transition-all ${
+                    u.error ? "bg-destructive" : "bg-primary"
+                  }`}
+                  style={{ width: `${pct}%` }}
+                />
+              )}
             </div>
             <div className="text-muted-foreground flex items-center justify-between gap-2 text-[11px]">
               <span className="truncate">
-                {formatBytes(u.loaded)} / {formatBytes(u.size)}
+                {u.indeterminate
+                  ? u.done
+                    ? formatBytes(u.loaded)
+                    : u.loaded > 0
+                      ? `${formatBytes(u.loaded)} downloaded`
+                      : "Starting…"
+                  : `${formatBytes(u.loaded)} / ${formatBytes(u.size)}`}
               </span>
               <span className="shrink-0">
-                {u.done
-                  ? u.error
-                    ? "failed"
-                    : "done"
-                  : formatSpeed(u.speed)}
+                {u.done ? (u.error ? "failed" : "done") : formatSpeed(u.speed)}
               </span>
             </div>
             {u.error && (

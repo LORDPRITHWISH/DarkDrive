@@ -128,7 +128,7 @@ export function FolderCard({
             onClick={(e) => e.stopPropagation()}
           />
         ) : (
-          <div className="truncate text-sm font-medium" title={folder.name}>
+          <div className="truncate text-center text-sm font-medium" title={folder.name}>
             {folder.name}
           </div>
         )}

@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react"
 import {
+  ArrowsOutSimpleIcon,
   CaretDownIcon,
+  CaretRightIcon,
   CheckCircleIcon,
   ClockCounterClockwiseIcon,
   DeviceMobileIcon,
@@ -33,7 +35,12 @@ import {
 } from "@workspace/ui/components/dropdown-menu"
 import { PopConfirm } from "@workspace/ui/components/popconfirm"
 import { Sheet, SheetContent } from "@workspace/ui/components/sheet"
-import { DialogTitle } from "@workspace/ui/components/dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@workspace/ui/components/dialog"
 import {
   Table,
   TableBody,
@@ -48,7 +55,17 @@ import { iconFor } from "@/lib/fileIcon"
 import { toast } from "@/store/toast"
 import { FilePreview } from "@/components/FilePreview"
 import { useAdminFilePreview } from "./useAdminFilePreview"
-import type { UserDetail as UserDetailData } from "@/lib/types"
+import type {
+  AdminFolderTree,
+  Breadcrumb,
+  FileItem,
+  Folder,
+  UserDetail as UserDetailData,
+} from "@/lib/types"
+
+const MIN_SHEET_WIDTH = 420
+const MAX_SHEET_WIDTH_PCT = 0.9
+const DEFAULT_SHEET_WIDTH = 860
 
 const PRESETS = [
   { label: "1 GB", bytes: 1 * 1024 ** 3 },
@@ -118,7 +135,31 @@ export function UserDetail({
   const [data, setData] = useState<UserDetailData | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [width, setWidth] = useState(DEFAULT_SHEET_WIDTH)
   const { preview, loadingId, open, close } = useAdminFilePreview()
+
+  // Sheet is docked to the right edge, so dragging the left-edge handle
+  // grows the sheet as the pointer moves further left.
+  function startResize(e: React.PointerEvent<HTMLDivElement>) {
+    const el = e.currentTarget
+    const startX = e.clientX
+    const startWidth = width
+    el.setPointerCapture(e.pointerId)
+
+    function onMove(ev: PointerEvent) {
+      const max = window.innerWidth * MAX_SHEET_WIDTH_PCT
+      setWidth(
+        Math.min(max, Math.max(MIN_SHEET_WIDTH, startWidth + (startX - ev.clientX)))
+      )
+    }
+    function onUp() {
+      el.releasePointerCapture(e.pointerId)
+      el.removeEventListener("pointermove", onMove)
+      el.removeEventListener("pointerup", onUp)
+    }
+    el.addEventListener("pointermove", onMove)
+    el.addEventListener("pointerup", onUp)
+  }
 
   async function load() {
     try {
@@ -161,7 +202,11 @@ export function UserDetail({
           if (!o) onClose()
         }}
       >
-        <SheetContent className="max-w-3xl gap-0">
+        <SheetContent className="gap-0" style={{ width, maxWidth: "90vw" }}>
+          <div
+            onPointerDown={startResize}
+            className="hover:bg-primary/30 active:bg-primary/40 absolute top-0 left-0 z-10 h-full w-1.5 cursor-col-resize touch-none"
+          />
           {/* Header */}
           <div className="flex items-start gap-3 border-b p-4">
             {u ? (
@@ -347,6 +392,12 @@ function Body({
   return (
     <div className="flex flex-col gap-6">
       <StorageSection data={data} />
+      <DriveBrowserSection
+        userId={data.user.id}
+        userName={data.user.name}
+        loadingFileId={loadingFileId}
+        onOpenFile={onOpenFile}
+      />
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <FileListSection
           title="Largest files"
@@ -540,6 +591,246 @@ function FileListSection({
         )}
       </div>
     </section>
+  )
+}
+
+type FolderContents = {
+  folder: Folder
+  folders: Folder[]
+  files: FileItem[]
+  breadcrumbs: Breadcrumb[]
+}
+
+// Shared by the inline sidebar browser and the full-size dialog. `open`
+// gates fetching so the dialog's instance stays idle (and cheap) until it's
+// actually opened — mirrors the always-mounted-but-gated dialog pattern used
+// by RecycleBinMoveDialog elsewhere in this panel.
+function useDriveBrowser(userId: string, open: boolean = true) {
+  const [folderId, setFolderId] = useState<string | null>(null)
+  const [contents, setContents] = useState<FolderContents | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+
+  async function loadRoot() {
+    try {
+      const tree = await apiGet<AdminFolderTree>(`/api/admin/users/${userId}/folders/tree`)
+      setFolderId(tree.rootId)
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Couldn't load this drive.")
+    }
+  }
+
+  async function loadContents(id: string) {
+    try {
+      const c = await apiGet<FolderContents>(`/api/folders/${id}/contents`)
+      setContents(c)
+      setErr(null)
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Couldn't load this folder.")
+    }
+  }
+
+  useEffect(() => {
+    if (!open) return
+    setFolderId(null)
+    void loadRoot()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, open])
+
+  useEffect(() => {
+    if (!folderId) return
+    setContents(null)
+    void loadContents(folderId)
+  }, [folderId])
+
+  return { contents, err, setFolderId }
+}
+
+function DriveListing({
+  contents,
+  err,
+  onNavigate,
+  loadingFileId,
+  onOpenFile,
+}: {
+  contents: FolderContents | null
+  err: string | null
+  onNavigate: (id: string) => void
+  loadingFileId: string | null
+  onOpenFile: (id: string) => void
+}) {
+  return (
+    <>
+      {contents && (
+        <div className="mb-1 flex min-w-0 flex-wrap items-center gap-1 border-b px-1 pb-2 text-sm">
+          {contents.breadcrumbs.map((c, i) => {
+            const last = i === contents.breadcrumbs.length - 1
+            return (
+              <span key={c.id} className="flex min-w-0 items-center gap-1">
+                {i > 0 && (
+                  <CaretRightIcon size={11} className="text-muted-foreground shrink-0" />
+                )}
+                <button
+                  type="button"
+                  onClick={() => onNavigate(c.id)}
+                  disabled={last}
+                  className={
+                    last
+                      ? "truncate font-medium"
+                      : "text-muted-foreground hover:text-foreground truncate hover:underline"
+                  }
+                >
+                  {c.name}
+                </button>
+              </span>
+            )
+          })}
+        </div>
+      )}
+
+      {err ? (
+        <div className="text-destructive py-6 text-center text-xs">{err}</div>
+      ) : !contents ? (
+        <div className="text-muted-foreground py-6 text-center text-xs">Loading…</div>
+      ) : contents.folders.length === 0 && contents.files.length === 0 ? (
+        <div className="text-muted-foreground py-6 text-center text-xs">
+          Empty folder.
+        </div>
+      ) : (
+        <ul className="flex flex-col">
+          {contents.folders.map((f) => (
+            <li key={f.id}>
+              <button
+                type="button"
+                onClick={() => onNavigate(f.id)}
+                title={`Open "${f.name}"`}
+                className="hover:bg-accent/40 flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-left"
+              >
+                <FolderIcon
+                  size={18}
+                  weight="fill"
+                  style={{ color: f.color || undefined }}
+                  className={`shrink-0 ${f.color ? "" : "text-primary"}`}
+                />
+                <span className="min-w-0 flex-1 truncate text-sm">{f.name}</span>
+                <CaretRightIcon size={12} className="text-muted-foreground shrink-0" />
+              </button>
+            </li>
+          ))}
+          {contents.files.map((f) => (
+            <li key={f.id}>
+              <button
+                type="button"
+                onClick={() => onOpenFile(f.id)}
+                disabled={loadingFileId === f.id}
+                title={`Open "${f.name}"`}
+                className="hover:bg-accent/40 flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-left disabled:opacity-60"
+              >
+                <span className="shrink-0">{iconFor(f.mimeType, 18, f.name)}</span>
+                <span className="min-w-0 flex-1 truncate text-sm">{f.name}</span>
+                <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
+                  {formatBytes(f.size)}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
+  )
+}
+
+// Lets an admin navigate the target user's actual folder tree, not just the
+// flat largest/recent lists above. Reuses the ordinary GET /folders/:id/contents
+// route — admins already get read-only access to any folder there (see api
+// lib/access.ts) — starting from the user's root folder. The expand button
+// opens the same browsing experience in a bigger dialog for proper surfing.
+function DriveBrowserSection({
+  userId,
+  userName,
+  loadingFileId,
+  onOpenFile,
+}: {
+  userId: string
+  userName: string
+  loadingFileId: string | null
+  onOpenFile: (id: string) => void
+}) {
+  const { contents, err, setFolderId } = useDriveBrowser(userId)
+  const [expanded, setExpanded] = useState(false)
+
+  return (
+    <section>
+      <SectionTitle
+        icon={FolderIcon}
+        right={
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            onClick={() => setExpanded(true)}
+            title="Open in a bigger view"
+          >
+            <ArrowsOutSimpleIcon size={14} />
+          </Button>
+        }
+      >
+        Drive
+      </SectionTitle>
+      <div className="bg-card rounded-lg border p-2">
+        <DriveListing
+          contents={contents}
+          err={err}
+          onNavigate={setFolderId}
+          loadingFileId={loadingFileId}
+          onOpenFile={onOpenFile}
+        />
+      </div>
+
+      <DriveBrowserDialog
+        open={expanded}
+        onClose={() => setExpanded(false)}
+        userId={userId}
+        userName={userName}
+        loadingFileId={loadingFileId}
+        onOpenFile={onOpenFile}
+      />
+    </section>
+  )
+}
+
+function DriveBrowserDialog({
+  open,
+  onClose,
+  userId,
+  userName,
+  loadingFileId,
+  onOpenFile,
+}: {
+  open: boolean
+  onClose: () => void
+  userId: string
+  userName: string
+  loadingFileId: string | null
+  onOpenFile: (id: string) => void
+}) {
+  const { contents, err, setFolderId } = useDriveBrowser(userId, open)
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="flex h-[70vh] w-full max-w-3xl flex-col gap-0 overflow-hidden p-0">
+        <DialogHeader className="border-b p-4">
+          <DialogTitle>{userName}&rsquo;s drive</DialogTitle>
+        </DialogHeader>
+        <div className="flex-1 overflow-y-auto p-3">
+          <DriveListing
+            contents={contents}
+            err={err}
+            onNavigate={setFolderId}
+            loadingFileId={loadingFileId}
+            onOpenFile={onOpenFile}
+          />
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 

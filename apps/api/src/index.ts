@@ -1,3 +1,4 @@
+import "./lib/logbuf.js" // patches console — must load before anything that logs
 import http from "node:http"
 import express from "express"
 import cors from "cors"

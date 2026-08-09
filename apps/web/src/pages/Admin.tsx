@@ -21,6 +21,8 @@ import { TrashPanel } from "./admin/TrashPanel"
 import { RecycleBinPanel } from "./admin/RecycleBinPanel"
 import { ServerPanel } from "./admin/ServerPanel"
 import { ServerSummary } from "./admin/ServerSummary"
+import { ThumbnailsPanel } from "./admin/ThumbnailsPanel"
+import { LogsPanel } from "./admin/LogsPanel"
 import { HourlyChart } from "./admin/HourlyChart"
 import { RecentActivity } from "./admin/RecentActivity"
 import { RecentLogins } from "./admin/RecentLogins"
@@ -190,8 +192,10 @@ function Dashboard({
           <RecentLogins stats={stats} />
         </TabsContent>
 
-        <TabsContent value="server">
+        <TabsContent value="server" className="flex flex-col gap-4">
           <ServerPanel />
+          <ThumbnailsPanel />
+          <LogsPanel />
         </TabsContent>
 
         <TabsContent value="users">

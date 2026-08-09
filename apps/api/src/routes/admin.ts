@@ -9,6 +9,8 @@ import { assertUserRootFolderId } from "../lib/access.js"
 import { removeFile, STORAGE_ROOT } from "../storage/local.js"
 import { removeAudioVariants } from "../lib/audioTracks.js"
 import { notify } from "../lib/notify.js"
+import { recentLogs } from "../lib/logbuf.js"
+import { backfillProgress, backfillThumbnails, toolStatus } from "../lib/thumbnails.js"
 
 function formatBytes(bytes: number): string {
   if (bytes <= 0) return "0 B"
@@ -1107,4 +1109,49 @@ adminRouter.post("/recycle-bin/purge-all", async (_req, res) => {
     if (f.thumbnailKey) { try { removeFile(f.thumbnailKey) } catch {} }
   }
   res.json({ ok: true, files: files.length, folders: folders.length })
+})
+
+// --- server logs -----------------------------------------------------------
+// Recent console output from this process, newest last. `q` filters by
+// substring (the panel uses `[thumb]` to isolate the thumbnail pipeline).
+adminRouter.get("/logs", (req, res) => {
+  const q = String(req.query.q ?? "").toLowerCase()
+  const limit = Math.min(Number(req.query.limit) || 300, 800)
+  const entries = recentLogs().filter((e) => !q || e.msg.toLowerCase().includes(q))
+  res.json({ entries: entries.slice(-limit) })
+})
+
+// --- thumbnail pipeline ----------------------------------------------------
+// Health of the thumbnailer: which external binaries actually exist on this
+// box, plus how the files break down by generation state.
+adminRouter.get("/thumbnails", async (_req, res) => {
+  const [tools, states, missing] = await Promise.all([
+    toolStatus(),
+    prisma.file.groupBy({
+      by: ["thumbnailState"],
+      where: { deletedAt: null },
+      _count: { _all: true },
+    }),
+    prisma.file.count({ where: { deletedAt: null, thumbnailKey: null } }),
+  ])
+  res.json({
+    tools,
+    missing,
+    progress: backfillProgress(),
+    states: states.map((s) => ({ state: s.thumbnailState ?? "pending", count: s._count._all })),
+  })
+})
+
+// Kick off a backfill over every file missing a thumbnail. Returns immediately;
+// poll GET /thumbnails for progress.
+// ponytail: runs in the background on this process, no job queue — the
+// concurrency gate in lib/thumbnails keeps it from eating the box.
+adminRouter.post("/thumbnails/rebuild", (req, res) => {
+  const { includeFailed = true } = z
+    .object({ includeFailed: z.boolean().optional() })
+    .parse(req.body ?? {})
+
+  if (backfillProgress().running) return res.status(409).json({ error: "already_running" })
+  void backfillThumbnails(includeFailed)
+  res.json({ ok: true })
 })

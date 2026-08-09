@@ -20,6 +20,7 @@ import {
 } from "@phosphor-icons/react"
 import type { ComponentType } from "react"
 import { Button } from "@workspace/ui/components/button"
+import { Input } from "@workspace/ui/components/input"
 import { apiUrl } from "@/lib/config"
 import { apiGet, apiJson } from "@/lib/api"
 
@@ -410,13 +411,13 @@ export function LoginPage() {
                     Dev login (local only)
                   </div>
                   <div className="mt-2 flex gap-2">
-                    <input
+                    <Input
                       type="email"
                       required
                       placeholder="you@example.com"
                       value={devEmail}
                       onChange={(e) => setDevEmail(e.target.value)}
-                      className="bg-background min-w-0 flex-1 rounded-md border px-3 py-2 text-sm"
+                      className="min-w-0 flex-1 text-sm"
                     />
                     <Button type="submit" size="sm" disabled={devSubmitting}>
                       {devSubmitting ? "..." : "Go"}

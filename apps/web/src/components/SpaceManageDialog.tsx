@@ -38,6 +38,10 @@ import { SpaceLogo } from "./SpaceLogo"
 import { SpaceEditorDialog } from "./SpaceEditorDialog"
 
 type Role = "VIEWER" | "EDITOR"
+const ROLE_LABELS: Record<Role, string> = {
+  VIEWER: "Viewer",
+  EDITOR: "Editor",
+}
 
 type Contact = {
   id: string
@@ -545,7 +549,11 @@ export function SpaceManageDialog({
                   </ul>
                 )}
               </div>
-              <Select value={role} onValueChange={(v) => setRole(v as Role)}>
+              <Select
+                items={ROLE_LABELS}
+                value={role}
+                onValueChange={(v) => setRole(v as Role)}
+              >
                 <SelectTrigger className="rounded-xl">
                   <SelectValue />
                 </SelectTrigger>
@@ -649,6 +657,7 @@ export function SpaceManageDialog({
                     </span>
                   ) : (
                     <Select
+                      items={ROLE_LABELS}
                       value={m.role}
                       disabled={!iAmOwner}
                       onValueChange={(v) =>

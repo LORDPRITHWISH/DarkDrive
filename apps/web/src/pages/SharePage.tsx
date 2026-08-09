@@ -8,6 +8,7 @@ import {
 } from "@phosphor-icons/react"
 import { Button } from "@workspace/ui/components/button"
 import { Dialog, DialogContent, DialogTitle } from "@workspace/ui/components/dialog"
+import { Input } from "@workspace/ui/components/input"
 import { formatBytes, formatDate } from "@/lib/format"
 import { apiUrl } from "@/lib/config"
 import { iconFor } from "@/lib/fileIcon"
@@ -129,11 +130,10 @@ export function SharePage() {
         <div className="grid min-h-[60vh] place-items-center p-4">
           <div className="bg-card w-full max-w-sm rounded-xl border p-6">
             <div className="mb-2 font-medium">Password required</div>
-            <input
+            <Input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="bg-background w-full rounded-md border px-3 py-2"
             />
             <Button className="mt-3 w-full" onClick={() => resolve(password)}>
               Unlock

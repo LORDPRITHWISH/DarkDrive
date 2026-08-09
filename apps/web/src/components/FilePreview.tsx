@@ -3,6 +3,21 @@ import { XIcon, DownloadIcon, InfoIcon, CaretLeftIcon, CaretRightIcon } from "@p
 import type { FileItem, SubtitleTrack, AudioTrack } from "@/lib/types"
 import { apiUrl } from "@/lib/config"
 import { apiGet, apiJson } from "@/lib/api"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@workspace/ui/components/select"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@workspace/ui/components/table"
 import { formatBytes, formatDate } from "@/lib/format"
 import { DarkPlayer } from "./player"
 import { AudioPlayer } from "@/components/AudioPlayer"
@@ -182,6 +197,26 @@ export function FilePreview({
   const audioIndex =
     audioPick.fileId === file.id ? audioPick.index : file.audioTrackIndex ?? null
   const subtitleIndex = subtitlePick.fileId === file.id ? subtitlePick.index : null
+  // `items` feeds Select's trigger label; without it Base UI falls back to
+  // stringifying the raw value (the track index).
+  const audioItems: { value: number | null; label: string }[] = [
+    {
+      value: null,
+      label:
+        audioTracks.length === 0
+          ? "No audio"
+          : audioTracks.length === 1
+            ? audioTracks[0].label
+            : "Default",
+    },
+    ...(audioTracks.length > 1
+      ? audioTracks.map((a) => ({ value: a.index, label: a.label }))
+      : []),
+  ]
+  const subtitleItems: { value: number | null; label: string }[] = [
+    { value: null, label: subtitleTracks.length ? "Off" : "None found" },
+    ...subtitleTracks.map((t, i) => ({ value: i, label: t.label })),
+  ]
   const selectAudio = (index: number | null) => {
     setAudioPick({ fileId: file.id, index })
     apiJson(`/api/files/${file.id}`, "PATCH", { audioTrackIndex: index }).catch(
@@ -261,55 +296,46 @@ export function FilePreview({
             Playback
           </div>
           <div className="grid gap-2">
-            <label className="grid gap-1 text-sm">
+            <div className="grid gap-1 text-sm">
               <span className="text-muted-foreground text-xs">Audio</span>
-              <select
-                className="w-full rounded-md border bg-background px-2 py-1.5 text-sm disabled:opacity-60"
-                value={audioIndex ?? ""}
+              <Select
+                items={audioItems}
+                value={audioIndex}
                 disabled={audioTracks.length < 2}
-                onChange={(e) =>
-                  selectAudio(
-                    e.target.value === "" ? null : Number(e.target.value)
-                  )
-                }
+                onValueChange={(v) => selectAudio(v as number | null)}
               >
-                <option value="">
-                  {audioTracks.length === 0
-                    ? "No audio"
-                    : audioTracks.length === 1
-                      ? audioTracks[0].label
-                      : "Default"}
-                </option>
-                {audioTracks.length > 1 &&
-                  audioTracks.map((a) => (
-                    <option key={a.index} value={a.index}>
+                <SelectTrigger size="sm" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {audioItems.map((a) => (
+                    <SelectItem key={a.value ?? "default"} value={a.value}>
                       {a.label}
-                    </option>
+                    </SelectItem>
                   ))}
-              </select>
-            </label>
-            <label className="grid gap-1 text-sm">
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-1 text-sm">
               <span className="text-muted-foreground text-xs">Subtitles</span>
-              <select
-                className="w-full rounded-md border bg-background px-2 py-1.5 text-sm disabled:opacity-60"
-                value={subtitleIndex ?? ""}
+              <Select
+                items={subtitleItems}
+                value={subtitleIndex}
                 disabled={subtitleTracks.length === 0}
-                onChange={(e) =>
-                  selectSubtitle(
-                    e.target.value === "" ? null : Number(e.target.value)
-                  )
-                }
+                onValueChange={(v) => selectSubtitle(v as number | null)}
               >
-                <option value="">
-                  {subtitleTracks.length ? "Off" : "None found"}
-                </option>
-                {subtitleTracks.map((t, i) => (
-                  <option key={t.id} value={i}>
-                    {t.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+                <SelectTrigger size="sm" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {subtitleItems.map((t) => (
+                    <SelectItem key={t.value ?? "off"} value={t.value}>
+                      {t.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </div>
       )}
@@ -882,28 +908,26 @@ function CsvPreview({ src, delimiter }: { src: string; delimiter: string }) {
   const [head, ...body] = rows
   return (
     <div className="overflow-auto p-2">
-      <table className="border-collapse text-sm">
-        <thead className="sticky top-0 bg-accent">
-          <tr>
+      <Table>
+        <TableHeader className="bg-accent sticky top-0">
+          <TableRow>
             {head.map((h, i) => (
-              <th key={i} className="border px-2 py-1 text-left font-medium">
-                {h}
-              </th>
+              <TableHead key={i}>{h}</TableHead>
             ))}
-          </tr>
-        </thead>
-        <tbody>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {body.map((r, ri) => (
-            <tr key={ri} className={ri % 2 ? "bg-muted/30" : ""}>
+            <TableRow key={ri} className={ri % 2 ? "bg-muted/30" : ""}>
               {r.map((c, ci) => (
-                <td key={ci} className="border px-2 py-1 whitespace-pre-wrap">
+                <TableCell key={ci} className="whitespace-pre-wrap">
                   {c}
-                </td>
+                </TableCell>
               ))}
-            </tr>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   )
 }

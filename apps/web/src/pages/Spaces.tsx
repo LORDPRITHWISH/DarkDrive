@@ -18,6 +18,7 @@ import { SpaceLogo } from "@/components/SpaceLogo"
 import { SpaceEditorDialog } from "@/components/SpaceEditorDialog"
 import { JoinSpaceDialog } from "@/components/JoinSpaceDialog"
 import { Button } from "@workspace/ui/components/button"
+import { Input } from "@workspace/ui/components/input"
 import type { Space } from "@/lib/types"
 
 export function SpacesPage() {
@@ -77,8 +78,8 @@ export function SpacesPage() {
                     size={14}
                     className="text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2"
                   />
-                  <input
-                    className="bg-background focus-visible:ring-primary/40 w-44 rounded-xl border py-2 pl-8 pr-3 text-sm transition-shadow focus-visible:ring-2 focus-visible:outline-none"
+                  <Input
+                    className="w-44 rounded-xl pl-8 pr-3 text-sm"
                     placeholder="Search…"
                     value={q}
                     onChange={(e) => setQ(e.target.value)}

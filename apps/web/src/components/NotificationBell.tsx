@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import {
   BellIcon,
@@ -9,6 +9,11 @@ import {
   WarningCircleIcon,
   XIcon,
 } from "@phosphor-icons/react"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@workspace/ui/components/popover"
 import { useNotifications } from "@/store/notifications"
 import { relativeTime } from "@/lib/format"
 import type { AppNotification, NotificationType } from "@/lib/types"
@@ -38,20 +43,10 @@ export function NotificationBell() {
   const { items, unreadCount, loaded, load, markRead, markAllRead, dismiss } =
     useNotifications()
   const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!loaded) void load()
   }, [loaded, load])
-
-  useEffect(() => {
-    if (!open) return
-    const h = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener("mousedown", h)
-    return () => document.removeEventListener("mousedown", h)
-  }, [open])
 
   const onClickItem = (n: AppNotification) => {
     if (!n.readAt) void markRead(n.id)
@@ -60,9 +55,8 @@ export function NotificationBell() {
   }
 
   return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen((v) => !v)}
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
         title="Notifications"
         className="relative rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
       >
@@ -72,11 +66,13 @@ export function NotificationBell() {
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         )}
-      </button>
+      </PopoverTrigger>
 
-      {open && (
-        <div className="bg-popover animate-in fade-in slide-in-from-top-1 absolute right-0 top-full z-30 mt-1 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border shadow-xl duration-150">
-          <div className="flex items-center justify-between border-b px-3 py-2">
+      <PopoverContent
+        align="end"
+        className="w-80 max-w-[calc(100vw-2rem)] overflow-hidden p-0"
+      >
+        <div className="flex items-center justify-between border-b px-3 py-2">
             <span className="text-sm font-semibold">Notifications</span>
             {unreadCount > 0 && (
               <button
@@ -132,8 +128,7 @@ export function NotificationBell() {
               ))
             )}
           </div>
-        </div>
-      )}
-    </div>
+      </PopoverContent>
+    </Popover>
   )
 }

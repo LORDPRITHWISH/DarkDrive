@@ -24,6 +24,7 @@ import { FilePreview } from "@/components/FilePreview"
 import { FileThumb } from "@/components/file-grid/FileThumb"
 import { SearchFolderDialog } from "@/components/SearchFolderDialog"
 import { Button } from "@workspace/ui/components/button"
+import { Input } from "@workspace/ui/components/input"
 import {
   Table,
   TableBody,
@@ -222,7 +223,7 @@ export function SearchPage() {
               size={16}
               className="text-muted-foreground pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
             />
-            <input
+            <Input
               autoFocus
               value={qInput}
               onChange={(e) => setQInput(e.target.value)}
@@ -230,7 +231,7 @@ export function SearchPage() {
                 if (e.key === "Enter") commitQuery(qInput)
               }}
               placeholder="Search files and folders by name…"
-              className="bg-background focus-visible:ring-ring w-full rounded-xl border py-2 pl-9 pr-9 text-sm focus-visible:ring-2 focus-visible:outline-none"
+              className="rounded-xl pl-9 pr-9 text-sm"
             />
             {qInput && (
               <button

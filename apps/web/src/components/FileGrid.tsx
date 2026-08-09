@@ -345,6 +345,7 @@ export function FileGrid() {
       {menu && (
         <FileContextMenu
           menu={menu}
+          onClose={closeMenu}
           onOpen={() => {
             const f = files.find((x) => x.id === menu.id)
             if (f) setPreview(f)

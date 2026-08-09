@@ -31,6 +31,7 @@ import { apiGet, apiJson } from "@/lib/api"
 import { formatBytes, formatDate, relativeTime } from "@/lib/format"
 import { iconFor } from "@/lib/fileIcon"
 import { toast } from "@/store/toast"
+import { confirmDialog } from "@/store/confirm"
 import { FilePreview } from "@/components/FilePreview"
 import { useAdminFilePreview } from "./useAdminFilePreview"
 import { RecycleBinMoveDialog } from "./RecycleBinMoveDialog"
@@ -98,12 +99,13 @@ export function RecycleBinPanel({ users }: { users: AdminUser[] }) {
   }
 
   async function purge(type: "file" | "folder", id: string, name: string) {
-    if (
-      !confirm(
-        `Permanently erase "${name}" from the system? This deletes it for good — it cannot be recovered.`
-      )
-    )
-      return
+    const ok = await confirmDialog({
+      title: "Erase from the system?",
+      description: `"${name}" will be deleted for good — it cannot be recovered.`,
+      confirmLabel: "Erase forever",
+      destructive: true,
+    })
+    if (!ok) return
     setBusy({ id, action: "purge" })
     try {
       await apiJson("/api/admin/recycle-bin/purge", "POST", { type, id })
@@ -118,12 +120,14 @@ export function RecycleBinPanel({ users }: { users: AdminUser[] }) {
 
   async function purgeAll() {
     if (!data || data.totals.files + data.totals.folders === 0) return
-    if (
-      !confirm(
-        "Permanently erase everything in the recycle bin? This deletes all retained files and folders for good and cannot be undone."
-      )
-    )
-      return
+    const ok = await confirmDialog({
+      title: "Clear the recycle bin?",
+      description:
+        "All retained files and folders will be erased for good. This cannot be undone.",
+      confirmLabel: "Erase everything",
+      destructive: true,
+    })
+    if (!ok) return
     setPurgingAll(true)
     try {
       const r = await apiJson<{ files: number; folders: number }>(

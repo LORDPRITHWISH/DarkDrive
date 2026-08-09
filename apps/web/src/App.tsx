@@ -25,6 +25,7 @@ import { StarredPage } from "@/pages/Starred"
 import { ShareTargetPage } from "@/pages/ShareTarget"
 import { UploadToaster } from "@/components/UploadToaster"
 import { Toaster } from "@/components/Toaster"
+import { ConfirmDialog } from "@/components/ConfirmDialog"
 import { getSocket } from "@/lib/socket"
 import { useNotifications } from "@/store/notifications"
 import { toast } from "@/store/toast"
@@ -101,6 +102,7 @@ export function App() {
     <BrowserRouter>
       <Toaster />
       <UploadToaster />
+      <ConfirmDialog />
       <Routes>
         <Route path="/" element={<Root />} />
         <Route path="/landing" element={<LandingPage />} />

@@ -24,6 +24,8 @@ import {
 } from "@phosphor-icons/react"
 import { useAuth } from "@/store/auth"
 import { useDrive } from "@/store/drive"
+import { toast } from "@/store/toast"
+import { confirmDialog } from "@/store/confirm"
 import { Sidebar } from "@/components/Sidebar"
 import { SidebarToggle } from "@/components/SidebarToggle"
 import { HeaderActions } from "@/components/HeaderActions"
@@ -113,7 +115,12 @@ export function SpacePage() {
 
   async function handleLeave() {
     if (!id || busy) return
-    if (!confirm("Leave this space? You can rejoin any time since it's public.")) return
+    const ok = await confirmDialog({
+      title: "Leave this space?",
+      description: "You can rejoin any time since it's public.",
+      confirmLabel: "Leave",
+    })
+    if (!ok) return
     setBusy(true)
     try {
       await leaveSpace(id)
@@ -605,7 +612,7 @@ function RecentFileCard({
       await apiJson(`/api/files/${f.id}/owner`, "PATCH", { ownerId: userId, spaceId })
       onChanged()
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Couldn't change uploader.")
+      toast.error(e instanceof Error ? e.message : "Couldn't change uploader.")
     } finally {
       setBusy(false)
     }

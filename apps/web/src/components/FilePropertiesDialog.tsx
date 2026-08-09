@@ -18,6 +18,7 @@ import {
 } from "@workspace/ui/components/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@workspace/ui/components/tabs"
 import { Avatar, AvatarImage, AvatarFallback } from "@workspace/ui/components/avatar"
+import { HoverName } from "@/components/HoverName"
 
 type ActivityEvent = {
   action: string
@@ -80,8 +81,8 @@ export function FilePropertiesDialog({
             {iconFor(file.mimeType, 28, file.name)}
           </div>
           <div className="min-w-0 flex-1 text-left">
-            <DialogTitle className="truncate" title={file.name}>
-              {file.name}
+            <DialogTitle className="min-w-0 truncate">
+              <HoverName as="span" name={file.name} className="truncate" />
             </DialogTitle>
             <div className="text-muted-foreground mt-0.5 text-xs">
               {formatBytes(file.size)} · {file.mimeType || "unknown type"}

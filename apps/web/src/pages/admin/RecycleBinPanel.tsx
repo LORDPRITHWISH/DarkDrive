@@ -34,6 +34,7 @@ import { toast } from "@/store/toast"
 import { FilePreview } from "@/components/FilePreview"
 import { useAdminFilePreview } from "./useAdminFilePreview"
 import { RecycleBinMoveDialog } from "./RecycleBinMoveDialog"
+import { HoverName } from "@/components/HoverName"
 import type {
   AdminUser,
   FileItem,
@@ -381,9 +382,7 @@ function FolderRow({
               className={folder.color ? "shrink-0" : "text-primary shrink-0"}
             />
             <div className="min-w-0">
-              <div className="truncate font-medium" title={folder.name}>
-                {folder.name}
-              </div>
+              <HoverName as="div" name={folder.name} className="truncate font-medium" />
               <div className="text-muted-foreground text-xs">
                 {contents.length ? contents.join(" · ") : "empty folder"}
               </div>
@@ -521,12 +520,11 @@ function FolderContents({
               style={{ paddingLeft: depth * 20 + 16 }}
             >
               <span className="shrink-0">{iconFor(f.mimeType, 18, f.name)}</span>
-              <span
-                className={`truncate ${loadingFileId === f.id ? "text-muted-foreground" : ""}`}
-                title={f.name}
-              >
-                {f.name}
-              </span>
+              <HoverName
+                as="span"
+                name={f.name}
+                className={`min-w-0 truncate ${loadingFileId === f.id ? "text-muted-foreground" : ""}`}
+              />
             </div>
           </TableCell>
           <TableCell className="p-0 py-2 pr-3" colSpan={3} />
@@ -577,9 +575,7 @@ function NestedFolderRow({
               style={{ color: folder.color || undefined }}
               className={folder.color ? "shrink-0" : "text-primary shrink-0"}
             />
-            <span className="truncate" title={folder.name}>
-              {folder.name}
-            </span>
+            <HoverName as="span" name={folder.name} className="min-w-0 truncate" />
           </div>
         </TableCell>
       </TableRow>
@@ -617,12 +613,11 @@ function FileRow({
       <TableCell className="p-0 py-2 pr-3">
         <div className="flex items-center gap-2">
           <span className="shrink-0">{iconFor(file.mimeType, 20, file.name)}</span>
-          <span
-            className={`truncate font-medium ${isLoading ? "text-muted-foreground" : ""}`}
-            title={file.name}
-          >
-            {file.name}
-          </span>
+          <HoverName
+            as="span"
+            name={file.name}
+            className={`min-w-0 truncate font-medium ${isLoading ? "text-muted-foreground" : ""}`}
+          />
         </div>
       </TableCell>
       <TableCell className="p-0 py-2 pr-3">

@@ -330,6 +330,9 @@ export type FileItem = {
   storageKey: string
   thumbnailKey?: string | null
   thumbnailState?: string | null
+  // Saved default audio stream index for video files with multiple audio
+  // tracks (see AudioTrack) — null plays the source's own default track.
+  audioTrackIndex?: number | null
   isHidden: boolean
   isTrashed: boolean
   isStarred: boolean
@@ -348,6 +351,15 @@ export type SubtitleTrack = {
   label: string
   lang: string | null
   src: string
+}
+
+// An embedded audio stream on a video file, probed server-side (ffprobe).
+// `index` is the container's stream index, passed back as `?audio=` to pick
+// it — browsers don't reliably expose/switch embedded multi-audio streams
+// themselves, so track selection is done via a server-remuxed variant.
+export type AudioTrack = {
+  index: number
+  label: string
 }
 
 export type Breadcrumb = { id: string; name: string }

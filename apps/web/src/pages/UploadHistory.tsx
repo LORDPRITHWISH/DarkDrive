@@ -26,6 +26,7 @@ import {
   TableRow,
 } from "@workspace/ui/components/table"
 import { iconFor } from "@/lib/fileIcon"
+import { HoverName } from "@/components/HoverName"
 
 type Bucket = { key: string; label: string; order: number }
 
@@ -187,7 +188,7 @@ export function UploadHistoryPage() {
                               <TableCell className="p-0 py-2 pl-3">
                                 <div className="flex items-center gap-2">
                                   {iconFor(f.mimeType, 18, f.name)}
-                                  <span className="truncate">{f.name}</span>
+                                  <HoverName as="span" name={f.name} className="min-w-0 truncate" />
                                 </div>
                               </TableCell>
                               <TableCell className="p-0 py-2">{formatDate(f.createdAt)}</TableCell>

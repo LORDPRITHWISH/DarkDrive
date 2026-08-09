@@ -7,6 +7,7 @@ import { redis } from "../db/redis.js"
 import { currentUser, requireAuth } from "../middleware/auth.js"
 import { assertUserRootFolderId } from "../lib/access.js"
 import { removeFile, STORAGE_ROOT } from "../storage/local.js"
+import { removeAudioVariants } from "../lib/audioTracks.js"
 import { notify } from "../lib/notify.js"
 
 function formatBytes(bytes: number): string {
@@ -1052,6 +1053,7 @@ adminRouter.post("/recycle-bin/purge", async (req, res) => {
     await prisma.file.delete({ where: { id } })
     try { removeFile(file.storageKey) } catch {}
     if (file.thumbnailKey) { try { removeFile(file.thumbnailKey) } catch {} }
+    removeAudioVariants(file.id)
     return res.json({ ok: true })
   }
 
@@ -1061,7 +1063,7 @@ adminRouter.post("/recycle-bin/purge", async (req, res) => {
   const [files, folders] = await Promise.all([
     prisma.file.findMany({
       where: { folderId: { in: ids } },
-      select: { storageKey: true, thumbnailKey: true },
+      select: { id: true, storageKey: true, thumbnailKey: true },
     }),
     prisma.folder.findMany({
       where: { id: { in: ids } },
@@ -1072,6 +1074,7 @@ adminRouter.post("/recycle-bin/purge", async (req, res) => {
   for (const f of files) {
     try { removeFile(f.storageKey) } catch {}
     if (f.thumbnailKey) { try { removeFile(f.thumbnailKey) } catch {} }
+    removeAudioVariants(f.id)
   }
   for (const f of folders) {
     if (f.thumbnailKey) { try { removeFile(f.thumbnailKey) } catch {} }
@@ -1084,7 +1087,7 @@ adminRouter.post("/recycle-bin/purge-all", async (_req, res) => {
   const [files, folders] = await Promise.all([
     prisma.file.findMany({
       where: { deletedAt: { not: null } },
-      select: { storageKey: true, thumbnailKey: true },
+      select: { id: true, storageKey: true, thumbnailKey: true },
     }),
     prisma.folder.findMany({
       where: { deletedAt: { not: null } },
@@ -1098,6 +1101,7 @@ adminRouter.post("/recycle-bin/purge-all", async (_req, res) => {
   for (const f of files) {
     try { removeFile(f.storageKey) } catch {}
     if (f.thumbnailKey) { try { removeFile(f.thumbnailKey) } catch {} }
+    removeAudioVariants(f.id)
   }
   for (const f of folders) {
     if (f.thumbnailKey) { try { removeFile(f.thumbnailKey) } catch {} }

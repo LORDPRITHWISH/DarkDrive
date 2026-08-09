@@ -13,6 +13,7 @@ import { apiUrl } from "@/lib/config"
 import { iconFor } from "@/lib/fileIcon"
 import { FileViewer } from "@/components/FilePreview"
 import type { FileItem, Folder } from "@/lib/types"
+import { HoverName } from "@/components/HoverName"
 
 function ShareShell({ children }: { children: React.ReactNode }) {
   return (
@@ -156,8 +157,8 @@ export function SharePage() {
         <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col gap-3 p-4">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <h1 className="truncate text-lg font-semibold" title={f.name}>
-                {f.name}
+              <h1 className="min-w-0 truncate text-lg font-semibold">
+                <HoverName as="span" name={f.name} className="truncate" />
               </h1>
               <div className="text-muted-foreground text-sm">
                 {f.mimeType || "unknown"} · {formatBytes(f.size)}
@@ -195,7 +196,7 @@ export function SharePage() {
               className={f.color ? "" : "text-primary"}
             />
             <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-medium">{f.name}</div>
+              <HoverName as="div" name={f.name} className="truncate text-sm font-medium" />
               <div className="text-muted-foreground text-xs">
                 Subfolder (browse via owner)
               </div>
@@ -268,11 +269,8 @@ function SharedFileModal({
         </div>
         <aside className="flex w-72 shrink-0 flex-col gap-3 overflow-auto border-l p-4">
           <div className="flex items-start justify-between gap-2">
-            <DialogTitle
-              className="min-w-0 flex-1 truncate text-base font-semibold"
-              title={file.name}
-            >
-              {file.name}
+            <DialogTitle className="min-w-0 flex-1 truncate text-base font-semibold">
+              <HoverName as="span" name={file.name} className="truncate" />
             </DialogTitle>
           </div>
           <a

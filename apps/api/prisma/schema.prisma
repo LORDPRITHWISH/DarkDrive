@@ -140,6 +140,11 @@ model File {
   // attempted. Used to avoid re-running the pipeline on files that can't (or
   // didn't) produce a thumbnail.
   thumbnailState String?
+  // Container stream index of the audio track to play by default, set once
+  // from the player/properties panel so multi-audio files (dual-audio rips,
+  // commentary tracks) don't need reselecting on every open. Null = the
+  // source's own default track.
+  audioTrackIndex Int?
   isHidden   Boolean  @default(false)
   isTrashed  Boolean  @default(false)
   isStarred  Boolean  @default(false)

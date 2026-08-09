@@ -76,7 +76,7 @@ async function withSlot<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 // --- process helpers -------------------------------------------------------
-function run(cmd: string, args: string[], timeoutMs: number): Promise<boolean> {
+export function run(cmd: string, args: string[], timeoutMs: number): Promise<boolean> {
   return new Promise((resolve) => {
     const child = spawn(cmd, args, { stdio: "ignore" })
     let settled = false

@@ -9,6 +9,7 @@ import type { FileItem, Folder } from "@/lib/types"
 import { formatBytes, formatDate } from "@/lib/format"
 import { FileThumb } from "./FileThumb"
 import { isInternalDrag, readItemDrag, type DragItem } from "./dnd"
+import { HoverName } from "@/components/HoverName"
 import {
   Table,
   TableBody,
@@ -94,7 +95,11 @@ export function FileListView({
                   style={{ color: f.color || undefined }}
                   className={f.color ? "" : "text-primary"}
                 />
-                <span className={f.isHidden ? "opacity-60 italic" : ""}>{f.name}</span>
+                <HoverName
+                  as="span"
+                  name={f.name}
+                  className={`min-w-0 truncate ${f.isHidden ? "opacity-60 italic" : ""}`}
+                />
                 {f.isStarred && (
                   <StarIcon size={14} weight="fill" className="text-yellow-500" />
                 )}
@@ -127,7 +132,11 @@ export function FileListView({
                 <span className="grid size-5 shrink-0 place-items-center overflow-hidden rounded">
                   <FileThumb file={f} iconSize={20} />
                 </span>
-                <span className={f.isHidden ? "opacity-60 italic" : ""}>{f.name}</span>
+                <HoverName
+                  as="span"
+                  name={f.name}
+                  className={`min-w-0 truncate ${f.isHidden ? "opacity-60 italic" : ""}`}
+                />
                 {f.isStarred && (
                   <StarIcon size={14} weight="fill" className="text-yellow-500" />
                 )}

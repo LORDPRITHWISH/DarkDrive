@@ -6,6 +6,7 @@ import { iconFor } from "@/lib/fileIcon"
 import { thumbnailable } from "@/lib/thumb"
 import { StarToggle } from "./StarToggle"
 import { FileThumb } from "./FileThumb"
+import { HoverName } from "@/components/HoverName"
 
 export function FileCard({
   file,
@@ -87,9 +88,11 @@ export function FileCard({
             onClick={(e) => e.stopPropagation()}
           />
         ) : (
-          <div className="truncate text-center text-sm font-medium" title={file.name}>
-            {file.name}
-          </div>
+          <HoverName
+            as="div"
+            name={file.name}
+            className="truncate text-center text-sm font-medium"
+          />
         )}
         <div className="text-muted-foreground text-center text-xs">{formatBytes(file.size)}</div>
       </div>

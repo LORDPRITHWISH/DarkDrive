@@ -22,6 +22,7 @@ import { apiGet, apiJson } from "@/lib/api"
 import { useDrive } from "@/store/drive"
 import { useMe } from "@/store/me"
 import { toast } from "@/store/toast"
+import { confirmDialog } from "@/store/confirm"
 import { formatBytes, formatDate } from "@/lib/format"
 import { iconFor } from "@/lib/fileIcon"
 import { FilePreview } from "@/components/FilePreview"
@@ -69,19 +70,26 @@ export function BinPage() {
     await reload()
   }
   async function remove(type: "folder" | "file", id: string, name: string) {
-    if (!confirm(`Permanently delete "${name}"?`)) return
+    const ok = await confirmDialog({
+      title: "Delete forever?",
+      description: `"${name}" will be permanently deleted. This cannot be undone.`,
+      confirmLabel: "Delete forever",
+      destructive: true,
+    })
+    if (!ok) return
     await deleteItem(type, id)
     await reload()
   }
   async function emptyBin() {
     const n = folders.length + files.length
     if (n === 0) return
-    if (
-      !confirm(
-        `Permanently delete everything in the bin? This cannot be undone.`
-      )
-    )
-      return
+    const ok = await confirmDialog({
+      title: "Empty the bin?",
+      description: `All ${n} item${n === 1 ? "" : "s"} in the bin will be permanently deleted. This cannot be undone.`,
+      confirmLabel: "Empty bin",
+      destructive: true,
+    })
+    if (!ok) return
     setClearing(true)
     try {
       const r = await apiJson<{ files: number; folders: number }>(

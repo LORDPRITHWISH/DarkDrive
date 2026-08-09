@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { FolderIcon } from "@phosphor-icons/react"
+import { Input } from "@workspace/ui/components/input"
 import type { Folder } from "@/lib/types"
 import { apiUrl } from "@/lib/config"
 import { StarToggle } from "./StarToggle"
@@ -116,8 +117,8 @@ export function FolderCard({
       </div>
       <div className="px-2 pb-2">
         {renaming ? (
-          <input
-            className="bg-background w-full rounded border px-1 text-sm"
+          <Input
+            className="h-7 rounded-md px-1 text-sm"
             value={renameValue}
             onChange={(e) => onRenameChange(e.target.value)}
             onKeyDown={(e) => {

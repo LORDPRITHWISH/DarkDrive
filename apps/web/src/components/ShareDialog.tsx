@@ -80,6 +80,7 @@ export function ShareDialog({ open, onClose, resourceType, resourceId, resourceN
             <label className="text-sm">
               <div className="text-muted-foreground mb-1 text-xs">Permission</div>
               <Select
+                items={{ VIEW: "View", EDIT: "Edit (download)" }}
                 value={permission}
                 onValueChange={(v) => setPermission(v as "VIEW" | "EDIT")}
               >

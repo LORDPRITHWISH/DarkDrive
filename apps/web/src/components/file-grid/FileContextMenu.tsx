@@ -12,6 +12,11 @@ import {
   TrashIcon,
   UsersThreeIcon,
 } from "@phosphor-icons/react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@workspace/ui/components/dropdown-menu"
 
 export type MenuPos = {
   x: number
@@ -25,6 +30,7 @@ export type MenuPos = {
 
 type Props = {
   menu: MenuPos
+  onClose: () => void
   onOpen: () => void
   onProperties: () => void
   onExtract: () => void
@@ -42,6 +48,7 @@ type Props = {
 
 export function FileContextMenu({
   menu,
+  onClose,
   onOpen,
   onProperties,
   onExtract,
@@ -59,96 +66,91 @@ export function FileContextMenu({
   const isShortcut = !!menu.shortcutId
   const isZip = menu.type === "file" && /\.zip$/i.test(menu.name)
   return (
-    <ul
-      className="bg-popover text-popover-foreground fixed z-50 w-56 rounded-md border p-1 text-sm shadow-lg"
-      style={{ left: menu.x, top: menu.y }}
-      onClick={(e) => e.stopPropagation()}
-    >
-      {menu.type === "file" && (
-        <>
-          <MenuItem icon={<OpenEyeIcon size={16} />} onClick={onOpen}>
-            Open
-          </MenuItem>
-          <MenuItem icon={<InfoIcon size={16} />} onClick={onProperties}>
-            Properties
-          </MenuItem>
-          {isZip && (
-            <MenuItem icon={<FileZipIcon size={16} />} onClick={onExtract}>
-              Extract here
-            </MenuItem>
-          )}
-        </>
-      )}
-      {menu.type === "folder" && !isShortcut && (
-        <MenuItem icon={<InfoIcon size={16} />} onClick={onFolderProperties}>
-          Properties…
-        </MenuItem>
-      )}
-      <MenuItem icon={<DownloadIcon size={16} />} onClick={onDownload}>
-        Download
-      </MenuItem>
-      {isShortcut && (
-        <MenuItem icon={<LinkBreakIcon size={16} />} onClick={onRemoveShortcut}>
-          Remove shortcut
-        </MenuItem>
-      )}
-      {!isShortcut && (
-        <MenuItem icon={<PencilSimpleIcon size={16} />} onClick={onRename}>
-          Rename
-        </MenuItem>
-      )}
-      <MenuItem icon={<ArrowsOutCardinalIcon size={16} />} onClick={onMove}>
-        Move to…
-      </MenuItem>
-      {!isShortcut && (
-        <>
-          <MenuItem icon={<UsersThreeIcon size={16} />} onClick={onAddToSpace}>
-            Add to space…
-          </MenuItem>
-          <MenuItem icon={<ShareNetworkIcon size={16} />} onClick={onShare}>
-            Share…
-          </MenuItem>
-          <MenuItem icon={<StarIcon size={16} />} onClick={onToggleStar}>
-            Toggle star
-          </MenuItem>
-          <MenuItem icon={<EyeSlashIcon size={16} />} onClick={onToggleHidden}>
-            Toggle hidden
-          </MenuItem>
-          <MenuItem
-            icon={<TrashIcon size={16} weight="fill" />}
-            danger
-            onClick={onDelete}
-          >
-            {menu.type === "folder" ? "Delete folder" : "Delete file"}
-          </MenuItem>
-        </>
-      )}
-    </ul>
-  )
-}
-
-function MenuItem({
-  icon,
-  children,
-  onClick,
-  danger,
-}: {
-  icon?: React.ReactNode
-  children: React.ReactNode
-  onClick: () => void
-  danger?: boolean
-}) {
-  return (
-    <li>
-      <button
-        onClick={onClick}
-        className={`hover:bg-accent flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left ${
-          danger ? "text-destructive hover:text-destructive" : ""
-        }`}
+    <DropdownMenu open onOpenChange={(open) => !open && onClose()}>
+      <DropdownMenuContent
+        // Anchor the menu to the click point rather than an element; the
+        // positioner then flips it away from viewport edges for free.
+        anchor={{
+          getBoundingClientRect: () =>
+            new DOMRect(menu.x, menu.y, 0, 0),
+        }}
+        align="start"
+        side="bottom"
+        sideOffset={0}
+        className="w-56"
       >
-        {icon}
-        <span>{children}</span>
-      </button>
-    </li>
+        {menu.type === "file" && (
+          <>
+            <DropdownMenuItem onClick={onOpen}>
+              <OpenEyeIcon size={16} />
+              Open
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onProperties}>
+              <InfoIcon size={16} />
+              Properties
+            </DropdownMenuItem>
+            {isZip && (
+              <DropdownMenuItem onClick={onExtract}>
+                <FileZipIcon size={16} />
+                Extract here
+              </DropdownMenuItem>
+            )}
+          </>
+        )}
+        {menu.type === "folder" && !isShortcut && (
+          <DropdownMenuItem onClick={onFolderProperties}>
+            <InfoIcon size={16} />
+            Properties…
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuItem onClick={onDownload}>
+          <DownloadIcon size={16} />
+          Download
+        </DropdownMenuItem>
+        {isShortcut && (
+          <DropdownMenuItem onClick={onRemoveShortcut}>
+            <LinkBreakIcon size={16} />
+            Remove shortcut
+          </DropdownMenuItem>
+        )}
+        {!isShortcut && (
+          <DropdownMenuItem onClick={onRename}>
+            <PencilSimpleIcon size={16} />
+            Rename
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuItem onClick={onMove}>
+          <ArrowsOutCardinalIcon size={16} />
+          Move to…
+        </DropdownMenuItem>
+        {!isShortcut && (
+          <>
+            <DropdownMenuItem onClick={onAddToSpace}>
+              <UsersThreeIcon size={16} />
+              Add to space…
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onShare}>
+              <ShareNetworkIcon size={16} />
+              Share…
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onToggleStar}>
+              <StarIcon size={16} />
+              Toggle star
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onToggleHidden}>
+              <EyeSlashIcon size={16} />
+              Toggle hidden
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={onDelete}
+              className="text-destructive hover:text-destructive data-highlighted:text-destructive"
+            >
+              <TrashIcon size={16} weight="fill" />
+              {menu.type === "folder" ? "Delete folder" : "Delete file"}
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }

@@ -14,14 +14,22 @@ function DropdownMenuContent({
   className,
   sideOffset = 4,
   align = "start",
+  side,
+  anchor,
   ...props
-}: MenuPrimitive.Popup.Props & {
-  sideOffset?: number
-  align?: MenuPrimitive.Positioner.Props["align"]
-}) {
+}: MenuPrimitive.Popup.Props &
+  Pick<MenuPrimitive.Positioner.Props, "align" | "side" | "anchor"> & {
+    sideOffset?: number
+  }) {
   return (
     <MenuPrimitive.Portal>
-      <MenuPrimitive.Positioner sideOffset={sideOffset} align={align}>
+      <MenuPrimitive.Positioner
+        sideOffset={sideOffset}
+        align={align}
+        side={side}
+        anchor={anchor}
+        className="z-50"
+      >
         <MenuPrimitive.Popup
           data-slot="dropdown-menu-content"
           className={cn(

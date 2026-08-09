@@ -27,6 +27,12 @@ import { useMe } from "@/store/me"
 import { useSidebar } from "@/store/sidebar"
 import { formatBytes } from "@/lib/format"
 import { Button } from "@workspace/ui/components/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@workspace/ui/components/dropdown-menu"
 import { ThemeToggle } from "@/components/ThemeToggle"
 import { MobileTabBar } from "@/components/MobileTabBar"
 
@@ -36,8 +42,6 @@ export function Sidebar() {
   const { quota, loadQuota, requestUpgrade } = useMe()
   const fileInput = useRef<HTMLInputElement>(null)
   const folderInput = useRef<HTMLInputElement>(null)
-  const uploadMenuRef = useRef<HTMLDivElement>(null)
-  const [uploadMenuOpen, setUploadMenuOpen] = useState(false)
   const [creatingSpace, setCreatingSpace] = useState(false)
   const [upgradeOpen, setUpgradeOpen] = useState(false)
   const desktopCollapsed = useSidebar((s) => s.collapsed)
@@ -58,15 +62,6 @@ export function Sidebar() {
   useEffect(() => {
     setMobileOpen(false)
   }, [loc.pathname, setMobileOpen])
-
-  useEffect(() => {
-    if (!uploadMenuOpen) return
-    const h = (e: MouseEvent) => {
-      if (!uploadMenuRef.current?.contains(e.target as Node)) setUploadMenuOpen(false)
-    }
-    document.addEventListener("mousedown", h)
-    return () => document.removeEventListener("mousedown", h)
-  }, [uploadMenuOpen])
 
   const collapsed = isMobile ? false : desktopCollapsed
 
@@ -125,53 +120,37 @@ export function Sidebar() {
           </Link>
 
           <div className={`flex items-center gap-1.5 ${collapsed ? "" : "ml-auto"}`}>
-            <div ref={uploadMenuRef} className="relative">
-              {!collapsed && (
-                <Button
-                  size="sm"
-                  onClick={() => setUploadMenuOpen((v) => !v)}
-                  title="Upload"
-                >
-                  <UploadIcon size={16} weight="bold" />
-                  <span className="hidden md:inline">Upload</span>
-                </Button>
-              )}
-
-              {collapsed && (
-                <button
-                  onClick={() => setUploadMenuOpen((v) => !v)}
-                  title="Upload"
-                  className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-                >
-                  <UploadIcon size={16} weight="bold" />
-                </button>
-              )}
-
-              {uploadMenuOpen && (
-                <div className="bg-popover animate-in fade-in slide-in-from-top-1 absolute left-0 top-full z-30 mt-1 w-36 overflow-hidden rounded-xl border p-1 text-sm shadow-xl duration-150">
-                  <button
-                    onClick={() => {
-                      setUploadMenuOpen(false)
-                      fileInput.current?.click()
-                    }}
-                    className="hover:bg-accent flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors"
-                  >
-                    <FileIcon size={14} />
-                    Files
-                  </button>
-                  <button
-                    onClick={() => {
-                      setUploadMenuOpen(false)
-                      folderInput.current?.click()
-                    }}
-                    className="hover:bg-accent flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors"
-                  >
-                    <FolderOpenIcon size={14} />
-                    Folder
-                  </button>
-                </div>
-              )}
-            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  collapsed ? (
+                    <Button
+                      size="icon-sm"
+                      variant="ghost"
+                      className="text-muted-foreground"
+                      title="Upload"
+                    >
+                      <UploadIcon size={16} weight="bold" />
+                    </Button>
+                  ) : (
+                    <Button size="sm" title="Upload">
+                      <UploadIcon size={16} weight="bold" />
+                      <span className="hidden md:inline">Upload</span>
+                    </Button>
+                  )
+                }
+              />
+              <DropdownMenuContent className="w-36">
+                <DropdownMenuItem onClick={() => fileInput.current?.click()}>
+                  <FileIcon size={14} />
+                  Files
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => folderInput.current?.click()}>
+                  <FolderOpenIcon size={14} />
+                  Folder
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
             <button
               onClick={() => setMobileOpen(false)}

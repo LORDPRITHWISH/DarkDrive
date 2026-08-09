@@ -226,6 +226,16 @@ export function FilePreview({
   const selectSubtitle = (index: number | null) => {
     setSubtitlePick({ fileId: file.id, index })
   }
+  const posterUrl = videoFile ? apiUrl(`/api/files/${file.id}/thumbnail`) : undefined
+  const storyboardUrl = videoFile
+    ? apiUrl(`/api/files/${file.id}/storyboard.vtt`)
+    : undefined
+  const startTime = file.playbackPositionSec ?? undefined
+  const saveProgress = (sec: number) => {
+    apiJson(`/api/files/${file.id}`, "PATCH", { playbackPositionSec: sec || null }).catch(
+      () => {}
+    )
+  }
 
   const officeFile = isOfficeFile(file.mimeType, file.name)
   const pdfFile = isPdfFile(file.mimeType, file.name)
@@ -437,6 +447,10 @@ export function FilePreview({
             subtitleTracks={subtitleTracks}
             subtitleIndex={subtitleIndex}
             audioIndex={audioIndex}
+            poster={posterUrl}
+            storyboardSrc={storyboardUrl}
+            startTime={startTime}
+            onProgress={saveProgress}
           />
         </div>
 
@@ -498,6 +512,10 @@ export function FilePreview({
             subtitleTracks={subtitleTracks}
             subtitleIndex={subtitleIndex}
             audioIndex={audioIndex}
+            poster={posterUrl}
+            storyboardSrc={storyboardUrl}
+            startTime={startTime}
+            onProgress={saveProgress}
           />
         </div>
 
@@ -620,6 +638,10 @@ export function FileViewer({
   subtitleTracks = [],
   subtitleIndex = null,
   audioIndex = null,
+  poster,
+  storyboardSrc,
+  startTime,
+  onProgress,
 }: {
   file: FileItem
   src: string
@@ -632,6 +654,13 @@ export function FileViewer({
   subtitleIndex?: number | null
   // Audio stream to request — folded into the video src as `?audio=`.
   audioIndex?: number | null
+  // Poster image, scrubbing-preview storyboard, and resume position all need
+  // an authenticated request, so like the track selection above these are
+  // supplied by the caller and omitted on public surfaces.
+  poster?: string
+  storyboardSrc?: string
+  startTime?: number
+  onProgress?: (sec: number) => void
 }) {
   const mime = file.mimeType
   const sizing = layout === "fill" ? FILL_MEDIA : MODAL_MEDIA
@@ -653,6 +682,10 @@ export function FileViewer({
         src={playSrc}
         tracks={subtitleTracks}
         subtitleIndex={subtitleIndex}
+        poster={poster}
+        storyboardSrc={storyboardSrc}
+        startTime={startTime}
+        onProgress={onProgress}
         className={`block bg-black ${sizing.h} ${sizing.w} ${
           layout === "fill" ? "h-full w-full" : "w-[90vw] aspect-video"
         }`}
@@ -726,11 +759,19 @@ function VideoPreview({
   src,
   tracks,
   subtitleIndex,
+  poster,
+  storyboardSrc,
+  startTime,
+  onProgress,
   className,
 }: {
   src: string
   tracks: SubtitleTrack[]
   subtitleIndex: number | null
+  poster?: string
+  storyboardSrc?: string
+  startTime?: number
+  onProgress?: (sec: number) => void
   className?: string
 }) {
   const wrapperRef = useRef<HTMLDivElement>(null)
@@ -776,6 +817,10 @@ function VideoPreview({
         src={src}
         tracks={tracks}
         subtitleIndex={subtitleIndex}
+        poster={poster}
+        storyboardSrc={storyboardSrc}
+        startTime={startTime}
+        onProgress={onProgress}
         className="h-full w-full"
       />
     </div>

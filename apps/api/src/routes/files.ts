@@ -24,7 +24,15 @@ import {
 import { allowFrameEmbedding } from "../lib/embed.js"
 import { streamStoredFile } from "../lib/stream.js"
 import { listSubtitleSiblings, isSubtitleFile, toVtt } from "../lib/subtitles.js"
-import { canThumbnail, generateThumbnail, queueThumbnail } from "../lib/thumbnails.js"
+import {
+  canThumbnail,
+  generateThumbnail,
+  queueThumbnail,
+  canStoryboard,
+  generateStoryboard,
+  buildStoryboardVtt,
+  type StoryboardMeta,
+} from "../lib/thumbnails.js"
 import { probeAudioStreams, getAudioVariant } from "../lib/audioTracks.js"
 import { maybeNotifyQuotaNearLimit } from "../lib/notify.js"
 import { importUrlToFile } from "../lib/urlImport.js"
@@ -991,6 +999,58 @@ filesRouter.get("/:id/thumbnail", async (req, res) => {
   fs.createReadStream(abs).pipe(res)
 })
 
+// Don't keep retrying files we've already determined can't be storyboarded
+// (mirrors the thumbnail route below); a fresh attempt only happens once the
+// cached key/meta is missing and the last attempt didn't already fail.
+async function resolveStoryboard(file: {
+  id: string
+  storyboardKey: string | null
+  storyboardState: string | null
+  storyboardMeta: unknown
+}): Promise<{ key: string; meta: StoryboardMeta } | null> {
+  if (file.storyboardKey && file.storyboardMeta)
+    return { key: file.storyboardKey, meta: file.storyboardMeta as StoryboardMeta }
+  if (file.storyboardState === "failed" || file.storyboardState === "unsupported") return null
+  return generateStoryboard(file.id)
+}
+
+// Serve the seek bar's scrubbing-preview sprite sheet — a grid of JPEG frames
+// generated on demand (see lib/thumbnails' storyboard pipeline) the first time
+// either this or storyboard.vtt is requested.
+filesRouter.get("/:id/storyboard.jpg", async (req, res) => {
+  const user = currentUser(req)
+  const file = await getFileWithAccess(user.id, req.params.id, "read", { role: user.role })
+  if (!file) return res.status(404).json({ error: "not_found" })
+  if (!canStoryboard(file)) return res.status(415).json({ error: "unsupported" })
+
+  const result = await resolveStoryboard(file)
+  if (!result) return res.status(404).json({ error: "no_storyboard" })
+
+  const abs = absolutePath(result.key)
+  if (!fs.existsSync(abs)) return res.status(404).json({ error: "gone" })
+
+  res.setHeader("Content-Type", "image/jpeg")
+  res.setHeader("Cache-Control", "private, max-age=86400")
+  fs.createReadStream(abs).pipe(res)
+})
+
+// Serve the storyboard as a WebVTT track (one cue per sprite tile) so it can
+// be attached to the <video> as a `kind="metadata" label="thumbnails"` track.
+filesRouter.get("/:id/storyboard.vtt", async (req, res) => {
+  const user = currentUser(req)
+  const file = await getFileWithAccess(user.id, req.params.id, "read", { role: user.role })
+  if (!file) return res.status(404).json({ error: "not_found" })
+  if (!canStoryboard(file)) return res.status(415).json({ error: "unsupported" })
+
+  const result = await resolveStoryboard(file)
+  if (!result) return res.status(404).json({ error: "no_storyboard" })
+
+  allowFrameEmbedding(res)
+  res.setHeader("Content-Type", "text/vtt; charset=utf-8")
+  res.setHeader("Cache-Control", "private, max-age=86400")
+  res.send(buildStoryboardVtt(result.meta, "storyboard.jpg"))
+})
+
 // List sidecar subtitle tracks for a video: sibling files in the same folder
 // whose base name matches the video (e.g. Movie.mkv ↔ Movie.en.srt).
 filesRouter.get("/:id/subtitles", async (req, res) => {
@@ -1078,6 +1138,7 @@ filesRouter.patch("/:id", async (req, res) => {
       isStarred: z.boolean().optional(),
       isTrashed: z.boolean().optional(),
       audioTrackIndex: z.number().int().nullable().optional(),
+      playbackPositionSec: z.number().min(0).nullable().optional(),
     })
     .parse(req.body)
   const file = await getFileWithAccess(user.id, req.params.id, "write")

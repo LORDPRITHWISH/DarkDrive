@@ -145,6 +145,17 @@ model File {
   // commentary tracks) don't need reselecting on every open. Null = the
   // source's own default track.
   audioTrackIndex Int?
+  // Playback position in seconds, saved periodically while a video plays so
+  // reopening it resumes where the user left off. Null = start from the top
+  // (never played, or finished — see lib/thumbnails' onProgress(0) on `ended`).
+  playbackPositionSec Float?
+  // Storage key of the generated scrubbing-preview sprite sheet (a grid of
+  // JPEG frames) for the seek bar, or null if none exists yet. `storyboardMeta`
+  // holds the grid layout needed to slice it (interval/cols/rows/tileW/tileH).
+  // See lib/thumbnails' storyboard generation.
+  storyboardKey String?
+  storyboardState String?
+  storyboardMeta Json?
   isHidden   Boolean  @default(false)
   isTrashed  Boolean  @default(false)
   isStarred  Boolean  @default(false)

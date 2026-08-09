@@ -25,6 +25,7 @@ import { useDrive } from "@/store/drive"
 import { FileThumb } from "@/components/file-grid/FileThumb"
 import { formatBytes } from "@/lib/format"
 import type { Breadcrumb, FileItem, Folder } from "@/lib/types"
+import { HoverName } from "@/components/HoverName"
 
 type FolderNode = { id: string; name: string; parentId: string | null }
 type TreeResponse = { rootId: string; folders: FolderNode[] }
@@ -462,7 +463,7 @@ function FolderTree({
             weight="fill"
             className={isSelected ? "text-primary shrink-0" : "text-muted-foreground shrink-0"}
           />
-          <span className="truncate">{name}</span>
+          <HoverName as="span" name={name} className="min-w-0 truncate" />
         </div>
         {isOpen && kids.map((k) => render(k.id, k.name, depth + 1))}
       </div>

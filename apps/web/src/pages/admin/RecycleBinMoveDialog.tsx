@@ -17,6 +17,7 @@ import {
 } from "@workspace/ui/components/dialog"
 import { apiGet } from "@/lib/api"
 import type { AdminFolderTree, AdminUser } from "@/lib/types"
+import { HoverName } from "@/components/HoverName"
 
 type Item = { type: "file" | "folder"; id: string; name: string }
 
@@ -94,9 +95,7 @@ export function RecycleBinMoveDialog({ open, item, users, onClose, onSubmit }: P
       <DialogContent className="flex h-[560px] w-full max-w-2xl flex-col gap-0 overflow-hidden p-0">
         <DialogHeader className="border-b p-4">
           <DialogTitle>Move to…</DialogTitle>
-          <div className="text-muted-foreground truncate text-xs" title={item.name}>
-            {item.name}
-          </div>
+          <HoverName as="div" name={item.name} className="text-muted-foreground truncate text-xs" />
         </DialogHeader>
 
         <div className="flex min-h-0 flex-1">
@@ -244,7 +243,7 @@ function FolderTree({
             )}
           </button>
           <FolderIcon size={16} weight="fill" className="text-primary shrink-0" />
-          <span className="truncate">{name}</span>
+          <HoverName as="span" name={name} className="min-w-0 truncate" />
         </div>
         {isOpen && kids.map((k) => render(k.id, k.name, depth + 1))}
       </div>

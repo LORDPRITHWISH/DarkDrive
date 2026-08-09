@@ -4,6 +4,7 @@ import type { Folder } from "@/lib/types"
 import { apiUrl } from "@/lib/config"
 import { StarToggle } from "./StarToggle"
 import { isInternalDrag, readItemDrag, type DragItem } from "./dnd"
+import { HoverName } from "@/components/HoverName"
 
 function FolderThumb({ folderId }: { folderId: string }) {
   const [failed, setFailed] = useState(false)
@@ -128,9 +129,11 @@ export function FolderCard({
             onClick={(e) => e.stopPropagation()}
           />
         ) : (
-          <div className="truncate text-center text-sm font-medium" title={folder.name}>
-            {folder.name}
-          </div>
+          <HoverName
+            as="div"
+            name={folder.name}
+            className="truncate text-center text-sm font-medium"
+          />
         )}
       </div>
     </div>

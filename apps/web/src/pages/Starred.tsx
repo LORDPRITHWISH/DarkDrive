@@ -27,6 +27,7 @@ import { apiGet } from "@/lib/api"
 import { formatBytes, formatDate } from "@/lib/format"
 import { iconFor } from "@/lib/fileIcon"
 import type { FileItem, Folder } from "@/lib/types"
+import { HoverName } from "@/components/HoverName"
 
 type TypeFilter = "all" | "image" | "video" | "doc" | "other"
 
@@ -204,7 +205,7 @@ export function StarredPage() {
                               style={{ color: f.color || undefined }}
                               className={f.color ? "" : "text-primary"}
                             />
-                            <span>{f.name}</span>
+                            <HoverName as="span" name={f.name} className="min-w-0 truncate" />
                           </div>
                         </TableCell>
                         <TableCell className="p-0 py-2">{formatDate(f.updatedAt)}</TableCell>
@@ -220,7 +221,7 @@ export function StarredPage() {
                       <TableCell className="p-0 py-2 pl-3">
                         <div className="flex items-center gap-2">
                           {iconFor(f.mimeType, 18, f.name)}
-                          <span>{f.name}</span>
+                          <HoverName as="span" name={f.name} className="min-w-0 truncate" />
                         </div>
                       </TableCell>
                       <TableCell className="p-0 py-2">{formatDate(f.updatedAt)}</TableCell>

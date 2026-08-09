@@ -12,6 +12,7 @@ import { apiUrl } from "@/lib/config"
 import { iconFor } from "@/lib/fileIcon"
 import { Table, TableBody, TableCell, TableRow } from "@workspace/ui/components/table"
 import type { FileItem } from "@/lib/types"
+import { HoverName } from "@/components/HoverName"
 
 function greeting() {
   const h = new Date().getHours()
@@ -247,7 +248,7 @@ export function HomePage() {
                           <TableCell className="p-0 py-2 pl-3">
                             <div className="flex items-center gap-2">
                               {iconFor(f.mimeType, 18, f.name)}
-                              <span className="truncate">{f.name}</span>
+                              <HoverName as="span" name={f.name} className="min-w-0 truncate" />
                             </div>
                           </TableCell>
                           <TableCell className="text-muted-foreground p-0 py-2 pr-3 text-right text-xs">

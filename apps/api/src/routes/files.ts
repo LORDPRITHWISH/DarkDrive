@@ -25,6 +25,7 @@ import { allowFrameEmbedding } from "../lib/embed.js"
 import { streamStoredFile } from "../lib/stream.js"
 import { listSubtitleSiblings, isSubtitleFile, toVtt } from "../lib/subtitles.js"
 import { canThumbnail, generateThumbnail, queueThumbnail } from "../lib/thumbnails.js"
+import { probeAudioStreams, getAudioVariant } from "../lib/audioTracks.js"
 import { maybeNotifyQuotaNearLimit } from "../lib/notify.js"
 import { importUrlToFile } from "../lib/urlImport.js"
 import { getIO } from "../realtime/socket.js"
@@ -596,9 +597,42 @@ filesRouter.get("/:id/download", async (req, res) => {
       })
       .catch(() => {})
   }
+  // ?audio=<streamIndex> swaps in a cached remux with only that audio stream
+  // — the reliable cross-browser way to pick an audio track, since browsers
+  // don't consistently expose/switch embedded multi-audio streams themselves.
+  // Falls back to the file's saved default (set once from the player/
+  // properties panel) so it doesn't have to be reselected on every open.
+  const audioParam = Array.isArray(req.query.audio)
+    ? req.query.audio[0]
+    : req.query.audio
+  const streamIndex =
+    typeof audioParam === "string" ? Number(audioParam) : file.audioTrackIndex ?? NaN
+  if (Number.isInteger(streamIndex)) {
+    const key = await getAudioVariant(file.id, absolutePath(file.storageKey), streamIndex)
+    if (!key) return res.status(422).json({ error: "audio_track_unavailable" })
+    return streamStoredFile(
+      req,
+      res,
+      { name: file.name, mimeType: "video/mp4", storageKey: key },
+      { disposition: req.query.inline === "1" ? "inline" : "attachment" }
+    )
+  }
+
   streamStoredFile(req, res, file, {
     disposition: req.query.inline === "1" ? "inline" : "attachment",
   })
+})
+
+// List embedded audio streams for a video (ffprobe). Returns every stream,
+// including the single-track case — the client shows the track name and only
+// enables switching when there's more than one to switch between.
+filesRouter.get("/:id/audio-tracks", async (req, res) => {
+  const user = currentUser(req)
+  const file = await getFileWithAccess(user.id, req.params.id, "read", { role: user.role })
+  if (!file) return res.status(404).json({ error: "not_found" })
+  const abs = absolutePath(file.storageKey)
+  if (!fs.existsSync(abs)) return res.json({ tracks: [] })
+  res.json({ tracks: await probeAudioStreams(abs) })
 })
 
 // Serve a file's preview thumbnail (a small JPEG). Generated on demand the
@@ -1043,6 +1077,7 @@ filesRouter.patch("/:id", async (req, res) => {
       isHidden: z.boolean().optional(),
       isStarred: z.boolean().optional(),
       isTrashed: z.boolean().optional(),
+      audioTrackIndex: z.number().int().nullable().optional(),
     })
     .parse(req.body)
   const file = await getFileWithAccess(user.id, req.params.id, "write")

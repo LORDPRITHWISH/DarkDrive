@@ -1,11 +1,12 @@
 import { Suspense, lazy, useCallback, useEffect, useEffectEvent, useRef, useState } from "react"
 import { XIcon, DownloadIcon, InfoIcon, CaretLeftIcon, CaretRightIcon } from "@phosphor-icons/react"
-import type { FileItem, SubtitleTrack } from "@/lib/types"
+import type { FileItem, SubtitleTrack, AudioTrack } from "@/lib/types"
 import { apiUrl } from "@/lib/config"
-import { apiGet } from "@/lib/api"
+import { apiGet, apiJson } from "@/lib/api"
 import { formatBytes, formatDate } from "@/lib/format"
 import { DarkPlayer } from "./player"
 import { AudioPlayer } from "@/components/AudioPlayer"
+import { HoverName } from "@/components/HoverName"
 
 const LazyPdfViewer = lazy(async () => {
   const module = await import("@/components/PdfViewer")
@@ -31,11 +32,41 @@ export function FilePreview({
     fileId: string | null
     focused: boolean
   }>({ fileId: null, focused: false })
-  const [showInfo, setShowInfo] = useState(false)
+  const [infoState, setInfoState] = useState<{
+    fileId: string | null
+    show: boolean
+  }>({ fileId: null, show: false })
+  const showInfo = infoState.fileId === file?.id && infoState.show
+  const setShowInfo = (show: boolean) => {
+    if (file) setInfoState({ fileId: file.id, show })
+  }
   const [isMobile, setIsMobile] = useState(
     () => window.matchMedia("(max-width: 767px)").matches
   )
   const touchRef = useRef<{ x: number; y: number; t: number } | null>(null)
+  // Track lists for the video controls in the Properties panel. Both are
+  // fetched here rather than inside the player so the sidebar owns the
+  // selection and the player just renders what it's told.
+  const [audioTracksState, setAudioTracksState] = useState<{
+    fileId: string | null
+    tracks: AudioTrack[]
+  }>({ fileId: null, tracks: [] })
+  const [subtitleTracksState, setSubtitleTracksState] = useState<{
+    fileId: string | null
+    tracks: SubtitleTrack[]
+  }>({ fileId: null, tracks: [] })
+  // Overrides file.audioTrackIndex once the user picks a track this session,
+  // so the Properties panel reflects the change immediately (no refetch).
+  const [audioPick, setAudioPick] = useState<{
+    fileId: string | null
+    index: number | null
+  }>({ fileId: null, index: null })
+  // Subtitle choice is view-only state (not persisted): index into the
+  // subtitle track list, or null for off.
+  const [subtitlePick, setSubtitlePick] = useState<{
+    fileId: string | null
+    index: number | null
+  }>({ fileId: null, index: null })
 
   useEffect(() => {
     const mql = window.matchMedia("(max-width: 767px)")
@@ -43,10 +74,6 @@ export function FilePreview({
     mql.addEventListener("change", handler)
     return () => mql.removeEventListener("change", handler)
   }, [])
-
-  useEffect(() => {
-    setShowInfo(false)
-  }, [file?.id])
 
   const handleKeyDown = useEffectEvent((e: KeyboardEvent) => {
     if (!file) return
@@ -96,6 +123,32 @@ export function FilePreview({
     return () => window.removeEventListener("keydown", onKey)
   }, [file])
 
+  useEffect(() => {
+    if (!file || !file.mimeType.startsWith("video/")) return
+    let cancelled = false
+    apiGet<{ tracks: AudioTrack[] }>(`/api/files/${file.id}/audio-tracks`)
+      .then((data) => {
+        if (!cancelled) setAudioTracksState({ fileId: file.id, tracks: data.tracks })
+      })
+      .catch(() => {
+        if (!cancelled) setAudioTracksState({ fileId: file.id, tracks: [] })
+      })
+    apiGet<{ tracks: SubtitleTrack[] }>(`/api/files/${file.id}/subtitles`)
+      .then((data) => {
+        if (cancelled) return
+        setSubtitleTracksState({
+          fileId: file.id,
+          tracks: data.tracks.map((t) => ({ ...t, src: apiUrl(t.src) })),
+        })
+      })
+      .catch(() => {
+        if (!cancelled) setSubtitleTracksState({ fileId: file.id, tracks: [] })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [file])
+
   const onTouchStart = useCallback((e: React.TouchEvent) => {
     const t = e.touches[0]
     touchRef.current = { x: t.clientX, y: t.clientY, t: Date.now() }
@@ -120,6 +173,24 @@ export function FilePreview({
   )
 
   if (!file) return null
+
+  const videoFile = file.mimeType.startsWith("video/")
+  const audioTracks =
+    audioTracksState.fileId === file.id ? audioTracksState.tracks : []
+  const subtitleTracks =
+    subtitleTracksState.fileId === file.id ? subtitleTracksState.tracks : []
+  const audioIndex =
+    audioPick.fileId === file.id ? audioPick.index : file.audioTrackIndex ?? null
+  const subtitleIndex = subtitlePick.fileId === file.id ? subtitlePick.index : null
+  const selectAudio = (index: number | null) => {
+    setAudioPick({ fileId: file.id, index })
+    apiJson(`/api/files/${file.id}`, "PATCH", { audioTrackIndex: index }).catch(
+      () => {}
+    )
+  }
+  const selectSubtitle = (index: number | null) => {
+    setSubtitlePick({ fileId: file.id, index })
+  }
 
   const officeFile = isOfficeFile(file.mimeType, file.name)
   const pdfFile = isPdfFile(file.mimeType, file.name)
@@ -184,6 +255,64 @@ export function FilePreview({
           />
         </div>
       )}
+      {videoFile && (
+        <div className="mt-3 border-t pt-3">
+          <div className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            Playback
+          </div>
+          <div className="grid gap-2">
+            <label className="grid gap-1 text-sm">
+              <span className="text-muted-foreground text-xs">Audio</span>
+              <select
+                className="w-full rounded-md border bg-background px-2 py-1.5 text-sm disabled:opacity-60"
+                value={audioIndex ?? ""}
+                disabled={audioTracks.length < 2}
+                onChange={(e) =>
+                  selectAudio(
+                    e.target.value === "" ? null : Number(e.target.value)
+                  )
+                }
+              >
+                <option value="">
+                  {audioTracks.length === 0
+                    ? "No audio"
+                    : audioTracks.length === 1
+                      ? audioTracks[0].label
+                      : "Default"}
+                </option>
+                {audioTracks.length > 1 &&
+                  audioTracks.map((a) => (
+                    <option key={a.index} value={a.index}>
+                      {a.label}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm">
+              <span className="text-muted-foreground text-xs">Subtitles</span>
+              <select
+                className="w-full rounded-md border bg-background px-2 py-1.5 text-sm disabled:opacity-60"
+                value={subtitleIndex ?? ""}
+                disabled={subtitleTracks.length === 0}
+                onChange={(e) =>
+                  selectSubtitle(
+                    e.target.value === "" ? null : Number(e.target.value)
+                  )
+                }
+              >
+                <option value="">
+                  {subtitleTracks.length ? "Off" : "None found"}
+                </option>
+                {subtitleTracks.map((t, i) => (
+                  <option key={t.id} value={i}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </div>
+      )}
       <div className="mt-3 border-t pt-3">
         <div className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
           Properties
@@ -246,10 +375,10 @@ export function FilePreview({
             <XIcon size={20} />
           </button>
           <h3 className="min-w-0 flex-1 truncate px-1 text-sm font-medium">
-            {file.name}
+            <HoverName as="span" name={file.name} className="truncate" />
           </h3>
           {counter && (
-            <span className="shrink-0 rounded-full bg-muted px-2.5 py-0.5 text-xs tabular-nums text-muted-foreground">
+            <span className="shrink-0 rounded-full bg-muted px-2.5 py-0.5 text-xs text-muted-foreground tabular-nums">
               {counter}
             </span>
           )}
@@ -279,7 +408,9 @@ export function FilePreview({
             src={viewSrc}
             layout="fill"
             officeProvider={officeProvider}
-            subtitleFileId={file.id}
+            subtitleTracks={subtitleTracks}
+            subtitleIndex={subtitleIndex}
+            audioIndex={audioIndex}
           />
         </div>
 
@@ -289,14 +420,11 @@ export function FilePreview({
               className="fixed inset-0 z-60 bg-black/40"
               onClick={() => setShowInfo(false)}
             />
-            <div className="animate-in slide-in-from-bottom fixed inset-x-0 bottom-0 z-70 max-h-[75vh] overflow-auto rounded-t-2xl border-t bg-card px-5 pb-8 pt-3 duration-200">
+            <div className="fixed inset-x-0 bottom-0 z-70 max-h-[75vh] animate-in overflow-auto rounded-t-2xl border-t bg-card px-5 pt-3 pb-8 duration-200 slide-in-from-bottom">
               <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted-foreground/30" />
               <div className="mb-3 flex items-start justify-between gap-2">
-                <h3
-                  className="min-w-0 truncate font-semibold"
-                  title={file.name}
-                >
-                  {file.name}
+                <h3 className="min-w-0 truncate font-semibold">
+                  <HoverName as="span" name={file.name} className="truncate" />
                 </h3>
                 <button
                   onClick={() => setShowInfo(false)}
@@ -341,18 +469,17 @@ export function FilePreview({
             layout={viewerLayout}
             officeProvider={officeProvider}
             onPdfFocusModeChange={handlePdfFocusModeChange}
-            subtitleFileId={file.id}
+            subtitleTracks={subtitleTracks}
+            subtitleIndex={subtitleIndex}
+            audioIndex={audioIndex}
           />
         </div>
 
         {!pdfFocusMode && (
           <aside className="flex w-80 shrink-0 flex-col gap-3 overflow-auto border-l p-4">
             <div className="flex items-start justify-between gap-2">
-              <h3
-                className="min-w-0 flex-1 truncate font-semibold"
-                title={file.name}
-              >
-                {file.name}
+              <h3 className="min-w-0 flex-1 truncate font-semibold">
+                <HoverName as="span" name={file.name} className="truncate" />
               </h3>
               <button
                 className="shrink-0 rounded p-1 hover:bg-accent"
@@ -464,16 +591,21 @@ export function FileViewer({
   layout = "modal",
   officeProvider = "office",
   onPdfFocusModeChange,
-  subtitleFileId,
+  subtitleTracks = [],
+  subtitleIndex = null,
+  audioIndex = null,
 }: {
   file: FileItem
   src: string
   layout?: FileViewerLayout
   officeProvider?: OfficeProvider
   onPdfFocusModeChange?: (focused: boolean) => void
-  // When set, the video player loads sidecar subtitle tracks for this file id
-  // from the authenticated API. Omitted on public surfaces (e.g. share pages).
-  subtitleFileId?: string | null
+  // Video track selection, owned by the caller's Properties panel. Omitted on
+  // public surfaces (e.g. share pages), which get a plain player.
+  subtitleTracks?: SubtitleTrack[]
+  subtitleIndex?: number | null
+  // Audio stream to request — folded into the video src as `?audio=`.
+  audioIndex?: number | null
 }) {
   const mime = file.mimeType
   const sizing = layout === "fill" ? FILL_MEDIA : MODAL_MEDIA
@@ -488,11 +620,13 @@ export function FileViewer({
     )
   }
   if (mime.startsWith("video/")) {
+    const playSrc = audioIndex == null ? src : `${src}&audio=${audioIndex}`
     return (
       <VideoPreview
-        key={src}
-        src={src}
-        subtitleFileId={subtitleFileId}
+        key={playSrc}
+        src={playSrc}
+        tracks={subtitleTracks}
+        subtitleIndex={subtitleIndex}
         className={`block bg-black ${sizing.h} ${sizing.w} ${
           layout === "fill" ? "h-full w-full" : "w-[90vw] aspect-video"
         }`}
@@ -559,20 +693,21 @@ export function FileViewer({
   )
 }
 
-// Wraps the player and, when a file id is supplied, loads sidecar subtitle
-// tracks for it. Keyed by the resolved video src so switching files gives the
-// underlying player a clean slate (track/audio selection doesn't leak across).
+// Wraps the player, adding fullscreen orientation locking on mobile. Subtitle
+// tracks and the active selection are supplied by the caller (the Properties
+// panel owns them).
 function VideoPreview({
   src,
-  subtitleFileId,
+  tracks,
+  subtitleIndex,
   className,
 }: {
   src: string
-  subtitleFileId?: string | null
+  tracks: SubtitleTrack[]
+  subtitleIndex: number | null
   className?: string
 }) {
   const wrapperRef = useRef<HTMLDivElement>(null)
-  const [tracks, setTracks] = useState<SubtitleTrack[]>([])
 
   useEffect(() => {
     const handler = () => {
@@ -593,7 +728,9 @@ function VideoPreview({
             unlock?: () => void
           }
           orientation?.unlock?.()
-        } catch {}
+        } catch {
+          // unlock() throws on browsers that never granted the lock; safe to ignore
+        }
       }
     }
     document.addEventListener("fullscreenchange", handler)
@@ -601,31 +738,20 @@ function VideoPreview({
       document.removeEventListener("fullscreenchange", handler)
       try {
         screen.orientation?.unlock?.()
-      } catch {}
+      } catch {
+        // unlock() throws on browsers that never granted the lock; safe to ignore
+      }
     }
   }, [])
 
-  useEffect(() => {
-    if (!subtitleFileId) return
-    let cancelled = false
-    apiGet<{ tracks: SubtitleTrack[] }>(
-      `/api/files/${subtitleFileId}/subtitles`
-    )
-      .then((data) => {
-        if (cancelled) return
-        setTracks(data.tracks.map((t) => ({ ...t, src: apiUrl(t.src) })))
-      })
-      .catch(() => {
-        if (!cancelled) setTracks([])
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [subtitleFileId])
-
   return (
     <div ref={wrapperRef} className={className}>
-      <DarkPlayer src={src} tracks={tracks} className="h-full w-full" />
+      <DarkPlayer
+        src={src}
+        tracks={tracks}
+        subtitleIndex={subtitleIndex}
+        className="h-full w-full"
+      />
     </div>
   )
 }

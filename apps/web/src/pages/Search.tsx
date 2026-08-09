@@ -36,6 +36,7 @@ import { apiGet, apiJson } from "@/lib/api"
 import { formatBytes, formatDate } from "@/lib/format"
 import { triggerDownload } from "@/lib/download"
 import { SEARCH_TYPE_LABELS } from "@/lib/fileType"
+import { HoverName } from "@/components/HoverName"
 import type {
   FileItem,
   SearchFileResult,
@@ -356,7 +357,7 @@ export function SearchPage() {
                             style={{ color: f.color || undefined }}
                             className={f.color ? "" : "text-primary"}
                           />
-                          <span>{f.name}</span>
+                          <HoverName as="span" name={f.name} className="min-w-0 truncate" />
                           {f.isStarred && (
                             <StarIcon size={14} weight="fill" className="text-yellow-500" />
                           )}
@@ -385,7 +386,7 @@ export function SearchPage() {
                       <TableCell className="p-0 py-2 pl-3">
                         <div className="flex items-center gap-2">
                           {iconForRow(f)}
-                          <span>{f.name}</span>
+                          <HoverName as="span" name={f.name} className="min-w-0 truncate" />
                           {f.isStarred && (
                             <StarIcon size={14} weight="fill" className="text-yellow-500" />
                           )}

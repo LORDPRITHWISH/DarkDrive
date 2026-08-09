@@ -26,6 +26,7 @@ import { formatBytes, formatDate } from "@/lib/format"
 import { iconFor } from "@/lib/fileIcon"
 import { FilePreview } from "@/components/FilePreview"
 import type { FileItem, Folder } from "@/lib/types"
+import { HoverName } from "@/components/HoverName"
 
 type Menu = {
   x: number
@@ -212,7 +213,7 @@ export function BinPage() {
                           style={{ color: f.color || undefined }}
                           className={f.color ? "" : "text-primary"}
                         />
-                        <span>{f.name}</span>
+                        <HoverName as="span" name={f.name} className="min-w-0 truncate" />
                       </div>
                     </TableCell>
                     <TableCell className="p-0 py-2">{formatDate(f.updatedAt)}</TableCell>
@@ -235,7 +236,7 @@ export function BinPage() {
                     <TableCell className="p-0 py-2 pl-4">
                       <div className="flex items-center gap-2">
                         {iconFor(f.mimeType, 20, f.name)}
-                        <span>{f.name}</span>
+                        <HoverName as="span" name={f.name} className="min-w-0 truncate" />
                       </div>
                     </TableCell>
                     <TableCell className="p-0 py-2">{formatDate(f.updatedAt)}</TableCell>
@@ -328,9 +329,11 @@ function TrashFolderCard({
         />
       </div>
       <div className="px-2 pb-2">
-        <div className="truncate text-sm font-medium" title={folder.name}>
-          {folder.name}
-        </div>
+        <HoverName
+          as="div"
+          name={folder.name}
+          className="truncate text-sm font-medium"
+        />
         <div className="text-muted-foreground truncate text-xs">
           Trashed {formatDate(folder.updatedAt)}
         </div>
@@ -370,9 +373,11 @@ function TrashFileCard({
         {iconFor(file.mimeType, 64, file.name)}
       </div>
       <div className="p-2">
-        <div className="truncate text-sm font-medium" title={file.name}>
-          {file.name}
-        </div>
+        <HoverName
+          as="div"
+          name={file.name}
+          className="truncate text-sm font-medium"
+        />
         <div className="text-muted-foreground flex items-center justify-between gap-2 text-xs">
           <span>{formatBytes(file.size)}</span>
           <span>Trashed {formatDate(file.updatedAt)}</span>

@@ -76,9 +76,15 @@ async function withSlot<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 // --- process helpers -------------------------------------------------------
+// stderr is captured (not discarded) and logged on failure — a missing binary
+// or a codec error on the server is otherwise invisible from the admin panel.
 export function run(cmd: string, args: string[], timeoutMs: number): Promise<boolean> {
   return new Promise((resolve) => {
-    const child = spawn(cmd, args, { stdio: "ignore" })
+    const child = spawn(cmd, args, { stdio: ["ignore", "ignore", "pipe"] })
+    let stderr = ""
+    child.stderr?.on("data", (d: Buffer) => {
+      if (stderr.length < 4000) stderr += d.toString()
+    })
     let settled = false
     const finish = (ok: boolean) => {
       if (settled) return
@@ -90,11 +96,45 @@ export function run(cmd: string, args: string[], timeoutMs: number): Promise<boo
       try {
         child.kill("SIGKILL")
       } catch {}
+      console.error(`[thumb] ${cmd} timed out after ${timeoutMs}ms`)
       finish(false)
     }, timeoutMs)
-    child.on("error", () => finish(false))
-    child.on("close", (code) => finish(code === 0))
+    child.on("error", (e: NodeJS.ErrnoException) => {
+      console.error(
+        `[thumb] ${cmd} could not run: ${e.code === "ENOENT" ? "not installed (not on PATH)" : e.message}`
+      )
+      finish(false)
+    })
+    child.on("close", (code) => {
+      if (code !== 0)
+        console.error(`[thumb] ${cmd} exited ${code}: ${stderr.trim().slice(0, 600) || "(no stderr)"}`)
+      finish(code === 0)
+    })
   })
+}
+
+// Which external binary each strategy needs — surfaced to the admin panel so a
+// broken deploy reads as "ffmpeg missing" instead of "thumbnails just don't work".
+const TOOLS: Record<ThumbKind, string> = {
+  image: "convert",
+  video: "ffmpeg",
+  pdf: "pdftoppm",
+  office: "libreoffice",
+}
+
+function onPath(cmd: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const child = spawn("which", [cmd], { stdio: "ignore" })
+    child.on("error", () => resolve(false))
+    child.on("close", (code) => resolve(code === 0))
+  })
+}
+
+export async function toolStatus(): Promise<Array<{ kind: string; cmd: string; ok: boolean }>> {
+  const entries = [...Object.entries(TOOLS), ["video (seek)", "ffprobe"]] as [string, string][]
+  return Promise.all(
+    entries.map(async ([kind, cmd]) => ({ kind, cmd, ok: await onPath(cmd) }))
+  )
 }
 
 function probeDuration(src: string): Promise<number> {
@@ -253,6 +293,92 @@ export function queueThumbnail(fileId: string): void {
   generateThumbnail(fileId).catch(() => {})
 }
 
+// --- admin backfill --------------------------------------------------------
+export type BackfillProgress = {
+  running: boolean
+  total: number
+  done: number
+  ok: number
+  failed: number
+  startedAt: number | null
+  finishedAt: number | null
+}
+
+let progress: BackfillProgress = {
+  running: false,
+  total: 0,
+  done: 0,
+  ok: 0,
+  failed: 0,
+  startedAt: null,
+  finishedAt: null,
+}
+
+export function backfillProgress(): BackfillProgress {
+  return progress
+}
+
+const BATCH = 200
+
+// Walk every file that has no thumbnail and try to generate one. Each row picks
+// up a state (ready / failed / unsupported) as it is handled, so it drops out of
+// the query and the next batch is simply "the first 200 still missing" — no
+// cursor to keep. Single-flight: calling again while a run is active is a no-op.
+export async function backfillThumbnails(includeFailed = true): Promise<void> {
+  if (progress.running) return
+  progress = {
+    running: true,
+    total: 0,
+    done: 0,
+    ok: 0,
+    failed: 0,
+    startedAt: Date.now(),
+    finishedAt: null,
+  }
+  try {
+    // Clearing "failed" is what makes this useful after installing a missing
+    // binary — otherwise those rows are skipped forever. "unsupported" stays.
+    if (includeFailed)
+      await prisma.file.updateMany({
+        where: { deletedAt: null, thumbnailKey: null, thumbnailState: "failed" },
+        data: { thumbnailState: null },
+      })
+
+    const where = { deletedAt: null, thumbnailKey: null, thumbnailState: null } as const
+    progress.total = await prisma.file.count({ where })
+    console.log(`[thumb] backfill started: ${progress.total} file(s) without a thumbnail`)
+
+    const seen = new Set<string>()
+    for (;;) {
+      const batch = await prisma.file.findMany({
+        where,
+        select: { id: true },
+        orderBy: { createdAt: "desc" },
+        take: BATCH,
+      })
+      // A batch of nothing but rows we already handled means the query stopped
+      // draining — bail rather than spin.
+      const fresh = batch.filter((f) => !seen.has(f.id))
+      if (fresh.length === 0) break
+      for (const f of fresh) {
+        seen.add(f.id)
+        const key = await generateThumbnail(f.id).catch(() => null)
+        progress.done++
+        if (key) progress.ok++
+        else progress.failed++
+      }
+    }
+    console.log(
+      `[thumb] backfill finished: ${progress.ok} generated, ${progress.failed} failed or unsupported, of ${progress.done} processed`
+    )
+  } catch (e) {
+    console.error("[thumb] backfill aborted", e)
+  } finally {
+    progress.running = false
+    progress.finishedAt = Date.now()
+  }
+}
+
 async function doGenerate(fileId: string): Promise<string | null> {
   const file = (await prisma.file.findUnique({
     where: { id: fileId },
@@ -278,21 +404,34 @@ async function doGenerate(fileId: string): Promise<string | null> {
   }
 
   const src = absolutePath(file.storageKey)
-  if (!fs.existsSync(src)) return null
+  if (!fs.existsSync(src)) {
+    // Marked failed, not left pending: the backfill below pages by "still has
+    // no state", so an unmarked row would be handed back forever.
+    await mark(file.id, null, "failed")
+    console.error(`[thumb] source missing on disk: ${file.name} (${file.id}) -> ${file.storageKey}`)
+    return null
+  }
 
   return withSlot(async () => {
+    const started = Date.now()
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ddthumb-"))
     try {
       const outJpg = path.join(tmpDir, "thumb.jpg")
       const ok = await renderTo(kind, src, outJpg, tmpDir)
       if (!ok || !fs.existsSync(outJpg) || fs.statSync(outJpg).size === 0) {
         await mark(file.id, null, "failed")
+        console.error(`[thumb] failed ${kind}: ${file.name} (${file.id}) in ${Date.now() - started}ms`)
         return null
       }
       const key = newStorageKey(`${file.id}.jpg`)
       fs.copyFileSync(outJpg, ensureDirFor(key))
       await mark(file.id, key, "ready")
+      console.log(`[thumb] ok ${kind}: ${file.name} (${file.id}) in ${Date.now() - started}ms`)
       return key
+    } catch (e) {
+      await mark(file.id, null, "failed")
+      console.error(`[thumb] error ${kind}: ${file.name} (${file.id})`, e)
+      return null
     } finally {
       try {
         fs.rmSync(tmpDir, { recursive: true, force: true })

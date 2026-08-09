@@ -34,6 +34,34 @@ type ThumbFile = {
   thumbnailState: string | null
 }
 
+// --- storyboard (seek bar scrubbing preview) --------------------------------
+// A grid of JPEG frames sampled across the video, sliced client-side via a
+// WebVTT storyboard track (the same `url#xywh=x,y,w,h` cue format YouTube/
+// video.js use) so the seek bar can show a preview thumbnail on hover.
+export type StoryboardMeta = {
+  interval: number
+  cols: number
+  rows: number
+  tileW: number
+  tileH: number
+  frames: number
+}
+
+type StoryboardFile = {
+  id: string
+  name: string
+  mimeType: string
+  storageKey: string
+  storyboardKey: string | null
+  storyboardState: string | null
+  storyboardMeta: unknown
+}
+
+const STORYBOARD_TILE_W = 160
+const STORYBOARD_MAX_TILES = 100
+const STORYBOARD_MIN_INTERVAL = 5
+const STORYBOARD_COLS = 10
+
 function ext(name: string): string {
   return path.extname(name).toLowerCase()
 }
@@ -154,6 +182,29 @@ function probeDuration(src: string): Promise<number> {
     child.on("close", () => {
       const n = parseFloat(out.trim())
       resolve(Number.isFinite(n) && n > 0 ? n : 0)
+    })
+  })
+}
+
+function probeImageSize(src: string): Promise<{ w: number; h: number } | null> {
+  return new Promise((resolve) => {
+    let out = ""
+    const child = spawn("ffprobe", [
+      "-v",
+      "error",
+      "-select_streams",
+      "v:0",
+      "-show_entries",
+      "stream=width,height",
+      "-of",
+      "csv=s=x:p=0",
+      src,
+    ])
+    child.stdout.on("data", (d) => (out += d))
+    child.on("error", () => resolve(null))
+    child.on("close", () => {
+      const [w, h] = out.trim().split("x").map(Number)
+      resolve(w > 0 && h > 0 ? { w, h } : null)
     })
   })
 }
@@ -438,4 +489,167 @@ async function doGenerate(fileId: string): Promise<string | null> {
       } catch {}
     }
   })
+}
+
+export function canStoryboard(file: { mimeType: string; name: string }): boolean {
+  return thumbKind(file) === "video"
+}
+
+// Sample one frame every `interval` seconds (capped so long videos don't
+// balloon the sprite) and tile them into a single JPEG grid. `-2` keeps the
+// scaled height even, which ffmpeg's scale filter requires.
+async function renderStoryboard(
+  src: string,
+  outJpg: string,
+  duration: number
+): Promise<{ interval: number; cols: number; rows: number } | null> {
+  const interval = Math.max(STORYBOARD_MIN_INTERVAL, Math.ceil(duration / STORYBOARD_MAX_TILES))
+  const frames = Math.max(1, Math.min(STORYBOARD_MAX_TILES, Math.ceil(duration / interval)))
+  const cols = Math.min(STORYBOARD_COLS, frames)
+  const rows = Math.ceil(frames / cols)
+  const ok = await run(
+    "ffmpeg",
+    [
+      "-i",
+      src,
+      "-vf",
+      `fps=1/${interval},scale=${STORYBOARD_TILE_W}:-2,tile=${cols}x${rows}`,
+      "-q:v",
+      "4",
+      "-y",
+      outJpg,
+    ],
+    TIMEOUT.video
+  )
+  return ok ? { interval, cols, rows } : null
+}
+
+async function markStoryboard(
+  fileId: string,
+  key: string | null,
+  state: string,
+  meta: StoryboardMeta | null
+): Promise<void> {
+  await prisma.file
+    .update({
+      where: { id: fileId },
+      data: { storyboardKey: key, storyboardState: state, storyboardMeta: meta ?? undefined },
+    })
+    .catch(() => {})
+}
+
+const inflightStoryboard = new Map<string, Promise<{ key: string; meta: StoryboardMeta } | null>>()
+
+// Generate (or return an existing) storyboard sprite for a file. Resolves the
+// sprite's storage key plus the grid layout needed to slice it, or null if the
+// file isn't a video / has no frames to sample.
+export function generateStoryboard(
+  fileId: string
+): Promise<{ key: string; meta: StoryboardMeta } | null> {
+  const existing = inflightStoryboard.get(fileId)
+  if (existing) return existing
+  const p = doGenerateStoryboard(fileId).finally(() => inflightStoryboard.delete(fileId))
+  inflightStoryboard.set(fileId, p)
+  return p
+}
+
+async function doGenerateStoryboard(
+  fileId: string
+): Promise<{ key: string; meta: StoryboardMeta } | null> {
+  const file = (await prisma.file.findUnique({
+    where: { id: fileId },
+    select: {
+      id: true,
+      name: true,
+      mimeType: true,
+      storageKey: true,
+      storyboardKey: true,
+      storyboardState: true,
+      storyboardMeta: true,
+    },
+  })) as StoryboardFile | null
+  if (!file) return null
+
+  if (file.storyboardKey && fs.existsSync(absolutePath(file.storyboardKey)) && file.storyboardMeta)
+    return { key: file.storyboardKey, meta: file.storyboardMeta as StoryboardMeta }
+
+  if (!canStoryboard(file)) {
+    await markStoryboard(file.id, null, "unsupported", null)
+    return null
+  }
+
+  const src = absolutePath(file.storageKey)
+  if (!fs.existsSync(src)) {
+    await markStoryboard(file.id, null, "failed", null)
+    return null
+  }
+
+  return withSlot(async () => {
+    const started = Date.now()
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ddstoryboard-"))
+    try {
+      const duration = await probeDuration(src)
+      if (duration <= 0) {
+        await markStoryboard(file.id, null, "failed", null)
+        return null
+      }
+      const outJpg = path.join(tmpDir, "storyboard.jpg")
+      const grid = await renderStoryboard(src, outJpg, duration)
+      const size = grid && fs.existsSync(outJpg) ? await probeImageSize(outJpg) : null
+      if (!grid || !size) {
+        await markStoryboard(file.id, null, "failed", null)
+        console.error(`[storyboard] failed: ${file.name} (${file.id}) in ${Date.now() - started}ms`)
+        return null
+      }
+      const meta: StoryboardMeta = {
+        interval: grid.interval,
+        cols: grid.cols,
+        rows: grid.rows,
+        tileW: Math.round(size.w / grid.cols),
+        tileH: Math.round(size.h / grid.rows),
+        frames: Math.min(grid.cols * grid.rows, Math.ceil(duration / grid.interval)),
+      }
+      const key = newStorageKey(`${file.id}.storyboard.jpg`)
+      fs.copyFileSync(outJpg, ensureDirFor(key))
+      await markStoryboard(file.id, key, "ready", meta)
+      console.log(`[storyboard] ok: ${file.name} (${file.id}) in ${Date.now() - started}ms`)
+      return { key, meta }
+    } catch (e) {
+      await markStoryboard(file.id, null, "failed", null)
+      console.error(`[storyboard] error: ${file.name} (${file.id})`, e)
+      return null
+    } finally {
+      try {
+        fs.rmSync(tmpDir, { recursive: true, force: true })
+      } catch {}
+    }
+  })
+}
+
+function pad(n: number, len = 2): string {
+  return String(Math.floor(n)).padStart(len, "0")
+}
+
+function vttTimestamp(sec: number): string {
+  const h = Math.floor(sec / 3600)
+  const m = Math.floor((sec % 3600) / 60)
+  const s = Math.floor(sec % 60)
+  const ms = Math.round((sec - Math.floor(sec)) * 1000)
+  return `${pad(h)}:${pad(m)}:${pad(s)}.${pad(ms, 3)}`
+}
+
+// Build a WebVTT storyboard track: one cue per sprite tile, each pointing at
+// `spriteUrl#xywh=x,y,w,h` — the same media-fragment format YouTube/video.js
+// use, which @videojs/react's Thumbnail component parses natively.
+export function buildStoryboardVtt(meta: StoryboardMeta, spriteUrl: string): string {
+  const { interval, cols, tileW, tileH, frames } = meta
+  let vtt = "WEBVTT\n\n"
+  for (let i = 0; i < frames; i++) {
+    const start = i * interval
+    const end = start + interval
+    const x = (i % cols) * tileW
+    const y = Math.floor(i / cols) * tileH
+    vtt += `${vttTimestamp(start)} --> ${vttTimestamp(end)}\n${spriteUrl}#xywh=${x},${y},${tileW},${tileH}\n\n`
+  }
+  return vtt
 }

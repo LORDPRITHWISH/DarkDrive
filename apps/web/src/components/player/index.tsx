@@ -35,10 +35,43 @@ interface DarkPlayerProps {
    */
   subtitleIndex?: number | null
   autoPlay?: boolean
+  /** Shown before playback starts / while the source loads. */
+  poster?: string
+  /** Seconds to seek to once metadata loads, e.g. a saved resume position. */
+  startTime?: number | null
+  /**
+   * WebVTT storyboard track URL for the seek bar's scrubbing preview (see
+   * apps/api's /storyboard.vtt route). Omitted where none is available.
+   */
+  storyboardSrc?: string
+  /**
+   * Called with the current playback position (seconds), throttled to ~5s
+   * while playing and once with 0 when the video ends. The caller decides
+   * whether/how to persist it.
+   */
+  onProgress?: (sec: number) => void
 }
 
+// Minimum gap between onProgress calls while playing — cheap enough to not
+// spam the server, coarse enough that a closed tab loses at most a few
+// seconds of progress.
+const PROGRESS_INTERVAL_MS = 5000
+
 export const DarkPlayer = forwardRef<HTMLVideoElement, DarkPlayerProps>(
-  ({ src, className, tracks = [], subtitleIndex = null, autoPlay }, ref) => {
+  (
+    {
+      src,
+      className,
+      tracks = [],
+      subtitleIndex = null,
+      autoPlay,
+      poster,
+      startTime,
+      storyboardSrc,
+      onProgress,
+    },
+    ref
+  ) => {
     const videoRef = useRef<HTMLVideoElement | null>(null)
 
     const attachRef = (el: HTMLVideoElement | null) => {
@@ -64,6 +97,38 @@ export const DarkPlayer = forwardRef<HTMLVideoElement, DarkPlayerProps>(
       }
     }, [subtitleIndex, tracks.length])
 
+    // Seek to the saved position once, when metadata for this source becomes
+    // available (`src` is part of the caller's remount key, so this effect's
+    // one-shot nature per mount lines up with one seek per video).
+    useEffect(() => {
+      const video = videoRef.current
+      if (!video || !startTime) return
+      const seek = () => {
+        video.currentTime = startTime
+      }
+      video.addEventListener("loadedmetadata", seek)
+      return () => video.removeEventListener("loadedmetadata", seek)
+    }, [startTime])
+
+    useEffect(() => {
+      const video = videoRef.current
+      if (!video || !onProgress) return
+      let last = 0
+      const onTime = () => {
+        const now = Date.now()
+        if (now - last < PROGRESS_INTERVAL_MS) return
+        last = now
+        onProgress(video.currentTime)
+      }
+      const onEnded = () => onProgress(0)
+      video.addEventListener("timeupdate", onTime)
+      video.addEventListener("ended", onEnded)
+      return () => {
+        video.removeEventListener("timeupdate", onTime)
+        video.removeEventListener("ended", onEnded)
+      }
+    }, [onProgress])
+
     if (!src) {
       return (
         <div className="dark-player-wrapper">
@@ -82,6 +147,7 @@ export const DarkPlayer = forwardRef<HTMLVideoElement, DarkPlayerProps>(
               <Video
                 ref={attachRef}
                 src={src}
+                poster={poster}
                 className="h-full w-full object-contain"
                 playsInline
                 autoPlay={autoPlay}
@@ -95,6 +161,9 @@ export const DarkPlayer = forwardRef<HTMLVideoElement, DarkPlayerProps>(
                     label={t.label}
                   />
                 ))}
+                {storyboardSrc && (
+                  <track kind="metadata" label="thumbnails" src={storyboardSrc} />
+                )}
               </Video>
             </VideoSkin>
           </Player.Container>

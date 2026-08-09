@@ -333,6 +333,9 @@ export type FileItem = {
   // Saved default audio stream index for video files with multiple audio
   // tracks (see AudioTrack) — null plays the source's own default track.
   audioTrackIndex?: number | null
+  // Saved playback position in seconds, so reopening a video resumes where
+  // the user left off. Null = start from the top.
+  playbackPositionSec?: number | null
   isHidden: boolean
   isTrashed: boolean
   isStarred: boolean

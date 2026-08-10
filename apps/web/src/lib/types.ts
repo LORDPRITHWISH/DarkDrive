@@ -14,6 +14,8 @@ export type QuotaInfo = {
   role: "USER" | "ADMIN"
   upgradeRequestedAt: string | null
   upgradeRequestedBytes: number | null
+  byType: Record<Exclude<SearchTypeFilter, "all" | "folder">, number>
+  bytesByType: Record<Exclude<SearchTypeFilter, "all" | "folder">, number>
 }
 
 export type RecentFile = FileItem & { accessedAt: string; action: "view" | "download" }
@@ -339,6 +341,7 @@ export type FileItem = {
   isHidden: boolean
   isTrashed: boolean
   isStarred: boolean
+  tags: string[]
   createdAt: string
   updatedAt: string
   // Present when the file is surfaced into the current folder via a shortcut.

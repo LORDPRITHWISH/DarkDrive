@@ -52,6 +52,7 @@ import {
 import { apiGet } from "@/lib/api"
 import { formatBytes, formatDate, relativeTime } from "@/lib/format"
 import { iconFor } from "@/lib/fileIcon"
+import { TYPE_META, TYPE_ORDER } from "@/lib/fileType"
 import { toast } from "@/store/toast"
 import { FilePreview } from "@/components/FilePreview"
 import { useAdminFilePreview } from "./useAdminFilePreview"
@@ -77,19 +78,6 @@ const PRESETS = [
   { label: "100 GB", bytes: 100 * 1024 ** 3 },
   { label: "500 GB", bytes: 500 * 1024 ** 3 },
 ]
-
-const TYPE_META: Record<
-  string,
-  { label: string; bar: string; dot: string }
-> = {
-  image: { label: "Images", bar: "bg-sky-500", dot: "bg-sky-500" },
-  video: { label: "Video", bar: "bg-violet-500", dot: "bg-violet-500" },
-  audio: { label: "Audio", bar: "bg-amber-500", dot: "bg-amber-500" },
-  doc: { label: "Docs", bar: "bg-emerald-500", dot: "bg-emerald-500" },
-  archive: { label: "Archives", bar: "bg-rose-500", dot: "bg-rose-500" },
-  other: { label: "Other", bar: "bg-slate-400", dot: "bg-slate-400" },
-}
-const TYPE_ORDER = ["image", "video", "audio", "doc", "archive", "other"]
 
 type UpdateFn = (id: string, patch: Record<string, unknown>) => void | Promise<void>
 

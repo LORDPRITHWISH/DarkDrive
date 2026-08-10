@@ -217,6 +217,7 @@ type DriveState = {
   renameFolder: (id: string, name: string) => Promise<void>
   recolorFolder: (id: string, color: string | null) => Promise<void>
   renameFile: (id: string, name: string) => Promise<void>
+  setFileTags: (id: string, tags: string[]) => Promise<void>
   extractZip: (id: string, name: string) => Promise<void>
   toggleHiddenItem: (type: "folder" | "file", id: string) => Promise<void>
   toggleStarred: (type: "folder" | "file", id: string) => Promise<void>
@@ -389,6 +390,10 @@ export const useDrive = create<DriveState>((set, get) => ({
   },
   renameFile: async (id, name) => {
     await apiJson(`/api/files/${id}`, "PATCH", { name })
+    await get().refresh()
+  },
+  setFileTags: async (id, tags) => {
+    await apiJson(`/api/files/${id}`, "PATCH", { tags })
     await get().refresh()
   },
   extractZip: async (id, name) => {

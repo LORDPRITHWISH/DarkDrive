@@ -3,6 +3,7 @@ import {
   DownloadSimpleIcon,
   EyeIcon,
   FileIcon,
+  XIcon,
 } from "@phosphor-icons/react"
 import type { FileItem } from "@/lib/types"
 import { apiGet } from "@/lib/api"
@@ -10,6 +11,7 @@ import { apiUrl } from "@/lib/config"
 import { formatBytes, formatDate, relativeTime } from "@/lib/format"
 import { iconFor } from "@/lib/fileIcon"
 import { thumbnailable } from "@/lib/thumb"
+import { useDrive } from "@/store/drive"
 import {
   Dialog,
   DialogContent,
@@ -18,6 +20,8 @@ import {
 } from "@workspace/ui/components/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@workspace/ui/components/tabs"
 import { Avatar, AvatarImage, AvatarFallback } from "@workspace/ui/components/avatar"
+import { Badge } from "@workspace/ui/components/badge"
+import { Input } from "@workspace/ui/components/input"
 import { HoverName } from "@/components/HoverName"
 
 type ActivityEvent = {
@@ -45,6 +49,9 @@ export function FilePropertiesDialog({
   const [activityLoading, setActivityLoading] = useState(false)
   const [activityErr, setActivityErr] = useState<string | null>(null)
   const [thumbFailed, setThumbFailed] = useState(false)
+  const [tags, setTags] = useState<string[]>([])
+  const [tagInput, setTagInput] = useState("")
+  const setFileTags = useDrive((s) => s.setFileTags)
 
   // Reset state when file changes
   useEffect(() => {
@@ -54,7 +61,20 @@ export function FilePropertiesDialog({
     setActivityErr(null)
     setActivityLoading(false)
     setThumbFailed(false)
+    setTags(file.tags ?? [])
+    setTagInput("")
   }, [file?.id])
+
+  function commitTags(next: string[]) {
+    setTags(next)
+    if (file) void setFileTags(file.id, next)
+  }
+  function addTag() {
+    const t = tagInput.trim()
+    setTagInput("")
+    if (!t || tags.includes(t)) return
+    commitTags([...tags, t])
+  }
 
   // Load activity when Activity tab is first opened
   useEffect(() => {
@@ -134,6 +154,40 @@ export function FilePropertiesDialog({
                 )}
                 <Row label="Storage key" value={file.storageKey} mono small />
               </dl>
+
+              {/* Tags */}
+              <div className="border-t pt-3">
+                <div className="text-muted-foreground mb-2 text-xs font-medium uppercase tracking-wider">
+                  Tags
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {tags.map((t) => (
+                    <Badge key={t} variant="secondary" className="pr-1">
+                      {t}
+                      <button
+                        onClick={() => commitTags(tags.filter((x) => x !== t))}
+                        title={`Remove "${t}"`}
+                        className="hover:bg-foreground/10 rounded-full p-0.5"
+                      >
+                        <XIcon size={10} weight="bold" />
+                      </button>
+                    </Badge>
+                  ))}
+                  <Input
+                    value={tagInput}
+                    onChange={(e) => setTagInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === ",") {
+                        e.preventDefault()
+                        addTag()
+                      }
+                    }}
+                    onBlur={addTag}
+                    placeholder="Add tag…"
+                    className="h-6 w-24 rounded-full px-2.5 text-xs"
+                  />
+                </div>
+              </div>
 
               {/* Download link */}
               <div className="border-t pt-3">

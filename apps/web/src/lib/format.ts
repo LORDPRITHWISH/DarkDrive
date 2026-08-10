@@ -47,3 +47,18 @@ export function relativeTime(iso: string): string {
         : "numeric",
   })
 }
+
+// Mirrors the API's trash auto-purge window (TRASH_RETENTION_MS in
+// apps/api/src/routes/me.ts) so the bin can warn before the sweep runs.
+const TRASH_RETENTION_DAYS = 30
+
+export function purgeCountdown(trashedAtIso: string): string {
+  const trashedAt = new Date(trashedAtIso).getTime()
+  if (!Number.isFinite(trashedAt)) return ""
+  const daysLeft = Math.ceil(
+    (trashedAt + TRASH_RETENTION_DAYS * 86400000 - Date.now()) / 86400000
+  )
+  if (daysLeft <= 0) return "Deletes soon"
+  if (daysLeft === 1) return "Deletes in 1 day"
+  return `Deletes in ${daysLeft} days`
+}

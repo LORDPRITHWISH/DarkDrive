@@ -159,6 +159,9 @@ model File {
   isHidden   Boolean  @default(false)
   isTrashed  Boolean  @default(false)
   isStarred  Boolean  @default(false)
+  // Free-form user labels for organizing/filtering. No separate tag table —
+  // there's no cross-file tag metadata (color, etc.) to justify one.
+  tags       String[] @default([])
   // See Folder.deletedAt — admin recycle bin retention for permanently-deleted
   // files. A non-null `deletedAt` always implies `isTrashed = true`.
   deletedAt   DateTime?

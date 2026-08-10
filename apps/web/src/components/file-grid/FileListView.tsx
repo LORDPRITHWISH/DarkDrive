@@ -147,6 +147,14 @@ export function FileListView({
                     aria-label="Shortcut"
                   />
                 )}
+                {f.tags.length > 0 && (
+                  <span
+                    className="text-muted-foreground shrink-0 truncate text-xs"
+                    title={f.tags.join(", ")}
+                  >
+                    {f.tags.join(" · ")}
+                  </span>
+                )}
               </div>
             </TableCell>
             <TableCell className="p-0 py-2">{formatDate(f.updatedAt)}</TableCell>

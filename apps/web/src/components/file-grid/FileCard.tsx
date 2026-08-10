@@ -96,6 +96,14 @@ export function FileCard({
           />
         )}
         <div className="text-muted-foreground text-center text-xs">{formatBytes(file.size)}</div>
+        {file.tags.length > 0 && (
+          <div
+            className="mt-1 truncate text-center text-xs text-muted-foreground"
+            title={file.tags.join(", ")}
+          >
+            {file.tags.join(" · ")}
+          </div>
+        )}
       </div>
     </div>
   )

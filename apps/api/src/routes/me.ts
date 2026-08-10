@@ -2,6 +2,7 @@ import { Router } from "express"
 import { z } from "zod"
 import { prisma } from "../db/prisma.js"
 import { currentUser, requireAuth } from "../middleware/auth.js"
+import { fileCategory, type FileCategory } from "../lib/fileType.js"
 
 declare module "express-session" {
   interface SessionData {
@@ -12,25 +13,36 @@ declare module "express-session" {
 export const meRouter = Router()
 meRouter.use(requireAuth)
 
-async function usedBytes(userId: string): Promise<bigint> {
-  const r = await prisma.file.aggregate({
-    _sum: { size: true },
-    where: { ownerId: userId, isTrashed: false },
-  })
-  return r._sum.size ?? BigInt(0)
-}
-
 meRouter.get("/quota", async (req, res) => {
   const user = currentUser(req)
-  const used = await usedBytes(user.id)
+  const files = await prisma.file.findMany({
+    where: { ownerId: user.id, isTrashed: false },
+    select: { mimeType: true, name: true, size: true },
+  })
+  const byType: Record<FileCategory, number> = {
+    image: 0, video: 0, audio: 0, doc: 0, archive: 0, other: 0,
+  }
+  const bytesByType: Record<FileCategory, number> = {
+    image: 0, video: 0, audio: 0, doc: 0, archive: 0, other: 0,
+  }
+  let used = 0
+  for (const f of files) {
+    const sz = Number(f.size)
+    used += sz
+    const k = fileCategory(f.mimeType, f.name)
+    byType[k] += 1
+    bytesByType[k] += sz
+  }
   res.json({
-    used: Number(used),
+    used,
     total: Number(user.storageQuotaBytes),
     role: user.role,
     upgradeRequestedAt: user.upgradeRequestedAt,
     upgradeRequestedBytes: user.upgradeRequestedBytes
       ? Number(user.upgradeRequestedBytes)
       : null,
+    byType,
+    bytesByType,
   })
 })
 
@@ -194,11 +206,50 @@ meRouter.get("/trash", async (req, res) => {
   })
 })
 
-// Empty the user's bin. From the user's point of view this permanently deletes
-// everything in the bin (files marked isTrashed plus all descendants of trashed
-// folders). Nothing is actually destroyed, though — every affected file and
-// folder is soft-deleted into the admin-only recycle bin (stamped deletedAt) so
-// an admin can still restore or purge it. Storage blobs are retained.
+// Shared by manual "empty bin" and the scheduled auto-purge below. Permanently
+// deletes from the user's point of view: the given trashed files/folders (plus
+// every descendant of those folders) are soft-deleted into the admin-only
+// recycle bin (stamped deletedAt) so an admin can still restore or purge them.
+// Nothing is actually destroyed — storage blobs are retained.
+async function purgeTrashed(
+  fileIds: string[],
+  rootFolderIds: string[],
+  deletedById: string | null
+) {
+  // Walk the trashed-folder subtree so every descendant folder (and its files)
+  // is stamped too — the DB has no cascade for a non-destructive update.
+  const folderIds = new Set<string>(rootFolderIds)
+  let frontier = rootFolderIds
+  while (frontier.length > 0) {
+    const children = await prisma.folder.findMany({
+      where: { parentId: { in: frontier } },
+      select: { id: true },
+    })
+    const next = children.map((c) => c.id).filter((id) => !folderIds.has(id))
+    next.forEach((id) => folderIds.add(id))
+    frontier = next
+  }
+
+  const data = { deletedAt: new Date(), deletedById, isTrashed: true }
+  const allFolderIds = [...folderIds]
+  const [directFiles, descendantFiles] = await prisma.$transaction([
+    // Files sitting directly in the bin.
+    prisma.file.updateMany({ where: { id: { in: fileIds } }, data }),
+    // Files anywhere inside a trashed folder subtree.
+    prisma.file.updateMany({
+      where: { folderId: { in: allFolderIds }, deletedAt: null },
+      data,
+    }),
+    prisma.folder.updateMany({
+      where: { id: { in: allFolderIds }, deletedAt: null },
+      data,
+    }),
+  ])
+
+  return { files: directFiles.count + descendantFiles.count, folders: allFolderIds.length }
+}
+
+// Empty the user's bin — everything currently in it, regardless of age.
 meRouter.post("/trash/empty", async (req, res) => {
   const user = currentUser(req)
   const [trashedFiles, trashedFolders] = await Promise.all([
@@ -211,47 +262,46 @@ meRouter.post("/trash/empty", async (req, res) => {
       select: { id: true },
     }),
   ])
+  const result = await purgeTrashed(
+    trashedFiles.map((f) => f.id),
+    trashedFolders.map((f) => f.id),
+    user.id
+  )
+  res.json({ ok: true, ...result })
+})
 
-  // Walk the trashed-folder subtree so every descendant folder (and its files)
-  // is stamped too — the DB has no cascade for a non-destructive update.
-  const folderIds = new Set<string>(trashedFolders.map((f) => f.id))
-  let frontier = trashedFolders.map((f) => f.id)
-  while (frontier.length > 0) {
-    const children = await prisma.folder.findMany({
-      where: { parentId: { in: frontier } },
+// Auto-purge: items sitting in a user's bin longer than the retention window
+// are swept into the admin recycle bin automatically, same as if the user had
+// clicked "Delete forever" — mirrors Google Drive's 30-day trash retention.
+const TRASH_RETENTION_MS = 30 * 24 * 60 * 60 * 1000
+const TRASH_SWEEP_INTERVAL_MS = 6 * 60 * 60 * 1000
+
+async function sweepExpiredTrash() {
+  const cutoff = new Date(Date.now() - TRASH_RETENTION_MS)
+  const [staleFiles, staleFolders] = await Promise.all([
+    prisma.file.findMany({
+      where: { isTrashed: true, deletedAt: null, updatedAt: { lt: cutoff } },
       select: { id: true },
-    })
-    const next = children.map((c) => c.id).filter((id) => !folderIds.has(id))
-    next.forEach((id) => folderIds.add(id))
-    frontier = next
-  }
-
-  const now = new Date()
-  const data = { deletedAt: now, deletedById: user.id, isTrashed: true }
-  const allFolderIds = [...folderIds]
-  const [directFiles, descendantFiles] = await prisma.$transaction([
-    // Files sitting directly in the bin.
-    prisma.file.updateMany({
-      where: { id: { in: trashedFiles.map((f) => f.id) } },
-      data,
     }),
-    // Files anywhere inside a trashed folder subtree.
-    prisma.file.updateMany({
-      where: { folderId: { in: allFolderIds }, deletedAt: null },
-      data,
-    }),
-    prisma.folder.updateMany({
-      where: { id: { in: allFolderIds }, deletedAt: null },
-      data,
+    prisma.folder.findMany({
+      where: { isTrashed: true, deletedAt: null, updatedAt: { lt: cutoff } },
+      select: { id: true },
     }),
   ])
+  if (staleFiles.length === 0 && staleFolders.length === 0) return
+  const result = await purgeTrashed(
+    staleFiles.map((f) => f.id),
+    staleFolders.map((f) => f.id),
+    null
+  )
+  console.log(
+    `[trash] auto-purged ${result.files} file(s), ${result.folders} folder(s) past ${TRASH_RETENTION_MS / 86400000}-day retention`
+  )
+}
 
-  res.json({
-    ok: true,
-    files: directFiles.count + descendantFiles.count,
-    folders: allFolderIds.length,
-  })
-})
+setInterval(() => {
+  void sweepExpiredTrash().catch((e) => console.error("[trash] auto-purge sweep failed", e))
+}, TRASH_SWEEP_INTERVAL_MS).unref()
 
 meRouter.get("/recent", async (req, res) => {
   const user = currentUser(req)

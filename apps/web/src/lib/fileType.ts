@@ -52,3 +52,17 @@ export const SEARCH_TYPE_LABELS: Record<SearchTypeFilter, string> = {
   archive: "Archives",
   other: "Other",
 }
+
+type FileCategory = Exclude<SearchTypeFilter, "all" | "folder">
+
+// Colors for storage-usage breakdowns (admin user detail, sidebar quota).
+export const TYPE_META: Record<FileCategory, { label: string; bar: string; dot: string }> = {
+  image: { label: "Images", bar: "bg-sky-500", dot: "bg-sky-500" },
+  video: { label: "Video", bar: "bg-violet-500", dot: "bg-violet-500" },
+  audio: { label: "Audio", bar: "bg-amber-500", dot: "bg-amber-500" },
+  doc: { label: "Docs", bar: "bg-emerald-500", dot: "bg-emerald-500" },
+  archive: { label: "Archives", bar: "bg-rose-500", dot: "bg-rose-500" },
+  other: { label: "Other", bar: "bg-slate-400", dot: "bg-slate-400" },
+}
+
+export const TYPE_ORDER: FileCategory[] = ["image", "video", "audio", "doc", "archive", "other"]

@@ -1137,6 +1137,11 @@ filesRouter.patch("/:id", async (req, res) => {
       isHidden: z.boolean().optional(),
       isStarred: z.boolean().optional(),
       isTrashed: z.boolean().optional(),
+      tags: z
+        .array(z.string().trim().min(1).max(40))
+        .max(30)
+        .transform((arr) => Array.from(new Set(arr)))
+        .optional(),
       audioTrackIndex: z.number().int().nullable().optional(),
       playbackPositionSec: z.number().min(0).nullable().optional(),
     })

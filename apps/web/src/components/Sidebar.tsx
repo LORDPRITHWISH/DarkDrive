@@ -26,6 +26,8 @@ import { useDrive } from "@/store/drive"
 import { useMe } from "@/store/me"
 import { useSidebar } from "@/store/sidebar"
 import { formatBytes } from "@/lib/format"
+import { TYPE_META, TYPE_ORDER } from "@/lib/fileType"
+import type { QuotaInfo } from "@/lib/types"
 import { Button } from "@workspace/ui/components/button"
 import {
   DropdownMenu,
@@ -33,6 +35,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu"
+import { Popover, PopoverContent, PopoverTrigger } from "@workspace/ui/components/popover"
 import { ThemeToggle } from "@/components/ThemeToggle"
 import { MobileTabBar } from "@/components/MobileTabBar"
 
@@ -286,20 +289,27 @@ export function Sidebar() {
       {/* Storage quota */}
       {quota && !collapsed && (
         <div className="mt-auto border-t pt-3">
-          <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
-            <span>Storage</span>
-            <span>
-              {formatBytes(quota.used)} / {formatBytes(quota.total)}
-            </span>
-          </div>
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-            <div
-              className={`h-full rounded-full transition-all ${
-                nearLimit ? "bg-destructive" : "bg-primary"
-              }`}
-              style={{ width: `${pct}%` }}
-            />
-          </div>
+          <Popover>
+            <PopoverTrigger className="block w-full text-left" title="Storage breakdown">
+              <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
+                <span>Storage</span>
+                <span>
+                  {formatBytes(quota.used)} / {formatBytes(quota.total)}
+                </span>
+              </div>
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                <div
+                  className={`h-full rounded-full transition-all ${
+                    nearLimit ? "bg-destructive" : "bg-primary"
+                  }`}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+            </PopoverTrigger>
+            <PopoverContent align="start">
+              <StorageBreakdown quota={quota} />
+            </PopoverContent>
+          </Popover>
           {quota.role === "USER" && (
             <button
               onClick={() => setUpgradeOpen(true)}
@@ -384,5 +394,40 @@ export function Sidebar() {
         />
       )}
     </>
+  )
+}
+
+function StorageBreakdown({ quota }: { quota: QuotaInfo }) {
+  const segments = TYPE_ORDER.filter((k) => quota.bytesByType[k] > 0)
+  if (segments.length === 0)
+    return <div className="text-muted-foreground text-xs">No files yet.</div>
+  return (
+    <div>
+      <div className="text-muted-foreground mb-2 text-xs font-medium uppercase tracking-wider">
+        Storage breakdown
+      </div>
+      <div className="flex h-2 overflow-hidden rounded-full">
+        {segments.map((k) => (
+          <div
+            key={k}
+            className={TYPE_META[k].bar}
+            style={{ width: `${(quota.bytesByType[k] / quota.used) * 100}%` }}
+            title={`${TYPE_META[k].label}: ${formatBytes(quota.bytesByType[k])}`}
+          />
+        ))}
+      </div>
+      <ul className="mt-2 flex flex-col gap-1">
+        {segments.map((k) => (
+          <li key={k} className="flex items-center gap-1.5 text-xs">
+            <span className={`h-2 w-2 shrink-0 rounded-full ${TYPE_META[k].dot}`} />
+            <span className="text-muted-foreground flex-1">{TYPE_META[k].label}</span>
+            <span className="tabular-nums">{quota.byType[k]}</span>
+            <span className="text-muted-foreground w-16 text-right tabular-nums">
+              {formatBytes(quota.bytesByType[k])}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }

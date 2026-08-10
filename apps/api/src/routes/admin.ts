@@ -11,35 +11,13 @@ import { removeAudioVariants } from "../lib/audioTracks.js"
 import { notify } from "../lib/notify.js"
 import { recentLogs } from "../lib/logbuf.js"
 import { backfillProgress, backfillThumbnails, toolStatus } from "../lib/thumbnails.js"
+import { fileCategory } from "../lib/fileType.js"
 
 function formatBytes(bytes: number): string {
   if (bytes <= 0) return "0 B"
   const units = ["B", "KB", "MB", "GB", "TB"]
   const i = Math.min(Math.floor(Math.log2(bytes) / 10), units.length - 1)
   return `${(bytes / 1024 ** i).toFixed(i === 0 ? 0 : 1)} ${units[i]}`
-}
-
-type FileTypeKey = "image" | "video" | "audio" | "doc" | "archive" | "other"
-
-// Coarse category for a file, matching the buckets used across the dashboard.
-function fileTypeKey(mimeType: string, name: string): FileTypeKey {
-  const m = mimeType
-  if (m.startsWith("image/")) return "image"
-  if (m.startsWith("video/")) return "video"
-  if (m.startsWith("audio/")) return "audio"
-  if (
-    m === "application/pdf" ||
-    m.startsWith("text/") ||
-    m.includes("officedocument") ||
-    m.includes("msword") ||
-    m.includes("ms-excel") ||
-    m.includes("ms-powerpoint") ||
-    /\.(pdf|docx?|xlsx?|pptx?|odt|ods|odp|rtf|md|txt)$/i.test(name)
-  )
-    return "doc"
-  if (m.includes("zip") || m.includes("tar") || m.includes("rar") || m.includes("7z"))
-    return "archive"
-  return "other"
 }
 
 export const adminRouter = Router()
@@ -716,7 +694,7 @@ adminRouter.get("/users/:id/detail", async (req, res) => {
   for (const f of ownedFiles) {
     const sz = Number(f.size)
     usedBytes += sz
-    const k = fileTypeKey(f.mimeType, f.name)
+    const k = fileCategory(f.mimeType, f.name)
     byType[k] += 1
     bytesByType[k] += sz
   }

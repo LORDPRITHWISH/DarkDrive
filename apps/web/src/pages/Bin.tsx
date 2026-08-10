@@ -23,7 +23,7 @@ import { useDrive } from "@/store/drive"
 import { useMe } from "@/store/me"
 import { toast } from "@/store/toast"
 import { confirmDialog } from "@/store/confirm"
-import { formatBytes, formatDate } from "@/lib/format"
+import { formatBytes, formatDate, purgeCountdown } from "@/lib/format"
 import { iconFor } from "@/lib/fileIcon"
 import { FilePreview } from "@/components/FilePreview"
 import type { FileItem, Folder } from "@/lib/types"
@@ -224,7 +224,12 @@ export function BinPage() {
                         <HoverName as="span" name={f.name} className="min-w-0 truncate" />
                       </div>
                     </TableCell>
-                    <TableCell className="p-0 py-2">{formatDate(f.updatedAt)}</TableCell>
+                    <TableCell className="p-0 py-2">
+                      <div>{formatDate(f.updatedAt)}</div>
+                      <div className="text-muted-foreground text-xs">
+                        {purgeCountdown(f.updatedAt)}
+                      </div>
+                    </TableCell>
                     <TableCell className="p-0 py-2">—</TableCell>
                     <TableCell className="p-0 py-2 pr-4">
                       <RowActions
@@ -247,7 +252,12 @@ export function BinPage() {
                         <HoverName as="span" name={f.name} className="min-w-0 truncate" />
                       </div>
                     </TableCell>
-                    <TableCell className="p-0 py-2">{formatDate(f.updatedAt)}</TableCell>
+                    <TableCell className="p-0 py-2">
+                      <div>{formatDate(f.updatedAt)}</div>
+                      <div className="text-muted-foreground text-xs">
+                        {purgeCountdown(f.updatedAt)}
+                      </div>
+                    </TableCell>
                     <TableCell className="p-0 py-2">{formatBytes(f.size)}</TableCell>
                     <TableCell className="p-0 py-2 pr-4" onClick={(e) => e.stopPropagation()}>
                       <RowActions
@@ -343,7 +353,7 @@ function TrashFolderCard({
           className="truncate text-sm font-medium"
         />
         <div className="text-muted-foreground truncate text-xs">
-          Trashed {formatDate(folder.updatedAt)}
+          Trashed {formatDate(folder.updatedAt)} · {purgeCountdown(folder.updatedAt)}
         </div>
       </div>
     </div>
@@ -389,6 +399,9 @@ function TrashFileCard({
         <div className="text-muted-foreground flex items-center justify-between gap-2 text-xs">
           <span>{formatBytes(file.size)}</span>
           <span>Trashed {formatDate(file.updatedAt)}</span>
+        </div>
+        <div className="text-muted-foreground truncate text-xs">
+          {purgeCountdown(file.updatedAt)}
         </div>
       </div>
     </div>

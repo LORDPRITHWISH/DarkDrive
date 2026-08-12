@@ -9,6 +9,7 @@ import { currentUser, requireAuth } from "../middleware/auth.js"
 import { getFolderWithAccess, assertUserRootFolderId } from "../lib/access.js"
 import { renderImage } from "../lib/thumbnails.js"
 import { absolutePath, ensureDirFor, newStorageKey, removeFile, STORAGE_ROOT } from "../storage/local.js"
+import { logActivity } from "../lib/activity.js"
 
 // Sniff the real format from magic bytes rather than trusting the `.jpg`
 // storage key — covers thumbnails written before upload-time re-encoding
@@ -131,6 +132,7 @@ foldersRouter.post("/:id/thumbnail", thumbUpload.single("thumbnail"), async (req
     data: { thumbnailKey: key },
   })
   if (oldKey) { try { removeFile(oldKey) } catch {} }
+  await logActivity({ userId: user.id, folderId: folder.id, action: "thumbnail" })
 
   res.json(updated)
 })
@@ -144,6 +146,7 @@ foldersRouter.delete("/:id/thumbnail", async (req, res) => {
   const oldKey = folder.thumbnailKey
   await prisma.folder.update({ where: { id: folder.id }, data: { thumbnailKey: null } })
   try { removeFile(oldKey) } catch {}
+  await logActivity({ userId: user.id, folderId: folder.id, action: "thumbnail" })
   res.json({ ok: true })
 })
 
@@ -186,6 +189,7 @@ foldersRouter.post("/", async (req, res) => {
       spaceId: parent.spaceId,
     },
   })
+  await logActivity({ userId: user.id, folderId: f.id, action: "create" })
   res.status(201).json(f)
 })
 
@@ -205,11 +209,13 @@ foldersRouter.patch("/:id", async (req, res) => {
   const folder = await getFolderWithAccess(user.id, req.params.id, "write")
   if (!folder) return res.status(403).json({ error: "forbidden" })
 
+  let targetFolderName: string | undefined
   if (body.parentId) {
     const target = await getFolderWithAccess(user.id, body.parentId, "write")
     if (!target) return res.status(403).json({ error: "forbidden_target" })
     if (await isDescendant(folder.id, target.id))
       return res.status(400).json({ error: "cycle" })
+    targetFolderName = target.name
     // Cascade spaceId to the moved subtree so membership follows the hierarchy.
     if ((target.spaceId ?? null) !== (folder.spaceId ?? null)) {
       await cascadeSpaceId(folder.id, target.spaceId ?? null)
@@ -217,6 +223,46 @@ foldersRouter.patch("/:id", async (req, res) => {
   }
 
   const updated = await prisma.folder.update({ where: { id: folder.id }, data: body })
+
+  const logs: Promise<unknown>[] = []
+  if (body.name !== undefined && body.name !== folder.name)
+    logs.push(
+      logActivity({
+        userId: user.id,
+        folderId: folder.id,
+        action: "rename",
+        detail: { from: folder.name, to: body.name },
+      })
+    )
+  if (body.parentId !== undefined && body.parentId !== folder.parentId)
+    logs.push(
+      logActivity({
+        userId: user.id,
+        folderId: folder.id,
+        action: "move",
+        detail: { to: targetFolderName },
+      })
+    )
+  if (body.color !== undefined && body.color !== folder.color)
+    logs.push(logActivity({ userId: user.id, folderId: folder.id, action: "color" }))
+  if (body.isStarred !== undefined && body.isStarred !== folder.isStarred)
+    logs.push(
+      logActivity({
+        userId: user.id,
+        folderId: folder.id,
+        action: body.isStarred ? "star" : "unstar",
+      })
+    )
+  if (body.isTrashed !== undefined && body.isTrashed !== folder.isTrashed)
+    logs.push(
+      logActivity({
+        userId: user.id,
+        folderId: folder.id,
+        action: body.isTrashed ? "trash" : "restore",
+      })
+    )
+  await Promise.all(logs)
+
   res.json(updated)
 })
 
@@ -334,7 +380,37 @@ foldersRouter.delete("/:id", async (req, res) => {
       data,
     }),
   ])
+  await logActivity({ userId: user.id, folderId: folder.id, action: "delete" })
   res.json({ ok: true })
+})
+
+// Audit trail for the folder itself (not its contents): create, rename,
+// move, color, star, trash/restore, thumbnail, share/unshare.
+foldersRouter.get("/:id/activity", async (req, res) => {
+  const user = currentUser(req)
+  const folder = await getFolderWithAccess(user.id, req.params.id, "read", { role: user.role })
+  if (!folder) return res.status(404).json({ error: "not_found" })
+
+  const logs = await prisma.activityLog.findMany({
+    where: { folderId: folder.id },
+    orderBy: { createdAt: "desc" },
+    take: 30,
+    select: {
+      action: true,
+      createdAt: true,
+      detail: true,
+      user: { select: { name: true, avatarUrl: true } },
+    },
+  })
+
+  const recent = logs.map((l) => ({
+    action: l.action,
+    at: l.createdAt.toISOString(),
+    user: l.user ? { name: l.user.name, avatarUrl: l.user.avatarUrl ?? null } : null,
+    detail: l.detail as Record<string, unknown> | null,
+  }))
+
+  res.json({ stats: { lastActivity: recent[0]?.at ?? null }, recent })
 })
 
 // Collect every folder id in the subtree rooted at `rootId` (inclusive),

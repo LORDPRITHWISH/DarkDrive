@@ -14,12 +14,12 @@ enum UserRole {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  googleId     String   @unique
-  email        String   @unique
-  name         String
-  avatarUrl    String?
-  createdAt    DateTime @default(now())
+  id        String   @id @default(cuid())
+  googleId  String   @unique
+  email     String   @unique
+  name      String
+  avatarUrl String?
+  createdAt DateTime @default(now())
 
   role                  UserRole  @default(USER)
   storageQuotaBytes     BigInt    @default(1073741824)
@@ -27,20 +27,21 @@ model User {
   upgradeRequestedBytes BigInt?
   disabledAt            DateTime?
 
-  rootFolderId String?  @unique
-  rootFolder   Folder?  @relation("UserRoot", fields: [rootFolderId], references: [id])
+  rootFolderId String? @unique
+  rootFolder   Folder? @relation("UserRoot", fields: [rootFolderId], references: [id])
 
-  folders      Folder[]  @relation("FolderOwner")
-  files        File[]    @relation("FileOwner")
-  spaces        Space[]   @relation("SpaceOwner")
+  folders       Folder[]       @relation("FolderOwner")
+  files         File[]         @relation("FileOwner")
+  spaces        Space[]        @relation("SpaceOwner")
   memberships   SpaceMember[]
   shares        Share[]
   spaceInvites  SpaceInvite[]
   fileAccesses  FileAccess[]
   loginEvents   LoginEvent[]
   notifications Notification[]
-  modifiedFiles File[]        @relation("FileLastModifiedBy")
+  modifiedFiles File[]         @relation("FileLastModifiedBy")
   fileVersions  FileVersion[]
+  activityLogs  ActivityLog[]
 }
 
 model Notification {
@@ -75,6 +76,31 @@ model FileAccess {
   @@index([userId, fileId])
 }
 
+// Audit trail of mutations (upload, rename, move, trash, share, ...) on a
+// file or folder. Exactly one of fileId/folderId is set. Separate from
+// FileAccess, which only ever records view/download reads — merging the two
+// would touch that model's existing view-count call sites (me.ts, admin.ts)
+// for no benefit, since they only care about action="view"/"download".
+model ActivityLog {
+  id        String   @id @default(cuid())
+  fileId    String?
+  file      File?    @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  folderId  String?
+  folder    Folder?  @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String
+  // Small human-readable snapshot captured at event time, e.g. {from,to} for
+  // a rename — the target itself may later be renamed again or deleted, so
+  // the log needs its own copy rather than joining live state.
+  detail    Json?
+  createdAt DateTime @default(now())
+
+  @@index([fileId, createdAt])
+  @@index([folderId, createdAt])
+  @@index([userId, fileId])
+}
+
 model LoginEvent {
   id        String   @id @default(cuid())
   userId    String
@@ -88,35 +114,36 @@ model LoginEvent {
 }
 
 model Folder {
-  id        String   @id @default(cuid())
-  name      String
-  color     String?
-  ownerId   String
-  owner     User     @relation("FolderOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  parentId  String?
-  parent    Folder?  @relation("FolderChildren", fields: [parentId], references: [id], onDelete: Cascade)
-  children  Folder[] @relation("FolderChildren")
-  files     File[]
-  spaceId   String?
-  space     Space?   @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  id           String    @id @default(cuid())
+  name         String
+  color        String?
+  ownerId      String
+  owner        User      @relation("FolderOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  parentId     String?
+  parent       Folder?   @relation("FolderChildren", fields: [parentId], references: [id], onDelete: Cascade)
+  children     Folder[]  @relation("FolderChildren")
+  files        File[]
+  spaceId      String?
+  space        Space?    @relation(fields: [spaceId], references: [id], onDelete: Cascade)
   thumbnailKey String?
-  isHidden  Boolean  @default(false)
-  isTrashed Boolean  @default(false)
-  isStarred Boolean  @default(false)
+  isHidden     Boolean   @default(false)
+  isTrashed    Boolean   @default(false)
+  isStarred    Boolean   @default(false)
   // System-level (admin) recycle bin. When a user permanently deletes an item
   // from their own bin, it is not destroyed — it is stamped with `deletedAt` and
   // retained here so an admin can restore or purge it. `deletedById` records who
   // triggered the deletion. A non-null `deletedAt` always implies
   // `isTrashed = true`, so deleted items stay excluded from every normal listing.
-  deletedAt   DateTime?
-  deletedById String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  deletedAt    DateTime?
+  deletedById  String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
-  rootOf    User?    @relation("UserRoot")
-  spaceRootOf Space? @relation("SpaceRoot")
-  shares    Share[]
-  shortcuts FileShortcut[] @relation("FolderShortcuts")
+  rootOf       User?          @relation("UserRoot")
+  spaceRootOf  Space?         @relation("SpaceRoot")
+  shares       Share[]
+  shortcuts    FileShortcut[] @relation("FolderShortcuts")
+  activityLogs ActivityLog[]
 
   @@index([ownerId, parentId])
   @@index([spaceId, parentId])
@@ -124,29 +151,29 @@ model Folder {
 }
 
 model File {
-  id         String   @id @default(cuid())
-  name       String
-  ownerId    String
-  owner      User     @relation("FileOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  folderId   String
-  folder     Folder   @relation(fields: [folderId], references: [id], onDelete: Cascade)
-  spaceId    String?
-  space      Space?   @relation(fields: [spaceId], references: [id], onDelete: Cascade)
-  size       BigInt
-  mimeType   String
-  storageKey String   @unique
+  id                  String    @id @default(cuid())
+  name                String
+  ownerId             String
+  owner               User      @relation("FileOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  folderId            String
+  folder              Folder    @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  spaceId             String?
+  space               Space?    @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  size                BigInt
+  mimeType            String
+  storageKey          String    @unique
   // Storage key of the generated preview thumbnail (a small JPEG), or null if
   // none exists yet. Populated by the thumbnail pipeline (see lib/thumbnails).
-  thumbnailKey String?
+  thumbnailKey        String?
   // Generation outcome: "ready", "failed", or "unsupported". Null means not yet
   // attempted. Used to avoid re-running the pipeline on files that can't (or
   // didn't) produce a thumbnail.
-  thumbnailState String?
+  thumbnailState      String?
   // Container stream index of the audio track to play by default, set once
   // from the player/properties panel so multi-audio files (dual-audio rips,
   // commentary tracks) don't need reselecting on every open. Null = the
   // source's own default track.
-  audioTrackIndex Int?
+  audioTrackIndex     Int?
   // Playback position in seconds, saved periodically while a video plays so
   // reopening it resumes where the user left off. Null = start from the top
   // (never played, or finished — see lib/thumbnails' onProgress(0) on `ended`).
@@ -155,21 +182,21 @@ model File {
   // JPEG frames) for the seek bar, or null if none exists yet. `storyboardMeta`
   // holds the grid layout needed to slice it (interval/cols/rows/tileW/tileH).
   // See lib/thumbnails' storyboard generation.
-  storyboardKey String?
-  storyboardState String?
-  storyboardMeta Json?
-  isHidden   Boolean  @default(false)
-  isTrashed  Boolean  @default(false)
-  isStarred  Boolean  @default(false)
+  storyboardKey       String?
+  storyboardState     String?
+  storyboardMeta      Json?
+  isHidden            Boolean   @default(false)
+  isTrashed           Boolean   @default(false)
+  isStarred           Boolean   @default(false)
   // Free-form user labels for organizing/filtering. No separate tag table —
   // there's no cross-file tag metadata (color, etc.) to justify one.
-  tags       String[] @default([])
+  tags                String[]  @default([])
   // See Folder.deletedAt — admin recycle bin retention for permanently-deleted
   // files. A non-null `deletedAt` always implies `isTrashed = true`.
-  deletedAt   DateTime?
-  deletedById String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  deletedAt           DateTime?
+  deletedById         String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   // Who uploaded the currently-live content (via "upload new version"). Null
   // means the content is still the original upload, so the author is just
@@ -177,12 +204,13 @@ model File {
   // swap, so past FileVersion rows can be attributed to whoever actually
   // authored that content at archive time — see files.ts's replace handler.
   lastModifiedById String?
-  lastModifiedBy   User?    @relation("FileLastModifiedBy", fields: [lastModifiedById], references: [id], onDelete: SetNull)
+  lastModifiedBy   User?   @relation("FileLastModifiedBy", fields: [lastModifiedById], references: [id], onDelete: SetNull)
 
-  shares     Share[]
-  accesses   FileAccess[]
-  shortcuts  FileShortcut[]
-  versions   FileVersion[]
+  shares       Share[]
+  accesses     FileAccess[]
+  shortcuts    FileShortcut[]
+  versions     FileVersion[]
+  activityLogs ActivityLog[]
 
   @@index([ownerId, folderId])
   @@index([spaceId, folderId])
@@ -233,10 +261,10 @@ model Space {
   pinned       Boolean  @default(false)
   createdAt    DateTime @default(now())
 
-  members      SpaceMember[]
-  folders      Folder[]
-  files        File[]
-  invites      SpaceInvite[]
+  members SpaceMember[]
+  folders Folder[]
+  files   File[]
+  invites SpaceInvite[]
 }
 
 enum SpaceRole {
@@ -267,19 +295,19 @@ model SpaceInvite {
 }
 
 model SpaceMember {
-  id       String    @id @default(cuid())
-  spaceId  String
-  space    Space     @relation(fields: [spaceId], references: [id], onDelete: Cascade)
-  userId   String
-  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role     SpaceRole @default(EDITOR)
+  id                String    @id @default(cuid())
+  spaceId           String
+  space             Space     @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  userId            String
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role              SpaceRole @default(EDITOR)
   // Whether this member has pinned the space to their own sidebar. Only
   // meaningful for non-owner members — owners always see their own spaces.
-  pinned   Boolean   @default(false)
+  pinned            Boolean   @default(false)
   // Set when a VIEWER asks the owner to be promoted to EDITOR (upload
   // rights). Null when there's no pending request — cleared on approve/deny.
   editorRequestedAt DateTime?
-  joinedAt DateTime  @default(now())
+  joinedAt          DateTime  @default(now())
 
   @@unique([spaceId, userId])
 }
@@ -295,19 +323,19 @@ enum ShareResourceType {
 }
 
 model Share {
-  id           String             @id @default(cuid())
-  token        String             @unique
+  id           String            @id @default(cuid())
+  token        String            @unique
   resourceType ShareResourceType
-  permission   SharePermission    @default(VIEW)
+  permission   SharePermission   @default(VIEW)
   fileId       String?
-  file         File?              @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  file         File?             @relation(fields: [fileId], references: [id], onDelete: Cascade)
   folderId     String?
-  folder       Folder?            @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  folder       Folder?           @relation(fields: [folderId], references: [id], onDelete: Cascade)
   createdById  String
-  createdBy    User               @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  createdBy    User              @relation(fields: [createdById], references: [id], onDelete: Cascade)
   expiresAt    DateTime?
   passwordHash String?
-  createdAt    DateTime           @default(now())
+  createdAt    DateTime          @default(now())
 
   @@index([createdById])
 }

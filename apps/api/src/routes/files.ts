@@ -37,6 +37,7 @@ import {
 } from "../lib/thumbnails.js"
 import { probeAudioStreams, getAudioVariant } from "../lib/audioTracks.js"
 import { maybeNotifyQuotaNearLimit } from "../lib/notify.js"
+import { logActivity, mergeActivityEvents } from "../lib/activity.js"
 import { importUrlToFile } from "../lib/urlImport.js"
 import { getIO } from "../realtime/socket.js"
 
@@ -443,6 +444,7 @@ filesRouter.post("/upload/:uploadId/complete", async (req, res) => {
     } catch {}
     sessions.delete(req.params.uploadId)
 
+    await logActivity({ userId: user.id, fileId: updated.id, action: "version" })
     queueThumbnail(updated.id)
     return res.status(200).json({ file: { ...updated, size: Number(updated.size) } })
   }
@@ -487,6 +489,8 @@ filesRouter.post("/upload/:uploadId/complete", async (req, res) => {
     fs.rmSync(s.tmpDir, { recursive: true, force: true })
   } catch {}
   sessions.delete(req.params.uploadId)
+
+  await logActivity({ userId: user.id, fileId: rec.id, action: "upload" })
 
   // Kick off thumbnail generation in the background so the upload response
   // isn't blocked on ffmpeg/libreoffice. Missing thumbnails are also generated
@@ -1204,7 +1208,7 @@ filesRouter.get("/:id/activity", async (req, res) => {
   const file = await getFileWithAccess(user.id, req.params.id, "read", { role: user.role })
   if (!file) return res.status(404).json({ error: "not_found" })
 
-  const [views, downloads, recent] = await Promise.all([
+  const [views, downloads, accesses, logs] = await Promise.all([
     prisma.fileAccess.count({ where: { fileId: file.id, action: "view" } }),
     prisma.fileAccess.count({ where: { fileId: file.id, action: "download" } }),
     prisma.fileAccess.findMany({
@@ -1217,19 +1221,37 @@ filesRouter.get("/:id/activity", async (req, res) => {
         user: { select: { name: true, avatarUrl: true } },
       },
     }),
+    prisma.activityLog.findMany({
+      where: { fileId: file.id },
+      orderBy: { createdAt: "desc" },
+      take: 30,
+      select: {
+        action: true,
+        createdAt: true,
+        detail: true,
+        user: { select: { name: true, avatarUrl: true } },
+      },
+    }),
   ])
 
-  res.json({
-    stats: {
-      views,
-      downloads,
-      lastAccessed: recent[0]?.accessedAt ?? null,
-    },
-    recent: recent.map((a) => ({
+  const recent = mergeActivityEvents(
+    accesses.map((a) => ({
       action: a.action,
-      accessedAt: a.accessedAt.toISOString(),
+      at: a.accessedAt.toISOString(),
       user: { name: a.user.name, avatarUrl: a.user.avatarUrl ?? null },
     })),
+    logs.map((l) => ({
+      action: l.action,
+      at: l.createdAt.toISOString(),
+      user: l.user ? { name: l.user.name, avatarUrl: l.user.avatarUrl ?? null } : null,
+      detail: l.detail as Record<string, unknown> | null,
+    })),
+    30
+  )
+
+  res.json({
+    stats: { views, downloads, lastActivity: recent[0]?.at ?? null },
+    recent,
   })
 })
 
@@ -1357,6 +1379,7 @@ filesRouter.post("/:id/versions/:versionId/restore", async (req, res) => {
     } catch {}
   }
 
+  await logActivity({ userId: user.id, fileId: file.id, action: "version_restore" })
   queueThumbnail(updated.id)
   res.json({ file: { ...updated, size: Number(updated.size) } })
 })
@@ -1381,11 +1404,51 @@ filesRouter.patch("/:id", async (req, res) => {
     .parse(req.body)
   const file = await getFileWithAccess(user.id, req.params.id, "write")
   if (!file) return res.status(403).json({ error: "forbidden" })
+  let targetFolderName: string | undefined
   if (body.folderId) {
     const target = await getFolderWithAccess(user.id, body.folderId, "write")
     if (!target) return res.status(403).json({ error: "forbidden_target" })
+    targetFolderName = target.name
   }
   const updated = await prisma.file.update({ where: { id: file.id }, data: body })
+
+  const logs: Promise<unknown>[] = []
+  if (body.name !== undefined && body.name !== file.name)
+    logs.push(
+      logActivity({
+        userId: user.id,
+        fileId: file.id,
+        action: "rename",
+        detail: { from: file.name, to: body.name },
+      })
+    )
+  if (body.folderId !== undefined && body.folderId !== file.folderId)
+    logs.push(
+      logActivity({
+        userId: user.id,
+        fileId: file.id,
+        action: "move",
+        detail: { to: targetFolderName },
+      })
+    )
+  if (body.isStarred !== undefined && body.isStarred !== file.isStarred)
+    logs.push(
+      logActivity({
+        userId: user.id,
+        fileId: file.id,
+        action: body.isStarred ? "star" : "unstar",
+      })
+    )
+  if (body.isTrashed !== undefined && body.isTrashed !== file.isTrashed)
+    logs.push(
+      logActivity({
+        userId: user.id,
+        fileId: file.id,
+        action: body.isTrashed ? "trash" : "restore",
+      })
+    )
+  await Promise.all(logs)
+
   res.json({ ...updated, size: Number(updated.size) })
 })
 
@@ -1410,6 +1473,7 @@ filesRouter.patch("/:id/owner", async (req, res) => {
     space && (space.ownerId === ownerId || space.members.some((m) => m.userId === ownerId))
   if (!allowed) return res.status(400).json({ error: "invalid_owner" })
   const updated = await prisma.file.update({ where: { id: file.id }, data: { ownerId } })
+  await logActivity({ userId: user.id, fileId: file.id, action: "owner" })
   res.json({ ...updated, size: Number(updated.size) })
 })
 
@@ -1427,5 +1491,6 @@ filesRouter.delete("/:id", async (req, res) => {
     where: { id: file.id },
     data: { deletedAt: new Date(), deletedById: user.id, isTrashed: true },
   })
+  await logActivity({ userId: user.id, fileId: file.id, action: "delete" })
   res.json({ ok: true })
 })

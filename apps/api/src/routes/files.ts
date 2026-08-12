@@ -10,10 +10,12 @@ import unzipper from "unzipper"
 import { prisma } from "../db/prisma.js"
 import { currentUser, requireAuth } from "../middleware/auth.js"
 import { env } from "../env.js"
+import { Prisma } from "@prisma/client"
 import {
   absolutePath,
   ensureDirFor,
   newStorageKey,
+  removeFile,
   STORAGE_ROOT,
 } from "../storage/local.js"
 import {
@@ -62,7 +64,15 @@ type UploadSession = {
   tmpDir: string
   chunks: Set<number>
   createdAt: number
+  // Set when this upload is a new version of an existing file rather than a
+  // new file — see /upload/init and /upload/complete's replace branch.
+  replaceFileId?: string
 }
+
+// Ceiling on how many past versions a file keeps. Oldest beyond this are
+// purged (row + blob) whenever a new version is archived — a fixed count is
+// simplest, upgrade to age-based retention if that ever matters.
+const MAX_VERSIONS_PER_FILE = 20
 // In-memory session registry. If the API restarts mid-upload the client must
 // restart — acceptable trade-off for the simpler implementation, and matches
 // the pre-chunking behavior (a single POST also fails on restart).
@@ -202,38 +212,63 @@ filesRouter.get("/:id/preview", async (req, res) => {
 filesRouter.use(requireAuth)
 
 // Start a chunked upload. Reserves quota and sets up a tmp dir for chunks.
+// `replaceFileId` switches this into "upload a new version" mode: the bytes
+// land as a version of that file instead of a new File row — see
+// /upload/complete's replace branch.
 filesRouter.post("/upload/init", async (req, res) => {
   const user = currentUser(req)
   const body = z
     .object({
-      folderId: z.string(),
+      folderId: z.string().optional(),
       name: z.string().min(1).max(255),
       size: z.number().int().nonnegative(),
       mimeType: z.string().max(255).optional(),
+      replaceFileId: z.string().optional(),
     })
     .parse(req.body)
 
   if (body.size > env.MAX_UPLOAD_MB * 1024 * 1024)
     return res.status(413).json({ error: "too_large" })
 
-  const folder = await getFolderWithAccess(user.id, body.folderId, "write")
-  if (!folder) return res.status(403).json({ error: "forbidden" })
+  let folderId = body.folderId
+  if (body.replaceFileId) {
+    const target = await getFileWithAccess(user.id, body.replaceFileId, "write")
+    if (!target) return res.status(403).json({ error: "forbidden" })
+    folderId = target.folderId
+    // Quota is checked against the file's owner (whose usage total the size
+    // change actually affects), excluding the outgoing size so a same-size
+    // or smaller replacement is never blocked by its own current bytes.
+    const owner = await prisma.user.findUnique({ where: { id: target.ownerId } })
+    if (!owner) return res.status(403).json({ error: "forbidden" })
+    const used = await prisma.file.aggregate({
+      _sum: { size: true },
+      where: { ownerId: target.ownerId, isTrashed: false },
+    })
+    const usedBytes = BigInt(used._sum.size ?? BigInt(0)) - BigInt(target.size)
+    const quota = owner.storageQuotaBytes ?? BigInt(0)
+    if (usedBytes + BigInt(body.size) > quota)
+      return res.status(413).json({ error: "quota_exceeded" })
+  } else {
+    if (!folderId) return res.status(400).json({ error: "folder_id_required" })
+    const folder = await getFolderWithAccess(user.id, folderId, "write")
+    if (!folder) return res.status(403).json({ error: "forbidden" })
 
-  // Quota always charged to the uploader, even for shared-space uploads.
-  const used = await prisma.file.aggregate({
-    _sum: { size: true },
-    where: { ownerId: user.id, isTrashed: false },
-  })
-  const quota = user.storageQuotaBytes ?? BigInt(0)
-  if (BigInt(used._sum.size ?? BigInt(0)) + BigInt(body.size) > quota)
-    return res.status(413).json({ error: "quota_exceeded" })
+    // Quota always charged to the uploader, even for shared-space uploads.
+    const used = await prisma.file.aggregate({
+      _sum: { size: true },
+      where: { ownerId: user.id, isTrashed: false },
+    })
+    const quota = user.storageQuotaBytes ?? BigInt(0)
+    if (BigInt(used._sum.size ?? BigInt(0)) + BigInt(body.size) > quota)
+      return res.status(413).json({ error: "quota_exceeded" })
+  }
 
   const uploadId = crypto.randomBytes(16).toString("hex")
   const tmpDir = path.join(UPLOADS_ROOT, uploadId)
   fs.mkdirSync(tmpDir, { recursive: true })
   sessions.set(uploadId, {
     userId: user.id,
-    folderId: body.folderId,
+    folderId: folderId!,
     name: body.name,
     size: body.size,
     mimeType:
@@ -241,6 +276,7 @@ filesRouter.post("/upload/init", async (req, res) => {
     tmpDir,
     chunks: new Set(),
     createdAt: Date.now(),
+    replaceFileId: body.replaceFileId,
   })
   res.status(201).json({ uploadId, chunkSize: CHUNK_SIZE })
 })
@@ -294,8 +330,13 @@ filesRouter.post("/upload/:uploadId/complete", async (req, res) => {
   }
 
   // Re-check access at completion — membership may have changed mid-upload.
-  const folder = await getFolderWithAccess(user.id, s.folderId, "write")
-  if (!folder) {
+  const folder = s.replaceFileId
+    ? null
+    : await getFolderWithAccess(user.id, s.folderId, "write")
+  const replaceTarget = s.replaceFileId
+    ? await getFileWithAccess(user.id, s.replaceFileId, "write")
+    : null
+  if (!folder && !replaceTarget) {
     try {
       fs.rmSync(s.tmpDir, { recursive: true, force: true })
     } catch {}
@@ -342,6 +383,70 @@ filesRouter.post("/upload/:uploadId/complete", async (req, res) => {
     sessions.delete(req.params.uploadId)
     return res.status(status).json({ error })
   }
+
+  if (replaceTarget) {
+    // Re-check quota at commit time, same owner-scoped math as /upload/init.
+    const owner = await prisma.user.findUnique({ where: { id: replaceTarget.ownerId } })
+    const used = await prisma.file.aggregate({
+      _sum: { size: true },
+      where: { ownerId: replaceTarget.ownerId, isTrashed: false },
+    })
+    const usedBytes = BigInt(used._sum.size ?? BigInt(0)) - BigInt(replaceTarget.size)
+    const quota = owner?.storageQuotaBytes ?? BigInt(0)
+    if (usedBytes + BigInt(stat.size) > quota) return abort(413, "quota_exceeded")
+
+    let overflow: { id: string; storageKey: string }[] = []
+    const updated = await prisma.$transaction(async (tx) => {
+      await tx.fileVersion.create({
+        data: {
+          fileId: replaceTarget.id,
+          storageKey: replaceTarget.storageKey,
+          size: replaceTarget.size,
+          mimeType: replaceTarget.mimeType,
+          createdById: replaceTarget.lastModifiedById ?? replaceTarget.ownerId,
+        },
+      })
+      overflow = await tx.fileVersion.findMany({
+        where: { fileId: replaceTarget.id },
+        orderBy: { createdAt: "desc" },
+        skip: MAX_VERSIONS_PER_FILE,
+        select: { id: true, storageKey: true },
+      })
+      if (overflow.length) {
+        await tx.fileVersion.deleteMany({ where: { id: { in: overflow.map((o) => o.id) } } })
+      }
+      return tx.file.update({
+        where: { id: replaceTarget.id },
+        data: {
+          storageKey: key,
+          size: BigInt(stat.size),
+          mimeType: s.mimeType,
+          lastModifiedById: user.id,
+          // Old preview is for the replaced content — drop it so the next
+          // read regenerates against the new bytes instead of reusing it.
+          thumbnailKey: null,
+          thumbnailState: null,
+          storyboardKey: null,
+          storyboardState: null,
+          storyboardMeta: Prisma.JsonNull,
+        },
+      })
+    })
+    for (const o of overflow) {
+      try {
+        removeFile(o.storageKey)
+      } catch {}
+    }
+
+    try {
+      fs.rmSync(s.tmpDir, { recursive: true, force: true })
+    } catch {}
+    sessions.delete(req.params.uploadId)
+
+    queueThumbnail(updated.id)
+    return res.status(200).json({ file: { ...updated, size: Number(updated.size) } })
+  }
+  if (!folder) return abort(403, "forbidden")
 
   // Re-check quota at commit time (assembled size is authoritative).
   const used = await prisma.file.aggregate({
@@ -1126,6 +1231,134 @@ filesRouter.get("/:id/activity", async (req, res) => {
       user: { name: a.user.name, avatarUrl: a.user.avatarUrl ?? null },
     })),
   })
+})
+
+// Version history: the live version (mirrors File) plus every archived one,
+// newest first.
+filesRouter.get("/:id/versions", async (req, res) => {
+  const user = currentUser(req)
+  const file = await getFileWithAccess(user.id, req.params.id, "read", { role: user.role })
+  if (!file) return res.status(404).json({ error: "not_found" })
+
+  const [versions, currentAuthor] = await Promise.all([
+    prisma.fileVersion.findMany({
+      where: { fileId: file.id },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        size: true,
+        mimeType: true,
+        createdAt: true,
+        createdBy: { select: { name: true, avatarUrl: true } },
+      },
+    }),
+    file.lastModifiedById
+      ? prisma.user.findUnique({
+          where: { id: file.lastModifiedById },
+          select: { name: true, avatarUrl: true },
+        })
+      : prisma.user.findUnique({
+          where: { id: file.ownerId },
+          select: { name: true, avatarUrl: true },
+        }),
+  ])
+
+  res.json({
+    current: {
+      size: Number(file.size),
+      mimeType: file.mimeType,
+      updatedAt: file.updatedAt.toISOString(),
+      uploadedBy: currentAuthor
+        ? { name: currentAuthor.name, avatarUrl: currentAuthor.avatarUrl ?? null }
+        : null,
+    },
+    versions: versions.map((v) => ({
+      id: v.id,
+      size: Number(v.size),
+      mimeType: v.mimeType,
+      createdAt: v.createdAt.toISOString(),
+      uploadedBy: v.createdBy
+        ? { name: v.createdBy.name, avatarUrl: v.createdBy.avatarUrl ?? null }
+        : null,
+    })),
+  })
+})
+
+// Download one archived version's bytes (not the live content).
+filesRouter.get("/:id/versions/:versionId/download", async (req, res) => {
+  const user = currentUser(req)
+  const file = await getFileWithAccess(user.id, req.params.id, "read", { role: user.role })
+  if (!file) return res.status(404).json({ error: "not_found" })
+  const version = await prisma.fileVersion.findFirst({
+    where: { id: req.params.versionId, fileId: file.id },
+  })
+  if (!version) return res.status(404).json({ error: "not_found" })
+  streamStoredFile(
+    req,
+    res,
+    { name: file.name, mimeType: version.mimeType, storageKey: version.storageKey },
+    { disposition: "attachment" }
+  )
+})
+
+// Restore an archived version: archives the current content (same as a
+// replace upload would) and copies the old version's bytes back onto File.
+// The restored-from version stays in history — restoring doesn't delete it.
+filesRouter.post("/:id/versions/:versionId/restore", async (req, res) => {
+  const user = currentUser(req)
+  const file = await getFileWithAccess(user.id, req.params.id, "write")
+  if (!file) return res.status(403).json({ error: "forbidden" })
+  const version = await prisma.fileVersion.findFirst({
+    where: { id: req.params.versionId, fileId: file.id },
+  })
+  if (!version) return res.status(404).json({ error: "not_found" })
+
+  let overflow: { id: string; storageKey: string }[] = []
+  const updated = await prisma.$transaction(async (tx) => {
+    await tx.fileVersion.create({
+      data: {
+        fileId: file.id,
+        storageKey: file.storageKey,
+        size: file.size,
+        mimeType: file.mimeType,
+        createdById: file.lastModifiedById ?? file.ownerId,
+      },
+    })
+    overflow = await tx.fileVersion.findMany({
+      where: { fileId: file.id },
+      orderBy: { createdAt: "desc" },
+      skip: MAX_VERSIONS_PER_FILE,
+      select: { id: true, storageKey: true },
+    })
+    if (overflow.length) {
+      await tx.fileVersion.deleteMany({ where: { id: { in: overflow.map((o) => o.id) } } })
+    }
+    return tx.file.update({
+      where: { id: file.id },
+      data: {
+        storageKey: version.storageKey,
+        size: version.size,
+        mimeType: version.mimeType,
+        lastModifiedById: user.id,
+        thumbnailKey: null,
+        thumbnailState: null,
+        storyboardKey: null,
+        storyboardState: null,
+        storyboardMeta: Prisma.JsonNull,
+      },
+    })
+  })
+  for (const o of overflow) {
+    // The version being restored FROM might itself get pushed out by the cap
+    // in a pathological (versions-per-file <= cap) edge case — skip its blob.
+    if (o.id === version.id) continue
+    try {
+      removeFile(o.storageKey)
+    } catch {}
+  }
+
+  queueThumbnail(updated.id)
+  res.json({ file: { ...updated, size: Number(updated.size) } })
 })
 
 filesRouter.patch("/:id", async (req, res) => {

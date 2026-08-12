@@ -39,6 +39,8 @@ model User {
   fileAccesses  FileAccess[]
   loginEvents   LoginEvent[]
   notifications Notification[]
+  modifiedFiles File[]        @relation("FileLastModifiedBy")
+  fileVersions  FileVersion[]
 }
 
 model Notification {
@@ -169,13 +171,40 @@ model File {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
+  // Who uploaded the currently-live content (via "upload new version"). Null
+  // means the content is still the original upload, so the author is just
+  // `owner`. Kept separate from `owner`, which never changes on a version
+  // swap, so past FileVersion rows can be attributed to whoever actually
+  // authored that content at archive time — see files.ts's replace handler.
+  lastModifiedById String?
+  lastModifiedBy   User?    @relation("FileLastModifiedBy", fields: [lastModifiedById], references: [id], onDelete: SetNull)
+
   shares     Share[]
   accesses   FileAccess[]
   shortcuts  FileShortcut[]
+  versions   FileVersion[]
 
   @@index([ownerId, folderId])
   @@index([spaceId, folderId])
   @@index([deletedAt])
+}
+
+// A superseded content blob for a File, kept so a previous "upload new
+// version" can be downloaded or restored. Only past content lives here — the
+// live content stays on File.storageKey/size/mimeType so every other read
+// path (streaming, thumbnails, zip) is untouched.
+model FileVersion {
+  id          String   @id @default(cuid())
+  fileId      String
+  file        File     @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  storageKey  String
+  size        BigInt
+  mimeType    String
+  createdById String?
+  createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  @@index([fileId, createdAt])
 }
 
 model Space {

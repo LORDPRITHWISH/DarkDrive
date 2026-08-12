@@ -56,14 +56,14 @@ function makeFolderResolver(rootFolderId: string) {
 }
 
 async function uploadFileChunked(
-  folderId: string,
   file: File,
-  onProgress: (loaded: number) => void
+  onProgress: (loaded: number) => void,
+  target: { folderId: string } | { replaceFileId: string }
 ) {
   const init = await apiJson<{ uploadId: string; chunkSize: number }>(
     "/api/files/upload/init",
     "POST",
-    { folderId, name: file.name, size: file.size, mimeType: file.type || undefined }
+    { ...target, name: file.name, size: file.size, mimeType: file.type || undefined }
   )
   const chunkSize = init.chunkSize || DEFAULT_CHUNK_SIZE
   const total = Math.max(1, Math.ceil(file.size / chunkSize))
@@ -244,6 +244,7 @@ type DriveState = {
     files: FileList | File[] | UploadEntry[],
     explicitTargetId?: string
   ) => Promise<void>
+  replaceFile: (fileId: string, file: File) => Promise<void>
   importUrl: (url: string, name?: string, explicitTargetId?: string) => Promise<void>
 
   loadSpaces: () => Promise<void>
@@ -670,7 +671,7 @@ export const useDrive = create<DriveState>((set, get) => ({
         const dirIdx = relativePath.lastIndexOf("/")
         const dirPath = dirIdx === -1 ? "" : relativePath.slice(0, dirIdx)
         const folderId = await resolveFolder(dirPath)
-        await uploadFileChunked(folderId, file, (loaded) => {
+        await uploadFileChunked(file, (loaded) => {
           const now = performance.now()
           samples.push({ t: now, loaded })
           while (samples.length > 2 && now - samples[0].t > 2000) samples.shift()
@@ -684,7 +685,7 @@ export const useDrive = create<DriveState>((set, get) => ({
               u.id === uid ? { ...u, loaded, progress, speed } : u
             ),
           })
-        })
+        }, { folderId })
         set({
           uploads: get().uploads.map((u) =>
             u.id === uid
@@ -700,6 +701,58 @@ export const useDrive = create<DriveState>((set, get) => ({
         })
       }
       // clear this item 5s after it finishes, independent of the rest of the queue
+      setTimeout(() => set({ uploads: get().uploads.filter((u) => u.id !== uid) }), 5000)
+    }
+    await get().refresh()
+    void useMe.getState().loadQuota()
+  },
+
+  // Uploads `file`'s bytes as a new version of an existing file, archiving
+  // the current content into its version history instead of creating a
+  // sibling file. Same chunked transport and toaster entry as a normal
+  // upload, just routed through replaceFileId.
+  replaceFile: async (fileId, file) => {
+    const uid = crypto.randomUUID()
+    set({
+      uploads: [
+        ...get().uploads,
+        { id: uid, name: file.name, size: file.size, loaded: 0, progress: 0, speed: 0, done: false },
+      ],
+    })
+    const samples: { t: number; loaded: number }[] = [{ t: performance.now(), loaded: 0 }]
+    try {
+      await uploadFileChunked(
+        file,
+        (loaded) => {
+          const now = performance.now()
+          samples.push({ t: now, loaded })
+          while (samples.length > 2 && now - samples[0].t > 2000) samples.shift()
+          const first = samples[0]
+          const last = samples[samples.length - 1]
+          const dt = (last.t - first.t) / 1000
+          const speed = dt > 0 ? (last.loaded - first.loaded) / dt : 0
+          const progress = file.size > 0 ? (loaded / file.size) * 100 : 100
+          set({
+            uploads: get().uploads.map((u) =>
+              u.id === uid ? { ...u, loaded, progress, speed } : u
+            ),
+          })
+        },
+        { replaceFileId: fileId }
+      )
+      set({
+        uploads: get().uploads.map((u) =>
+          u.id === uid ? { ...u, loaded: file.size, progress: 100, speed: 0, done: true } : u
+        ),
+      })
+    } catch (e: any) {
+      set({
+        uploads: get().uploads.map((u) =>
+          u.id === uid ? { ...u, error: e.message, speed: 0, done: true } : u
+        ),
+      })
+      throw e
+    } finally {
       setTimeout(() => set({ uploads: get().uploads.filter((u) => u.id !== uid) }), 5000)
     }
     await get().refresh()

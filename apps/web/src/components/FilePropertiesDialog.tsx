@@ -1,12 +1,14 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
+  ClockCounterClockwiseIcon,
   DownloadSimpleIcon,
   EyeIcon,
   FileIcon,
+  UploadSimpleIcon,
   XIcon,
 } from "@phosphor-icons/react"
 import type { FileItem } from "@/lib/types"
-import { apiGet } from "@/lib/api"
+import { apiGet, apiJson } from "@/lib/api"
 import { apiUrl } from "@/lib/config"
 import { formatBytes, formatDate, relativeTime } from "@/lib/format"
 import { iconFor } from "@/lib/fileIcon"
@@ -21,6 +23,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@workspace/ui/components/tabs"
 import { Avatar, AvatarImage, AvatarFallback } from "@workspace/ui/components/avatar"
 import { Badge } from "@workspace/ui/components/badge"
+import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
 import { HoverName } from "@/components/HoverName"
 
@@ -35,7 +38,20 @@ type ActivityData = {
   recent: ActivityEvent[]
 }
 
-type Tab = "info" | "activity"
+type VersionAuthor = { name: string; avatarUrl: string | null } | null
+
+type VersionsData = {
+  current: { size: number; mimeType: string; updatedAt: string; uploadedBy: VersionAuthor }
+  versions: {
+    id: string
+    size: number
+    mimeType: string
+    createdAt: string
+    uploadedBy: VersionAuthor
+  }[]
+}
+
+type Tab = "info" | "activity" | "versions"
 
 export function FilePropertiesDialog({
   file,
@@ -48,10 +64,17 @@ export function FilePropertiesDialog({
   const [activity, setActivity] = useState<ActivityData | null>(null)
   const [activityLoading, setActivityLoading] = useState(false)
   const [activityErr, setActivityErr] = useState<string | null>(null)
+  const [versions, setVersions] = useState<VersionsData | null>(null)
+  const [versionsLoading, setVersionsLoading] = useState(false)
+  const [versionsErr, setVersionsErr] = useState<string | null>(null)
+  const [uploadingVersion, setUploadingVersion] = useState(false)
+  const [restoringId, setRestoringId] = useState<string | null>(null)
+  const versionFileInput = useRef<HTMLInputElement>(null)
   const [thumbFailed, setThumbFailed] = useState(false)
   const [tags, setTags] = useState<string[]>([])
   const [tagInput, setTagInput] = useState("")
   const setFileTags = useDrive((s) => s.setFileTags)
+  const replaceFile = useDrive((s) => s.replaceFile)
 
   // Reset state when file changes
   useEffect(() => {
@@ -60,6 +83,9 @@ export function FilePropertiesDialog({
     setActivity(null)
     setActivityErr(null)
     setActivityLoading(false)
+    setVersions(null)
+    setVersionsErr(null)
+    setVersionsLoading(false)
     setThumbFailed(false)
     setTags(file.tags ?? [])
     setTagInput("")
@@ -86,6 +112,49 @@ export function FilePropertiesDialog({
       .catch((e) => setActivityErr(e instanceof Error ? e.message : "failed"))
       .finally(() => setActivityLoading(false))
   }, [file, tab, activity, activityLoading])
+
+  // Load version history when the Versions tab is first opened
+  useEffect(() => {
+    if (!file || tab !== "versions" || versions || versionsLoading) return
+    setVersionsLoading(true)
+    setVersionsErr(null)
+    apiGet<VersionsData>(`/api/files/${file.id}/versions`)
+      .then((d) => setVersions(d))
+      .catch((e) => setVersionsErr(e instanceof Error ? e.message : "failed"))
+      .finally(() => setVersionsLoading(false))
+  }, [file, tab, versions, versionsLoading])
+
+  async function reloadVersions() {
+    if (!file) return
+    try {
+      setVersions(await apiGet<VersionsData>(`/api/files/${file.id}/versions`))
+    } catch {}
+  }
+
+  async function pickNewVersion(f: File) {
+    if (!file) return
+    setUploadingVersion(true)
+    try {
+      await replaceFile(file.id, f)
+      await reloadVersions()
+    } catch {
+      // Failure is already surfaced via the upload toaster.
+    } finally {
+      setUploadingVersion(false)
+    }
+  }
+
+  async function restoreVersion(versionId: string) {
+    if (!file) return
+    setRestoringId(versionId)
+    try {
+      await apiJson(`/api/files/${file.id}/versions/${versionId}/restore`, "POST")
+      await reloadVersions()
+      void useDrive.getState().refresh()
+    } finally {
+      setRestoringId(null)
+    }
+  }
 
   if (!file) return null
 
@@ -121,6 +190,9 @@ export function FilePropertiesDialog({
             </TabsTrigger>
             <TabsTrigger value="activity" className="capitalize">
               Activity
+            </TabsTrigger>
+            <TabsTrigger value="versions" className="capitalize">
+              Versions
             </TabsTrigger>
           </TabsList>
 
@@ -260,6 +332,70 @@ export function FilePropertiesDialog({
                 </div>
               )}
             </TabsContent>
+
+            <TabsContent value="versions" className="p-5">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div className="text-muted-foreground text-xs font-medium uppercase tracking-wider">
+                  Version history
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={uploadingVersion}
+                  onClick={() => versionFileInput.current?.click()}
+                >
+                  <UploadSimpleIcon size={13} weight="bold" />
+                  {uploadingVersion ? "Uploading…" : "Upload new version"}
+                </Button>
+                <input
+                  ref={versionFileInput}
+                  type="file"
+                  hidden
+                  onChange={(e) => {
+                    const f = e.target.files?.[0]
+                    e.target.value = ""
+                    if (f) void pickNewVersion(f)
+                  }}
+                />
+              </div>
+
+              {versionsLoading && (
+                <div className="text-muted-foreground py-10 text-center text-sm">
+                  Loading versions…
+                </div>
+              )}
+              {versionsErr && (
+                <div className="text-destructive py-10 text-center text-sm">
+                  Failed to load: {versionsErr}
+                </div>
+              )}
+              {versions && (
+                <div className="space-y-0.5">
+                  <VersionRow
+                    current
+                    size={versions.current.size}
+                    at={versions.current.updatedAt}
+                    uploadedBy={versions.current.uploadedBy}
+                  />
+                  {versions.versions.map((v) => (
+                    <VersionRow
+                      key={v.id}
+                      size={v.size}
+                      at={v.createdAt}
+                      uploadedBy={v.uploadedBy}
+                      downloadHref={apiUrl(`/api/files/${file.id}/versions/${v.id}/download`)}
+                      onRestore={() => restoreVersion(v.id)}
+                      restoring={restoringId === v.id}
+                    />
+                  ))}
+                  {versions.versions.length === 0 && (
+                    <div className="text-muted-foreground py-6 text-center text-sm">
+                      No earlier versions — upload a new version to start keeping history.
+                    </div>
+                  )}
+                </div>
+              )}
+            </TabsContent>
           </div>
         </Tabs>
       </DialogContent>
@@ -351,6 +487,72 @@ function EventRow({ event }: { event: ActivityEvent }) {
           {relativeTime(event.accessedAt)}
         </span>
       </div>
+    </div>
+  )
+}
+
+function VersionRow({
+  current,
+  size,
+  at,
+  uploadedBy,
+  downloadHref,
+  onRestore,
+  restoring,
+}: {
+  current?: boolean
+  size: number
+  at: string
+  uploadedBy: VersionAuthor
+  downloadHref?: string
+  onRestore?: () => void
+  restoring?: boolean
+}) {
+  const name = uploadedBy?.name ?? "Unknown"
+  return (
+    <div className="hover:bg-accent/40 flex items-center gap-3 rounded-lg px-2 py-1.5 transition-colors">
+      <Avatar className="h-7 w-7 border">
+        {uploadedBy?.avatarUrl && <AvatarImage src={uploadedBy.avatarUrl} alt={name} />}
+        <AvatarFallback className="text-xs font-semibold uppercase">
+          {name.charAt(0)}
+        </AvatarFallback>
+      </Avatar>
+
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5">
+          <span className="truncate text-sm font-medium">{name}</span>
+          {current && (
+            <Badge variant="secondary" className="h-4 px-1.5 text-[10px]">
+              Current
+            </Badge>
+          )}
+        </div>
+        <div className="text-muted-foreground text-xs">
+          {formatBytes(size)} · {relativeTime(at)}
+        </div>
+      </div>
+
+      {!current && (
+        <div className="flex shrink-0 items-center gap-1">
+          {downloadHref && (
+            <a
+              href={downloadHref}
+              title="Download this version"
+              className="hover:bg-accent text-muted-foreground rounded-md p-1.5"
+            >
+              <DownloadSimpleIcon size={14} weight="bold" />
+            </a>
+          )}
+          <button
+            onClick={onRestore}
+            disabled={restoring}
+            title="Restore this version"
+            className="hover:bg-accent text-muted-foreground rounded-md p-1.5 disabled:opacity-50"
+          >
+            <ClockCounterClockwiseIcon size={14} weight="bold" />
+          </button>
+        </div>
+      )}
     </div>
   )
 }

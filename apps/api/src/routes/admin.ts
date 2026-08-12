@@ -1028,11 +1028,15 @@ adminRouter.post("/recycle-bin/purge", async (req, res) => {
   const { type, id } = RecycleItemSchema.parse(req.body)
 
   if (type === "file") {
-    const file = await prisma.file.findUnique({ where: { id } })
+    const file = await prisma.file.findUnique({
+      where: { id },
+      include: { versions: { select: { storageKey: true } } },
+    })
     if (!file || !file.deletedAt) return res.status(404).json({ error: "not_found" })
-    await prisma.file.delete({ where: { id } })
+    await prisma.file.delete({ where: { id } }) // cascades to versions
     try { removeFile(file.storageKey) } catch {}
     if (file.thumbnailKey) { try { removeFile(file.thumbnailKey) } catch {} }
+    for (const v of file.versions) { try { removeFile(v.storageKey) } catch {} }
     removeAudioVariants(file.id)
     return res.json({ ok: true })
   }
@@ -1043,7 +1047,12 @@ adminRouter.post("/recycle-bin/purge", async (req, res) => {
   const [files, folders] = await Promise.all([
     prisma.file.findMany({
       where: { folderId: { in: ids } },
-      select: { id: true, storageKey: true, thumbnailKey: true },
+      select: {
+        id: true,
+        storageKey: true,
+        thumbnailKey: true,
+        versions: { select: { storageKey: true } },
+      },
     }),
     prisma.folder.findMany({
       where: { id: { in: ids } },
@@ -1054,6 +1063,7 @@ adminRouter.post("/recycle-bin/purge", async (req, res) => {
   for (const f of files) {
     try { removeFile(f.storageKey) } catch {}
     if (f.thumbnailKey) { try { removeFile(f.thumbnailKey) } catch {} }
+    for (const v of f.versions) { try { removeFile(v.storageKey) } catch {} }
     removeAudioVariants(f.id)
   }
   for (const f of folders) {
@@ -1067,7 +1077,12 @@ adminRouter.post("/recycle-bin/purge-all", async (_req, res) => {
   const [files, folders] = await Promise.all([
     prisma.file.findMany({
       where: { deletedAt: { not: null } },
-      select: { id: true, storageKey: true, thumbnailKey: true },
+      select: {
+        id: true,
+        storageKey: true,
+        thumbnailKey: true,
+        versions: { select: { storageKey: true } },
+      },
     }),
     prisma.folder.findMany({
       where: { deletedAt: { not: null } },
@@ -1081,6 +1096,7 @@ adminRouter.post("/recycle-bin/purge-all", async (_req, res) => {
   for (const f of files) {
     try { removeFile(f.storageKey) } catch {}
     if (f.thumbnailKey) { try { removeFile(f.thumbnailKey) } catch {} }
+    for (const v of f.versions) { try { removeFile(v.storageKey) } catch {} }
     removeAudioVariants(f.id)
   }
   for (const f of folders) {

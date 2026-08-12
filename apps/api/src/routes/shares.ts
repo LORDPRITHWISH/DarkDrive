@@ -7,6 +7,7 @@ import { currentUser, requireAuth } from "../middleware/auth.js"
 import { getFileWithAccess, getFolderWithAccess } from "../lib/access.js"
 import { streamStoredFile } from "../lib/stream.js"
 import { env } from "../env.js"
+import { logActivity } from "../lib/activity.js"
 
 export const sharesRouter = Router()
 
@@ -42,6 +43,13 @@ sharesRouter.post("/", requireAuth, async (req, res) => {
       passwordHash: body.password ? await bcrypt.hash(body.password, 10) : null,
     },
   })
+  await logActivity({
+    userId: user.id,
+    action: "share",
+    fileId: share.fileId ?? undefined,
+    folderId: share.folderId ?? undefined,
+    detail: { permission: share.permission },
+  })
   res.status(201).json({ token: share.token, id: share.id })
 })
 
@@ -64,6 +72,12 @@ sharesRouter.delete("/:id", requireAuth, async (req, res) => {
   const s = await prisma.share.findUnique({ where: { id: req.params.id } })
   if (!s || s.createdById !== user.id) return res.status(403).json({ error: "forbidden" })
   await prisma.share.delete({ where: { id: s.id } })
+  await logActivity({
+    userId: user.id,
+    action: "unshare",
+    fileId: s.fileId ?? undefined,
+    folderId: s.folderId ?? undefined,
+  })
   res.json({ ok: true })
 })
 

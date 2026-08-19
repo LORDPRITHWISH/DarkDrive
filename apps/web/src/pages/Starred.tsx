@@ -14,6 +14,7 @@ import { Sidebar } from "@/components/Sidebar"
 import { SidebarToggle } from "@/components/SidebarToggle"
 import { HeaderActions } from "@/components/HeaderActions"
 import { FilePreview } from "@/components/FilePreview"
+import { FileThumb } from "@/components/file-grid/FileThumb"
 import { Button } from "@workspace/ui/components/button"
 import {
   Table,
@@ -337,7 +338,7 @@ function FileTile({
         className="text-yellow-500 absolute top-2 right-2 z-10"
       />
       <div className="bg-muted grid aspect-4/3 place-items-center overflow-hidden rounded-lg">
-        {iconFor(file.mimeType, 64, file.name)}
+        <FileThumb file={file} iconSize={64} />
       </div>
       <div className="p-2">
         <div className="truncate text-sm font-medium" title={file.name}>

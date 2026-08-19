@@ -7,8 +7,8 @@ import { Sidebar } from "@/components/Sidebar"
 import { SidebarToggle } from "@/components/SidebarToggle"
 import { HeaderActions } from "@/components/HeaderActions"
 import { FilePreview } from "@/components/FilePreview"
+import { FileThumb } from "@/components/file-grid/FileThumb"
 import { formatBytes, formatDate } from "@/lib/format"
-import { apiUrl } from "@/lib/config"
 import { iconFor } from "@/lib/fileIcon"
 import { Table, TableBody, TableCell, TableRow } from "@workspace/ui/components/table"
 import type { FileItem } from "@/lib/types"
@@ -111,42 +111,30 @@ export function HomePage() {
                   Recently added
                 </div>
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3">
-                  {recentlyAdded.map((f) => {
-                    const isImg = f.mimeType.startsWith("image/")
-                    return (
-                      <button
-                        key={f.id}
-                        onClick={() => openFile(f)}
-                        onContextMenu={(e) => openMenu(e, "file", f)}
-                        className="bg-card hover:border-primary/60 group relative overflow-hidden rounded-lg border text-left transition-colors"
-                      >
-                        <span className="bg-primary text-primary-foreground absolute top-2 left-2 z-10 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider">
-                          New
-                        </span>
-                        <div className="bg-muted grid aspect-4/3 place-items-center overflow-hidden">
-                          {isImg ? (
-                            <img
-                              src={apiUrl(`/api/files/${f.id}/download?inline=1`)}
-                              alt=""
-                              className="h-full w-full object-cover"
-                              loading="lazy"
-                            />
-                          ) : (
-                            iconFor(f.mimeType, 56, f.name)
-                          )}
+                  {recentlyAdded.map((f) => (
+                    <button
+                      key={f.id}
+                      onClick={() => openFile(f)}
+                      onContextMenu={(e) => openMenu(e, "file", f)}
+                      className="bg-card hover:border-primary/60 group relative overflow-hidden rounded-lg border text-left transition-colors"
+                    >
+                      <span className="bg-primary text-primary-foreground absolute top-2 left-2 z-10 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider">
+                        New
+                      </span>
+                      <div className="bg-muted grid aspect-4/3 place-items-center overflow-hidden">
+                        <FileThumb file={f} iconSize={56} />
+                      </div>
+                      <div className="p-2">
+                        <div className="truncate text-sm font-medium" title={f.name}>
+                          {f.name}
                         </div>
-                        <div className="p-2">
-                          <div className="truncate text-sm font-medium" title={f.name}>
-                            {f.name}
-                          </div>
-                          <div className="text-muted-foreground flex items-center justify-between text-xs">
-                            <span>{formatBytes(f.size)}</span>
-                            <span>{formatDate(f.createdAt)}</span>
-                          </div>
+                        <div className="text-muted-foreground flex items-center justify-between text-xs">
+                          <span>{formatBytes(f.size)}</span>
+                          <span>{formatDate(f.createdAt)}</span>
                         </div>
-                      </button>
-                    )
-                  })}
+                      </div>
+                    </button>
+                  ))}
                 </div>
               </section>
             )}
@@ -193,38 +181,26 @@ export function HomePage() {
                   Suggested files
                 </div>
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3">
-                  {suggestions.map((f) => {
-                    const isImg = f.mimeType.startsWith("image/")
-                    return (
-                      <button
-                        key={f.id}
-                        onClick={() => setPreview(f)}
-                        onContextMenu={(e) => openMenu(e, "file", f)}
-                        className="bg-card hover:border-primary/60 overflow-hidden rounded-lg border text-left transition-colors"
-                      >
-                        <div className="bg-muted grid aspect-4/3 place-items-center overflow-hidden">
-                          {isImg ? (
-                            <img
-                              src={apiUrl(`/api/files/${f.id}/download?inline=1`)}
-                              alt=""
-                              className="h-full w-full object-cover"
-                              loading="lazy"
-                            />
-                          ) : (
-                            iconFor(f.mimeType, 56, f.name)
-                          )}
+                  {suggestions.map((f) => (
+                    <button
+                      key={f.id}
+                      onClick={() => setPreview(f)}
+                      onContextMenu={(e) => openMenu(e, "file", f)}
+                      className="bg-card hover:border-primary/60 overflow-hidden rounded-lg border text-left transition-colors"
+                    >
+                      <div className="bg-muted grid aspect-4/3 place-items-center overflow-hidden">
+                        <FileThumb file={f} iconSize={56} />
+                      </div>
+                      <div className="p-2">
+                        <div className="truncate text-sm font-medium" title={f.name}>
+                          {f.name}
                         </div>
-                        <div className="p-2">
-                          <div className="truncate text-sm font-medium" title={f.name}>
-                            {f.name}
-                          </div>
-                          <div className="text-muted-foreground text-xs">
-                            {formatBytes(f.size)}
-                          </div>
+                        <div className="text-muted-foreground text-xs">
+                          {formatBytes(f.size)}
                         </div>
-                      </button>
-                    )
-                  })}
+                      </div>
+                    </button>
+                  ))}
                 </div>
               </section>
             )}

@@ -25,6 +25,23 @@ Self-hosted Drive clone — folders, files, sharing, collaborative spaces.
 pnpm install
 ```
 
+Thumbnails shell out to system binaries — optional, but without them every
+preview falls back to a file-type icon:
+
+```bash
+sudo apt install imagemagick ffmpeg poppler-utils libreoffice
+```
+
+| Tool | Package | Covers |
+|---|---|---|
+| `convert` | imagemagick | images |
+| `ffmpeg` + `ffprobe` | ffmpeg | video posters, seek-bar storyboards |
+| `pdftoppm` | poppler-utils | PDFs |
+| `libreoffice` | libreoffice | doc/xls/ppt/odf (converted to PDF first) |
+
+Admin → Thumbnails lists which are missing. After installing, hit **Generate
+missing thumbnails** there — the backfill retries previously-failed files.
+
 ### 2. Backend env
 
 ```bash

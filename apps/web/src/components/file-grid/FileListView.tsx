@@ -31,6 +31,10 @@ type Props = {
   onMenu: (e: React.MouseEvent, type: ItemType, id: string, name: string) => void
   onDragStart: (e: React.DragEvent, type: ItemType, id: string) => void
   onMoveDrop: (targetFolderId: string, dragged: DragItem[]) => void
+  // Current user id, passed only when browsing a space — drives the "You"
+  // badge on rows the viewer owns. Undefined in personal Drive, where
+  // everything is trivially the viewer's own.
+  meId?: string
 }
 
 export function FileListView({
@@ -43,6 +47,7 @@ export function FileListView({
   onMenu,
   onDragStart,
   onMoveDrop,
+  meId,
 }: Props) {
   const [dropId, setDropId] = useState<string | null>(null)
   return (
@@ -103,6 +108,11 @@ export function FileListView({
                 {f.isStarred && (
                   <StarIcon size={14} weight="fill" className="text-yellow-500" />
                 )}
+                {meId && f.ownerId === meId && (
+                  <span className="bg-primary/15 text-primary shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold">
+                    You
+                  </span>
+                )}
               </div>
             </TableCell>
             <TableCell className="p-0 py-2">{formatDate(f.updatedAt)}</TableCell>
@@ -146,6 +156,11 @@ export function FileListView({
                     className="text-muted-foreground"
                     aria-label="Shortcut"
                   />
+                )}
+                {meId && f.ownerId === meId && (
+                  <span className="bg-primary/15 text-primary shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold">
+                    You
+                  </span>
                 )}
                 {f.tags.length > 0 && (
                   <span

@@ -6,6 +6,7 @@ import {
   FileZipIcon,
   InfoIcon,
   LinkBreakIcon,
+  MapPinIcon,
   PencilSimpleIcon,
   ShareNetworkIcon,
   StarIcon,
@@ -26,30 +27,38 @@ export type MenuPos = {
   name: string
   shortcutId?: string
   hasThumbnail?: boolean
+  // Only known outside the drive grid (Recent/Uploads/Search/Starred pass the
+  // record they rendered) — undefined falls back to a "Toggle star" label.
+  isStarred?: boolean
 }
 
+// Every action is optional: an entry renders only where its host passes a
+// handler, so the drive grid gets the full menu while the flat listing pages
+// get the subset that makes sense without a current folder.
 type Props = {
   menu: MenuPos
   onClose: () => void
-  onOpen: () => void
-  onProperties: () => void
-  onExtract: () => void
-  onDownload: () => void
-  onRename: () => void
-  onMove: () => void
-  onFolderProperties: () => void
-  onShare: () => void
-  onToggleStar: () => void
-  onToggleHidden: () => void
-  onDelete: () => void
-  onRemoveShortcut: () => void
-  onAddToSpace: () => void
+  onOpen?: () => void
+  onOpenLocation?: () => void
+  onProperties?: () => void
+  onExtract?: () => void
+  onDownload?: () => void
+  onRename?: () => void
+  onMove?: () => void
+  onFolderProperties?: () => void
+  onShare?: () => void
+  onToggleStar?: () => void
+  onToggleHidden?: () => void
+  onDelete?: () => void
+  onRemoveShortcut?: () => void
+  onAddToSpace?: () => void
 }
 
 export function FileContextMenu({
   menu,
   onClose,
   onOpen,
+  onOpenLocation,
   onProperties,
   onExtract,
   onDownload,
@@ -81,15 +90,19 @@ export function FileContextMenu({
       >
         {menu.type === "file" && (
           <>
-            <DropdownMenuItem onClick={onOpen}>
-              <OpenEyeIcon size={16} />
-              Open
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={onProperties}>
-              <InfoIcon size={16} />
-              Properties
-            </DropdownMenuItem>
-            {isZip && (
+            {onOpen && (
+              <DropdownMenuItem onClick={onOpen}>
+                <OpenEyeIcon size={16} />
+                Open
+              </DropdownMenuItem>
+            )}
+            {onProperties && (
+              <DropdownMenuItem onClick={onProperties}>
+                <InfoIcon size={16} />
+                Properties
+              </DropdownMenuItem>
+            )}
+            {isZip && onExtract && (
               <DropdownMenuItem onClick={onExtract}>
                 <FileZipIcon size={16} />
                 Extract here
@@ -97,57 +110,81 @@ export function FileContextMenu({
             )}
           </>
         )}
-        {menu.type === "folder" && !isShortcut && (
+        {menu.type === "folder" && !isShortcut && onFolderProperties && (
           <DropdownMenuItem onClick={onFolderProperties}>
             <InfoIcon size={16} />
             Properties…
           </DropdownMenuItem>
         )}
-        <DropdownMenuItem onClick={onDownload}>
-          <DownloadIcon size={16} />
-          Download
-        </DropdownMenuItem>
-        {isShortcut && (
+        {onOpenLocation && (
+          <DropdownMenuItem onClick={onOpenLocation}>
+            <MapPinIcon size={16} />
+            Open location
+          </DropdownMenuItem>
+        )}
+        {onDownload && (
+          <DropdownMenuItem onClick={onDownload}>
+            <DownloadIcon size={16} />
+            Download
+          </DropdownMenuItem>
+        )}
+        {isShortcut && onRemoveShortcut && (
           <DropdownMenuItem onClick={onRemoveShortcut}>
             <LinkBreakIcon size={16} />
             Remove shortcut
           </DropdownMenuItem>
         )}
-        {!isShortcut && (
+        {!isShortcut && onRename && (
           <DropdownMenuItem onClick={onRename}>
             <PencilSimpleIcon size={16} />
             Rename
           </DropdownMenuItem>
         )}
-        <DropdownMenuItem onClick={onMove}>
-          <ArrowsOutCardinalIcon size={16} />
-          Move to…
-        </DropdownMenuItem>
+        {onMove && (
+          <DropdownMenuItem onClick={onMove}>
+            <ArrowsOutCardinalIcon size={16} />
+            Move to…
+          </DropdownMenuItem>
+        )}
         {!isShortcut && (
           <>
-            <DropdownMenuItem onClick={onAddToSpace}>
-              <UsersThreeIcon size={16} />
-              Add to space…
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={onShare}>
-              <ShareNetworkIcon size={16} />
-              Share…
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={onToggleStar}>
-              <StarIcon size={16} />
-              Toggle star
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={onToggleHidden}>
-              <EyeSlashIcon size={16} />
-              Toggle hidden
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={onDelete}
-              className="text-destructive hover:text-destructive data-highlighted:text-destructive"
-            >
-              <TrashIcon size={16} weight="fill" />
-              {menu.type === "folder" ? "Delete folder" : "Delete file"}
-            </DropdownMenuItem>
+            {onAddToSpace && (
+              <DropdownMenuItem onClick={onAddToSpace}>
+                <UsersThreeIcon size={16} />
+                Add to space…
+              </DropdownMenuItem>
+            )}
+            {onShare && (
+              <DropdownMenuItem onClick={onShare}>
+                <ShareNetworkIcon size={16} />
+                Share…
+              </DropdownMenuItem>
+            )}
+            {onToggleStar && (
+              <DropdownMenuItem onClick={onToggleStar}>
+                <StarIcon size={16} weight={menu.isStarred ? "fill" : "regular"} />
+                {menu.isStarred === undefined
+                  ? "Toggle star"
+                  : menu.isStarred
+                    ? "Remove star"
+                    : "Add star"}
+              </DropdownMenuItem>
+            )}
+            {onToggleHidden && (
+              <DropdownMenuItem onClick={onToggleHidden}>
+                <EyeSlashIcon size={16} />
+                Toggle hidden
+              </DropdownMenuItem>
+            )}
+            {onDelete && (
+              <DropdownMenuItem
+                onClick={onDelete}
+                className="text-destructive hover:text-destructive data-highlighted:text-destructive"
+              >
+                <TrashIcon size={16} weight="fill" />
+                {menu.type === "folder" ? "Delete folder" : "Delete file"}
+              </DropdownMenuItem>
+            )}
           </>
         )}
       </DropdownMenuContent>

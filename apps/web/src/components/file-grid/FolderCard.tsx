@@ -35,6 +35,7 @@ export function FolderCard({
   onRenameChange,
   onRenameCommit,
   onRenameCancel,
+  mine,
 }: {
   folder: Folder
   selected: boolean
@@ -49,6 +50,8 @@ export function FolderCard({
   onRenameChange: (v: string) => void
   onRenameCommit: () => void
   onRenameCancel: () => void
+  // See FileCard — only set inside a space, true when the viewer owns it.
+  mine?: boolean
 }) {
   const [dragOver, setDragOver] = useState(false)
   const [dragging, setDragging] = useState(false)
@@ -93,6 +96,14 @@ export function FolderCard({
         starred={folder.isStarred}
         className="absolute top-2 right-2 z-10"
       />
+      {mine && (
+        <span
+          className="bg-primary/15 text-primary absolute top-2 left-2 z-10 rounded-full px-1.5 py-0.5 text-[10px] font-semibold backdrop-blur"
+          title="Owned by you"
+        >
+          You
+        </span>
+      )}
       <div className="relative grid aspect-4/3 place-items-center overflow-hidden rounded-lg">
         {folder.thumbnailKey ? (
           <>

@@ -28,6 +28,7 @@ import { formatBytes, formatDate } from "@/lib/format"
 import { iconFor } from "@/lib/fileIcon"
 import type { FileItem, Folder } from "@/lib/types"
 import { HoverName } from "@/components/HoverName"
+import { useItemMenu } from "@/components/ItemMenu"
 
 type TypeFilter = "all" | "image" | "video" | "doc" | "other"
 
@@ -59,6 +60,7 @@ export function StarredPage() {
   const [filter, setFilter] = useState<TypeFilter>("all")
   const [preview, setPreview] = useState<FileItem | null>(null)
   const nav = useNavigate()
+  const { openMenu, itemMenu } = useItemMenu({ onPreview: setPreview, onChanged: reload })
 
   function reload() {
     setLoading(true)
@@ -157,6 +159,7 @@ export function StarredPage() {
                         key={f.id}
                         folder={f}
                         onOpen={() => nav(`/drive/${f.id}`)}
+                        onMenu={(e) => openMenu(e, "folder", f)}
                       />
                     ))}
                   </div>
@@ -173,6 +176,7 @@ export function StarredPage() {
                         key={f.id}
                         file={f}
                         onOpen={() => setPreview(f)}
+                        onMenu={(e) => openMenu(e, "file", f)}
                       />
                     ))}
                   </div>
@@ -196,6 +200,7 @@ export function StarredPage() {
                         key={f.id}
                         className="cursor-pointer last:border-b-0"
                         onClick={() => nav(`/drive/${f.id}`)}
+                        onContextMenu={(e) => openMenu(e, "folder", f)}
                       >
                         <TableCell className="p-0 py-2 pl-3">
                           <div className="flex items-center gap-2">
@@ -217,6 +222,7 @@ export function StarredPage() {
                       key={f.id}
                       className="cursor-pointer last:border-b-0"
                       onClick={() => setPreview(f)}
+                      onContextMenu={(e) => openMenu(e, "file", f)}
                     >
                       <TableCell className="p-0 py-2 pl-3">
                         <div className="flex items-center gap-2">
@@ -233,6 +239,7 @@ export function StarredPage() {
             </div>
           )}
         </div>
+        {itemMenu}
         <FilePreview
           file={preview}
           onClose={() => setPreview(null)}
@@ -267,11 +274,20 @@ function FilterChip({
   )
 }
 
-function FolderTile({ folder, onOpen }: { folder: Folder; onOpen: () => void }) {
+function FolderTile({
+  folder,
+  onOpen,
+  onMenu,
+}: {
+  folder: Folder
+  onOpen: () => void
+  onMenu: (e: React.MouseEvent) => void
+}) {
   return (
     <button
       onClick={onOpen}
       onDoubleClick={onOpen}
+      onContextMenu={onMenu}
       className="hover:bg-accent/30 group relative flex flex-col rounded-lg p-1 text-left transition-colors"
     >
       <StarIcon
@@ -299,11 +315,20 @@ function FolderTile({ folder, onOpen }: { folder: Folder; onOpen: () => void }) 
   )
 }
 
-function FileTile({ file, onOpen }: { file: FileItem; onOpen: () => void }) {
+function FileTile({
+  file,
+  onOpen,
+  onMenu,
+}: {
+  file: FileItem
+  onOpen: () => void
+  onMenu: (e: React.MouseEvent) => void
+}) {
   return (
     <button
       onClick={onOpen}
       onDoubleClick={onOpen}
+      onContextMenu={onMenu}
       className="hover:bg-accent/30 group relative flex flex-col overflow-visible rounded-lg text-left transition-colors"
     >
       <StarIcon

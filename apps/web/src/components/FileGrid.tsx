@@ -10,6 +10,7 @@ import {
 } from "@phosphor-icons/react"
 import { Button } from "@workspace/ui/components/button"
 import { useDrive, zoomToGrid } from "@/store/drive"
+import { useAuth } from "@/store/auth"
 import type { FileItem, Folder } from "@/lib/types"
 import { sortFiles, sortFolders } from "@/lib/sort"
 import { triggerDownload } from "@/lib/download"
@@ -30,8 +31,10 @@ const PAGE_SIZE = 60
 export function FileGrid() {
   const {
     currentFolderId,
+    folder,
     folders,
     files,
+    spaces,
     view,
     selection,
     sort,
@@ -51,6 +54,14 @@ export function FileGrid() {
     moveItems,
     removeShortcut,
   } = useDrive()
+  const me = useAuth((s) => s.user)
+  // Only meaningful inside a space — a fellow member's item is visually and
+  // functionally different (no Share/Open-location) from the viewer's own.
+  const currentSpace = folder?.spaceId ? spaces.find((s) => s.id === folder.spaceId) : undefined
+  const meId = currentSpace ? me?.id : undefined
+  function isMine(ownerId: string): boolean {
+    return !!meId && ownerId === meId
+  }
   const sortedFolders = useMemo(() => sortFolders(folders, sort), [folders, sort])
   const sortedFiles = useMemo(() => sortFiles(files, sort), [files, sort])
   const { minWidth, iconSize } = useMemo(() => zoomToGrid(zoom), [zoom])
@@ -186,6 +197,15 @@ export function FileGrid() {
   }
   const closeMenu = () => setMenu(null)
 
+  // Share requires "admin" access server-side — owner or space owner only,
+  // never just an editor — so hide it rather than let a fellow member hit a
+  // 403. Outside a space everything belongs to the viewer, so it's moot.
+  const menuFile = menu?.type === "file" ? files.find((x) => x.id === menu.id) : undefined
+  const menuFolder = menu?.type === "folder" ? folders.find((x) => x.id === menu.id) : undefined
+  const menuOwnerId = menuFile?.ownerId ?? menuFolder?.ownerId
+  const menuCanShare =
+    !currentSpace || menuOwnerId === me?.id || currentSpace.ownerId === me?.id
+
   async function doRename(type: "folder" | "file", id: string) {
     if (!renameValue.trim()) return setRenaming(null)
     if (type === "folder") await renameFolder(id, renameValue.trim())
@@ -303,6 +323,7 @@ export function FileGrid() {
               onRenameChange={setRenameValue}
               onRenameCommit={() => doRename("folder", f.id)}
               onRenameCancel={() => setRenaming(null)}
+              mine={isMine(f.ownerId)}
             />
           ))}
           {visibleFiles.map((f) => (
@@ -320,6 +341,7 @@ export function FileGrid() {
               onRenameChange={setRenameValue}
               onRenameCommit={() => doRename("file", f.id)}
               onRenameCancel={() => setRenaming(null)}
+              mine={isMine(f.ownerId)}
             />
           ))}
         </div>
@@ -334,6 +356,7 @@ export function FileGrid() {
           onMenu={openMenu}
           onDragStart={dragStart}
           onMoveDrop={handleMoveDrop}
+          meId={meId}
         />
       )}
       {visibleCount < totalCount && (
@@ -382,14 +405,26 @@ export function FileGrid() {
             if (f) setPropertiesFolder(f)
             closeMenu()
           }}
-          onShare={() => {
-            setShare({
-              type: menu.type === "folder" ? "FOLDER" : "FILE",
-              id: menu.id,
-              name: menu.name,
-            })
-            closeMenu()
-          }}
+          onOpenLocation={
+            menuFile?.isShortcut && menuFile.ownerId === me?.id
+              ? () => {
+                  nav(`/drive/${menuFile.folderId}`)
+                  closeMenu()
+                }
+              : undefined
+          }
+          onShare={
+            menuCanShare
+              ? () => {
+                  setShare({
+                    type: menu.type === "folder" ? "FOLDER" : "FILE",
+                    id: menu.id,
+                    name: menu.name,
+                  })
+                  closeMenu()
+                }
+              : undefined
+          }
           onToggleStar={async () => {
             await toggleStarred(menu.type, menu.id)
             closeMenu()

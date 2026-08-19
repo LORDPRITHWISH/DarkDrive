@@ -26,6 +26,7 @@ import {
 } from "@workspace/ui/components/table"
 import { iconFor } from "@/lib/fileIcon"
 import { HoverName } from "@/components/HoverName"
+import { useItemMenu } from "@/components/ItemMenu"
 
 type Bucket = { key: string; label: string; order: number }
 
@@ -79,6 +80,10 @@ export function RecentPage() {
   const [preview, setPreview] = useState<FileItem | null>(null)
   const [view, setView] = useState<"grid" | "list">("grid")
   const [filter, setFilter] = useState<TypeFilter>("all")
+  const { openMenu, itemMenu } = useItemMenu({
+    onPreview: setPreview,
+    onChanged: () => void loadRecent(100),
+  })
 
   useEffect(() => {
     void loadRecent(100)
@@ -162,7 +167,12 @@ export function RecentPage() {
                 {view === "grid" ? (
                   <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
                     {files.map((f) => (
-                      <RecentCard key={f.id} file={f} onOpen={() => setPreview(f)} />
+                      <RecentCard
+                        key={f.id}
+                        file={f}
+                        onOpen={() => setPreview(f)}
+                        onMenu={(e) => openMenu(e, "file", f)}
+                      />
                     ))}
                   </div>
                 ) : (
@@ -183,6 +193,7 @@ export function RecentPage() {
                             className="cursor-pointer last:border-b-0"
                             onClick={() => setPreview(f)}
                             onDoubleClick={() => setPreview(f)}
+                            onContextMenu={(e) => openMenu(e, "file", f)}
                           >
                             <TableCell className="p-0 py-2 pl-3">
                               <div className="flex items-center gap-2">
@@ -203,6 +214,7 @@ export function RecentPage() {
             ))
           )}
         </div>
+        {itemMenu}
         <FilePreview
           file={preview}
           onClose={() => setPreview(null)}
@@ -240,15 +252,18 @@ function FilterChip({
 function RecentCard({
   file,
   onOpen,
+  onMenu,
 }: {
   file: RecentFile
   onOpen: () => void
+  onMenu: (e: React.MouseEvent) => void
 }) {
   const isImg = file.mimeType.startsWith("image/")
   return (
     <button
       onClick={onOpen}
       onDoubleClick={onOpen}
+      onContextMenu={onMenu}
       className="bg-card hover:border-primary/60 flex flex-col overflow-hidden rounded-lg border text-left transition-colors"
     >
       <div className="flex items-center gap-2 px-3 py-2">

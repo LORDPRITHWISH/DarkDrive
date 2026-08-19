@@ -22,6 +22,7 @@ export function FileCard({
   onRenameChange,
   onRenameCommit,
   onRenameCancel,
+  mine,
 }: {
   file: FileItem
   selected: boolean
@@ -35,6 +36,11 @@ export function FileCard({
   onRenameChange: (v: string) => void
   onRenameCommit: () => void
   onRenameCancel: () => void
+  // Set only when browsing a space (personal Drive has nothing to
+  // distinguish) — true if the viewer owns this file, e.g. a fellow
+  // member's upload doesn't get the badge and doesn't get Share/Open
+  // location in the context menu.
+  mine?: boolean
 }) {
   const [dragging, setDragging] = useState(false)
   return (
@@ -58,12 +64,24 @@ export function FileCard({
         starred={file.isStarred}
         className="absolute top-2 right-0 z-10 w-fit"
       />
-      {file.isShortcut && (
-        <div
-          className="bg-background/80 absolute top-2 left-2 z-10 rounded-full p-1 backdrop-blur"
-          title="Shortcut — primary file lives in the uploader's drive"
-        >
-          <LinkSimpleIcon size={12} />
+      {(mine || file.isShortcut) && (
+        <div className="absolute top-2 left-2 z-10 flex items-center gap-1">
+          {mine && (
+            <span
+              className="bg-primary/15 text-primary rounded-full px-1.5 py-0.5 text-[10px] font-semibold backdrop-blur"
+              title="Owned by you"
+            >
+              You
+            </span>
+          )}
+          {file.isShortcut && (
+            <div
+              className="bg-background/80 rounded-full p-1 backdrop-blur"
+              title="Shortcut — primary file lives in the uploader's drive"
+            >
+              <LinkSimpleIcon size={12} />
+            </div>
+          )}
         </div>
       )}
       <div className="relative grid aspect-4/3 place-items-center overflow-hidden rounded-lg">

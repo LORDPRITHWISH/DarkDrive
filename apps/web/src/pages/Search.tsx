@@ -38,6 +38,7 @@ import { formatBytes, formatDate } from "@/lib/format"
 import { triggerDownload } from "@/lib/download"
 import { SEARCH_TYPE_LABELS } from "@/lib/fileType"
 import { HoverName } from "@/components/HoverName"
+import { useItemMenu } from "@/components/ItemMenu"
 import type {
   FileItem,
   SearchFileResult,
@@ -77,6 +78,10 @@ export function SearchPage() {
   const [preview, setPreview] = useState<FileItem | null>(null)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [reloadTick, setReloadTick] = useState(0)
+  const { openMenu, itemMenu } = useItemMenu({
+    onPreview: setPreview,
+    onChanged: () => setReloadTick((t) => t + 1),
+  })
 
   // The URL is the committed query; the input can drift from it briefly
   // while the user types. Keep it in sync when the URL changes some other
@@ -310,6 +315,7 @@ export function SearchPage() {
                         onOpen={() => nav(`/drive/${f.id}`)}
                         onOpenLocation={f.parentId ? () => nav(`/drive/${f.parentId}`) : undefined}
                         onToggleStar={() => toggleStar("folder", f.id, f.isStarred)}
+                        onMenu={(e) => openMenu(e, "folder", f)}
                       />
                     ))}
                   </div>
@@ -326,6 +332,7 @@ export function SearchPage() {
                         onOpen={() => setPreview(f)}
                         onOpenLocation={() => nav(`/drive/${f.folderId}`)}
                         onToggleStar={() => toggleStar("file", f.id, f.isStarred)}
+                        onMenu={(e) => openMenu(e, "file", f)}
                       />
                     ))}
                   </div>
@@ -349,6 +356,7 @@ export function SearchPage() {
                       key={f.id}
                       className="cursor-pointer last:border-b-0"
                       onClick={() => nav(`/drive/${f.id}`)}
+                      onContextMenu={(e) => openMenu(e, "folder", f)}
                     >
                       <TableCell className="p-0 py-2 pl-3">
                         <div className="flex items-center gap-2">
@@ -383,6 +391,7 @@ export function SearchPage() {
                       key={f.id}
                       className="cursor-pointer last:border-b-0"
                       onClick={() => setPreview(f)}
+                      onContextMenu={(e) => openMenu(e, "file", f)}
                     >
                       <TableCell className="p-0 py-2 pl-3">
                         <div className="flex items-center gap-2">
@@ -417,6 +426,7 @@ export function SearchPage() {
           )}
         </div>
 
+        {itemMenu}
         <FilePreview file={preview} onClose={() => setPreview(null)} items={files} onNavigate={setPreview} />
       </main>
 
@@ -466,14 +476,19 @@ function FolderTile({
   onOpen,
   onOpenLocation,
   onToggleStar,
+  onMenu,
 }: {
   folder: SearchFolderResult
   onOpen: () => void
   onOpenLocation?: () => void
   onToggleStar: () => void
+  onMenu: (e: React.MouseEvent) => void
 }) {
   return (
-    <div className="hover:bg-accent/30 group relative flex flex-col rounded-lg p-1 transition-colors">
+    <div
+      className="hover:bg-accent/30 group relative flex flex-col rounded-lg p-1 transition-colors"
+      onContextMenu={onMenu}
+    >
       <button
         onClick={(e) => {
           e.stopPropagation()
@@ -525,14 +540,19 @@ function FileTile({
   onOpen,
   onOpenLocation,
   onToggleStar,
+  onMenu,
 }: {
   file: SearchFileResult
   onOpen: () => void
   onOpenLocation: () => void
   onToggleStar: () => void
+  onMenu: (e: React.MouseEvent) => void
 }) {
   return (
-    <div className="hover:bg-accent/30 group relative flex flex-col overflow-visible rounded-lg transition-colors">
+    <div
+      className="hover:bg-accent/30 group relative flex flex-col overflow-visible rounded-lg transition-colors"
+      onContextMenu={onMenu}
+    >
       <button
         onClick={(e) => {
           e.stopPropagation()

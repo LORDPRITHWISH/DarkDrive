@@ -7,7 +7,7 @@ export function thumbnailable(file: { mimeType: string; name: string }): boolean
   const e = (file.name.match(/\.[^.]+$/)?.[0] ?? "").toLowerCase()
   if (m.startsWith("image/") || /\.(jpe?g|png|gif|webp|bmp|tiff?|heic|heif|avif|ico|svg)$/.test(e))
     return true
-  if (m.startsWith("video/") || /\.(mp4|mkv|webm|mov|avi|m4v|wmv|flv|mpe?g|3gp|ts)$/.test(e))
+  if (m.startsWith("video/") || /\.(mp4|mkv|webm|mov|avi|m4v|wmv|flv|mpe?g|3gp)$/.test(e))
     return true
   if (m === "application/pdf" || e === ".pdf") return true
   if (

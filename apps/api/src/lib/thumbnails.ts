@@ -3,6 +3,7 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { prisma } from "../db/prisma.js"
+import { resolveMime } from "./fileType.js"
 import {
   absolutePath,
   ensureDirFor,
@@ -70,11 +71,11 @@ function ext(name: string): string {
 // Both mime type and extension are consulted — uploads often arrive with a
 // generic `application/octet-stream` type, so the extension is the safety net.
 export function thumbKind(file: { mimeType: string; name: string }): ThumbKind | null {
-  const m = file.mimeType.toLowerCase()
+  const m = resolveMime(file.name, file.mimeType).toLowerCase()
   const e = ext(file.name)
   if (m.startsWith("image/") || /\.(jpe?g|png|gif|webp|bmp|tiff?|heic|heif|avif|ico|svg)$/.test(e))
     return "image"
-  if (m.startsWith("video/") || /\.(mp4|mkv|webm|mov|avi|m4v|wmv|flv|mpe?g|3gp|ts)$/.test(e))
+  if (m.startsWith("video/") || /\.(mp4|mkv|webm|mov|avi|m4v|wmv|flv|mpe?g|3gp)$/.test(e))
     return "video"
   if (m === "application/pdf" || e === ".pdf") return "pdf"
   if (

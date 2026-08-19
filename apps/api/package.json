@@ -48,7 +48,7 @@
     "@types/passport": "^1.0.17",
     "@types/passport-google-oauth20": "^2.0.16",
     "@types/unzipper": "^0.10.11",
-    "prisma": "^5.22.0",
+    "prisma": "^7.9.1",
     "tsx": "^4.19.2",
     "typescript": "^5.9.3"
   }

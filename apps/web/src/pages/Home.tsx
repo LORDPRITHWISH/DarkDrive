@@ -13,6 +13,7 @@ import { iconFor } from "@/lib/fileIcon"
 import { Table, TableBody, TableCell, TableRow } from "@workspace/ui/components/table"
 import type { FileItem } from "@/lib/types"
 import { HoverName } from "@/components/HoverName"
+import { useItemMenu } from "@/components/ItemMenu"
 
 function greeting() {
   const h = new Date().getHours()
@@ -54,6 +55,8 @@ export function HomePage() {
     void loadRecent(8)
     void loadRecentlyAdded(12)
   }
+
+  const { openMenu, itemMenu } = useItemMenu({ onPreview: setPreview, onChanged: reload })
 
   useEffect(() => {
     reload()
@@ -114,6 +117,7 @@ export function HomePage() {
                       <button
                         key={f.id}
                         onClick={() => openFile(f)}
+                        onContextMenu={(e) => openMenu(e, "file", f)}
                         className="bg-card hover:border-primary/60 group relative overflow-hidden rounded-lg border text-left transition-colors"
                       >
                         <span className="bg-primary text-primary-foreground absolute top-2 left-2 z-10 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider">
@@ -157,6 +161,7 @@ export function HomePage() {
                     <button
                       key={f.id}
                       onClick={() => void openFolder(f.id)}
+                      onContextMenu={(e) => openMenu(e, "folder", f)}
                       className="bg-card hover:border-primary/60 flex items-center gap-3 rounded-lg border px-3 py-3 text-left transition-colors"
                     >
                       <FolderIcon
@@ -194,6 +199,7 @@ export function HomePage() {
                       <button
                         key={f.id}
                         onClick={() => setPreview(f)}
+                        onContextMenu={(e) => openMenu(e, "file", f)}
                         className="bg-card hover:border-primary/60 overflow-hidden rounded-lg border text-left transition-colors"
                       >
                         <div className="bg-muted grid aspect-4/3 place-items-center overflow-hidden">
@@ -244,6 +250,7 @@ export function HomePage() {
                           key={f.id}
                           className="cursor-pointer last:border-b-0"
                           onClick={() => setPreview(f)}
+                          onContextMenu={(e) => openMenu(e, "file", f)}
                         >
                           <TableCell className="p-0 py-2 pl-3">
                             <div className="flex items-center gap-2">
@@ -281,6 +288,7 @@ export function HomePage() {
               )}
           </div>
         </div>
+        {itemMenu}
         <FilePreview
           file={preview}
           onClose={() => setPreview(null)}

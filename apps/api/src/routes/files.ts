@@ -5,6 +5,7 @@ import crypto from "node:crypto"
 import multer from "multer"
 import path from "node:path"
 import mime from "mime-types"
+import { resolveMime } from "../lib/fileType.js"
 import { ZipArchive, type Archiver } from "archiver"
 import unzipper from "unzipper"
 import { prisma } from "../db/prisma.js"
@@ -272,8 +273,7 @@ filesRouter.post("/upload/init", async (req, res) => {
     folderId: folderId!,
     name: body.name,
     size: body.size,
-    mimeType:
-      body.mimeType || mime.lookup(body.name) || "application/octet-stream",
+    mimeType: resolveMime(body.name, body.mimeType),
     tmpDir,
     chunks: new Set(),
     createdAt: Date.now(),
@@ -616,7 +616,7 @@ filesRouter.post("/import-url", async (req, res) => {
       return res.status(413).json({ error: "quota_exceeded" })
     }
 
-    const mimeType = result.mimeType || mime.lookup(preliminaryName) || "application/octet-stream"
+    const mimeType = resolveMime(preliminaryName, result.mimeType)
     const name = (
       body.name?.trim() ||
       result.suggestedName?.trim() ||
@@ -1042,7 +1042,7 @@ filesRouter.post("/:id/extract", async (req, res) => {
           .on("error", reject)
       })
       const stat = fs.statSync(dest)
-      const mimeType = mime.lookup(name) || "application/octet-stream"
+      const mimeType = resolveMime(name)
 
       const created = await prisma.file.create({
         data: {

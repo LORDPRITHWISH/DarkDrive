@@ -1,3 +1,5 @@
+import mime from "mime-types"
+
 export type FileCategory = "image" | "video" | "audio" | "doc" | "archive" | "other"
 
 const DOC_EXT = new Set([
@@ -12,11 +14,30 @@ function extOf(name: string): string {
   return name.slice(dot + 1).toLowerCase()
 }
 
+// mime-types maps .ts/.mts/.cts to video/mp2t (MPEG transport stream). In a
+// drive that holds source trees those are TypeScript, and every one of them was
+// being handed to ffmpeg for a thumbnail it could never produce.
+// ponytail: a genuine MPEG-TS upload now gets an icon instead of a thumbnail —
+// sniff the container if that ever comes up.
+const EXT_MIME: Record<string, string> = {
+  ts: "text/plain",
+  mts: "text/plain",
+  cts: "text/plain",
+}
+
+// Single source of truth for a file's type: the override beats both the
+// browser-supplied type and mime.lookup(). Upload stores the result, and the
+// classifiers below re-run it so rows written before this still classify right.
+export function resolveMime(name: string, provided?: string | null): string {
+  return EXT_MIME[extOf(name)] || provided || mime.lookup(name) || "application/octet-stream"
+}
+
 // Best-effort classification used by search's type filter. Extension wins
 // over MIME type since uploads often carry a generic
 // application/octet-stream mimeType from the browser.
-export function fileCategory(mimeType: string, name: string): FileCategory {
+export function fileCategory(rawMime: string, name: string): FileCategory {
   const ext = extOf(name)
+  const mimeType = resolveMime(name, rawMime)
   if (mimeType.startsWith("image/")) return "image"
   if (mimeType.startsWith("video/")) return "video"
   if (mimeType.startsWith("audio/")) return "audio"

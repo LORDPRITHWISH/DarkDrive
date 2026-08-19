@@ -264,29 +264,8 @@ adminRouter.get("/stats", async (_req, res) => {
   const typeBuckets = { image: 0, video: 0, audio: 0, doc: 0, archive: 0, other: 0 }
   const typeBytes = { image: 0, video: 0, audio: 0, doc: 0, archive: 0, other: 0 }
   for (const f of allFilesForTypes) {
-    const m = f.mimeType
+    const k = fileCategory(f.mimeType, f.name)
     const sz = Number(f.size)
-    let k: keyof typeof typeBuckets = "other"
-    if (m.startsWith("image/")) k = "image"
-    else if (m.startsWith("video/")) k = "video"
-    else if (m.startsWith("audio/")) k = "audio"
-    else if (
-      m === "application/pdf" ||
-      m.startsWith("text/") ||
-      m.includes("officedocument") ||
-      m.includes("msword") ||
-      m.includes("ms-excel") ||
-      m.includes("ms-powerpoint") ||
-      /\.(pdf|docx?|xlsx?|pptx?|odt|ods|odp|rtf|md|txt)$/i.test(f.name)
-    )
-      k = "doc"
-    else if (
-      m.includes("zip") ||
-      m.includes("tar") ||
-      m.includes("rar") ||
-      m.includes("7z")
-    )
-      k = "archive"
     typeBuckets[k] += 1
     typeBytes[k] += sz
   }

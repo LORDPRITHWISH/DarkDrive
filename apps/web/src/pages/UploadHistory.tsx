@@ -4,8 +4,8 @@ import { Sidebar } from "@/components/Sidebar"
 import { SidebarToggle } from "@/components/SidebarToggle"
 import { HeaderActions } from "@/components/HeaderActions"
 import { FilePreview } from "@/components/FilePreview"
+import { FileThumb } from "@/components/file-grid/FileThumb"
 import { formatBytes, formatDate } from "@/lib/format"
-import { apiUrl } from "@/lib/config"
 import type { FileItem } from "@/lib/types"
 import {
   FileIcon,
@@ -271,7 +271,6 @@ function UploadCard({
   onOpen: () => void
   onMenu: (e: React.MouseEvent) => void
 }) {
-  const isImg = file.mimeType.startsWith("image/")
   return (
     <button
       onClick={onOpen}
@@ -286,18 +285,7 @@ function UploadCard({
         </span>
       </div>
       <div className="bg-muted aspect-4/3 overflow-hidden border-t">
-        {isImg ? (
-          <img
-            src={apiUrl(`/api/files/${file.id}/download?inline=1`)}
-            alt=""
-            className="h-full w-full object-cover"
-            loading="lazy"
-          />
-        ) : (
-          <div className="grid h-full place-items-center">
-            {iconFor(file.mimeType, 56, file.name)}
-          </div>
-        )}
+        <FileThumb file={file} iconSize={56} />
       </div>
       <div className="text-muted-foreground flex items-center justify-between px-3 py-1.5 text-xs">
         <span className="flex items-center gap-1">

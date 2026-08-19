@@ -1,4 +1,6 @@
 import { PrismaClient } from "@prisma/client"
+import { PrismaPg } from "@prisma/adapter-pg"
+import { env } from "../env.js"
 
 // `tsx watch` restarts the process on every file change and a fresh
 // PrismaClient opens its own Postgres pool each time, quickly exhausting
@@ -9,6 +11,8 @@ const g = globalThis as unknown as { prisma?: PrismaClient }
 export const prisma =
   g.prisma ??
   new PrismaClient({
+    // Prisma 7 dropped the embedded Rust engine: the driver is now ours to pass in.
+    adapter: new PrismaPg({ connectionString: env.DATABASE_URL }),
     log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
   })
 

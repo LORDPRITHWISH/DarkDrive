@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
   ArrowCounterClockwiseIcon,
   FolderIcon,
@@ -28,6 +28,7 @@ import { iconFor } from "@/lib/fileIcon"
 import { FilePreview } from "@/components/FilePreview"
 import type { FileItem, Folder } from "@/lib/types"
 import { HoverName } from "@/components/HoverName"
+import { useGridKeyNav } from "@/lib/useGridKeyNav"
 
 type Menu = {
   x: number
@@ -48,6 +49,8 @@ export function BinPage() {
   const deleteItem = useDrive((s) => s.deleteItem)
   const loadQuota = useMe((s) => s.loadQuota)
   const [clearing, setClearing] = useState(false)
+  const contentRef = useRef<HTMLDivElement>(null)
+  useGridKeyNav(contentRef)
 
   async function reload() {
     setLoading(true)
@@ -168,7 +171,7 @@ export function BinPage() {
           </div>
         </header>
 
-        <div className="flex-1 overflow-auto">
+        <div ref={contentRef} className="flex-1 overflow-auto">
           {loading ? (
             <div className="text-muted-foreground grid h-full place-items-center text-sm">
               Loading…
@@ -242,8 +245,12 @@ export function BinPage() {
                 {files.map((f) => (
                   <TableRow
                     key={f.id}
-                    className="cursor-pointer"
+                    tabIndex={0}
+                    className="focus-visible:bg-accent/40 cursor-pointer outline-none"
                     onClick={() => setPreview(f)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") setPreview(f)
+                    }}
                     onContextMenu={(e) => openMenu(e, "file", f.id, f.name)}
                   >
                     <TableCell className="p-0 py-2 pl-4">
@@ -373,8 +380,12 @@ function TrashFileCard({
 }) {
   return (
     <div
-      className="group hover:bg-accent/30 relative cursor-pointer rounded-lg transition-colors"
+      tabIndex={0}
+      className="group hover:bg-accent/30 focus-visible:ring-primary relative cursor-pointer rounded-lg outline-none transition-colors focus-visible:ring-2"
       onDoubleClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") onOpen()
+      }}
       onContextMenu={onContextMenu}
     >
       <button

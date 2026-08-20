@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { ArrowCounterClockwiseIcon, MagnifyingGlassMinusIcon, MagnifyingGlassPlusIcon, UploadSimpleIcon } from "@phosphor-icons/react"
 import { Link, useNavigate, useParams } from "react-router-dom"
-import { useDrive, ZOOM_MIN, ZOOM_MAX, ZOOM_DEFAULT } from "@/store/drive"
+import { useDrive, zoomToGrid, ZOOM_MIN, ZOOM_MAX, ZOOM_DEFAULT } from "@/store/drive"
 import { Sidebar } from "@/components/Sidebar"
 import { SidebarToggle } from "@/components/SidebarToggle"
 import { HeaderActions } from "@/components/HeaderActions"
@@ -11,6 +11,7 @@ import { FileGrid } from "@/components/FileGrid"
 import { NavButtons } from "@/components/NavButtons"
 import { ShortcutsDialog } from "@/components/ShortcutsDialog"
 import { sortFiles, sortFolders } from "@/lib/sort"
+import { gridColumns, gridNavIndex, type NavKey } from "@/lib/gridNav"
 import { entriesFromDataTransfer } from "@/lib/dropEntries"
 import { isInternalDrag } from "@/components/file-grid/dnd"
 
@@ -61,6 +62,10 @@ export function DrivePage() {
   // boolean flickers the overlay off when the pointer passes over a card.
   // A counter only zeroes out once the drag has actually left the window.
   const dragDepth = useRef(0)
+  // Measures the rendered grid's width so ↑/↓ can skip by a full row instead
+  // of walking the flat folders-then-files order (which only worked for the
+  // single-column list view).
+  const gridWrapRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (folderId) void loadFolder(folderId)
@@ -107,19 +112,26 @@ export function DrivePage() {
 
       if (ordered.length === 0) return
 
-      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      if (
+        e.key === "ArrowDown" ||
+        e.key === "ArrowUp" ||
+        e.key === "ArrowLeft" ||
+        e.key === "ArrowRight" ||
+        e.key === "Home" ||
+        e.key === "End"
+      ) {
         e.preventDefault()
+        // List view is a single column; grid view's column count depends on
+        // the responsive auto-fill layout, so it's measured from the
+        // rendered width rather than assumed.
+        const columns =
+          view === "list"
+            ? 1
+            : gridColumns((gridWrapRef.current?.clientWidth ?? 0) - 16, zoomToGrid(zoom).minWidth)
         const curId = Array.from(selection)[0]
         const idx = ordered.findIndex((x) => x.id === curId)
-        const next =
-          e.key === "ArrowDown"
-            ? idx < 0
-              ? 0
-              : Math.min(ordered.length - 1, idx + 1)
-            : idx < 0
-              ? ordered.length - 1
-              : Math.max(0, idx - 1)
-        select(ordered[next].id)
+        const next = gridNavIndex(e.key as NavKey, idx, ordered.length, columns)
+        if (next >= 0) select(ordered[next].id)
         return
       }
 
@@ -161,6 +173,8 @@ export function DrivePage() {
     selection,
     preview,
     shortcutsOpen,
+    view,
+    zoom,
     clearSelection,
     select,
     selectAll,
@@ -283,7 +297,7 @@ export function DrivePage() {
           <div className="bg-border hidden h-6 w-px md:block" />
           <Toolbar />
         </div>
-        <div className="flex-1 overflow-auto">
+        <div ref={gridWrapRef} className="flex-1 overflow-auto">
           <FileGrid />
         </div>
       </main>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import {
   FilesIcon,
@@ -49,6 +49,7 @@ import { apiGet, apiJson } from "@/lib/api"
 import { apiUrl } from "@/lib/config"
 import { iconFor } from "@/lib/fileIcon"
 import { formatBytes, formatDate, relativeTime } from "@/lib/format"
+import { useGridKeyNav } from "@/lib/useGridKeyNav"
 import type { FileItem, SpaceMember, SpaceOverview } from "@/lib/types"
 
 export function SpacePage() {
@@ -63,6 +64,8 @@ export function SpacePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [preview, setPreview] = useState<FileItem | null>(null)
+  const recentFilesRef = useRef<HTMLDivElement>(null)
+  useGridKeyNav(recentFilesRef)
   const [shortcutFile, setShortcutFile] = useState<FileItem | null>(null)
   const [linkFilesOpen, setLinkFilesOpen] = useState(false)
   const [manageOpen, setManageOpen] = useState(false)
@@ -399,7 +402,10 @@ export function SpacePage() {
                     to add files.
                   </div>
                 ) : (
-                  <div className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-3">
+                  <div
+                    ref={recentFilesRef}
+                    className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-3"
+                  >
                     {data.recentFiles.map((f) => (
                       <RecentFileCard
                         key={f.id}
@@ -620,7 +626,10 @@ function RecentFileCard({
 
   return (
     <div className="bg-card hover:border-primary/60 group relative overflow-hidden rounded-lg border transition-colors">
-      <button onClick={onPreview} className="block w-full text-left">
+      <button
+        onClick={onPreview}
+        className="focus-visible:ring-primary block w-full text-left outline-none focus-visible:ring-2"
+      >
         <div className="bg-muted grid aspect-4/3 place-items-center overflow-hidden">
           {isImg ? (
             <img

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useMe } from "@/store/me"
 import { Sidebar } from "@/components/Sidebar"
 import { SidebarToggle } from "@/components/SidebarToggle"
@@ -27,6 +27,7 @@ import {
 import { iconFor } from "@/lib/fileIcon"
 import { HoverName } from "@/components/HoverName"
 import { useItemMenu } from "@/components/ItemMenu"
+import { useGridKeyNav } from "@/lib/useGridKeyNav"
 
 type Bucket = { key: string; label: string; order: number }
 
@@ -84,6 +85,8 @@ export function RecentPage() {
     onPreview: setPreview,
     onChanged: () => void loadRecent(100),
   })
+  const contentRef = useRef<HTMLDivElement>(null)
+  useGridKeyNav(contentRef)
 
   useEffect(() => {
     void loadRecent(100)
@@ -153,7 +156,7 @@ export function RecentPage() {
             <FileIcon size={14} /> Other
           </FilterChip>
         </div>
-        <div className="flex-1 overflow-auto px-4 py-5 md:px-6">
+        <div ref={contentRef} className="flex-1 overflow-auto px-4 py-5 md:px-6">
           {grouped.length === 0 ? (
             <div className="text-muted-foreground py-20 text-center text-sm">
               Nothing here yet. Files you open will show up here.
@@ -190,9 +193,13 @@ export function RecentPage() {
                         {files.map((f) => (
                           <TableRow
                             key={f.id}
-                            className="cursor-pointer last:border-b-0"
+                            tabIndex={0}
+                            className="focus-visible:bg-accent/40 cursor-pointer outline-none last:border-b-0"
                             onClick={() => setPreview(f)}
                             onDoubleClick={() => setPreview(f)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") setPreview(f)
+                            }}
                             onContextMenu={(e) => openMenu(e, "file", f)}
                           >
                             <TableCell className="p-0 py-2 pl-3">
@@ -263,7 +270,7 @@ function RecentCard({
       onClick={onOpen}
       onDoubleClick={onOpen}
       onContextMenu={onMenu}
-      className="bg-card hover:border-primary/60 flex flex-col overflow-hidden rounded-lg border text-left transition-colors"
+      className="bg-card hover:border-primary/60 focus-visible:border-primary flex flex-col overflow-hidden rounded-lg border text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary"
     >
       <div className="flex items-center gap-2 px-3 py-2">
         {iconFor(file.mimeType, 16, file.name)}

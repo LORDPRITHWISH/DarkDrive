@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { FolderIcon, StarIcon } from "@phosphor-icons/react"
 import { useAuth } from "@/store/auth"
@@ -14,6 +14,7 @@ import { Table, TableBody, TableCell, TableRow } from "@workspace/ui/components/
 import type { FileItem } from "@/lib/types"
 import { HoverName } from "@/components/HoverName"
 import { useItemMenu } from "@/components/ItemMenu"
+import { useGridKeyNav } from "@/lib/useGridKeyNav"
 
 function greeting() {
   const h = new Date().getHours()
@@ -57,6 +58,8 @@ export function HomePage() {
   }
 
   const { openMenu, itemMenu } = useItemMenu({ onPreview: setPreview, onChanged: reload })
+  const contentRef = useRef<HTMLDivElement>(null)
+  useGridKeyNav(contentRef)
 
   useEffect(() => {
     reload()
@@ -95,7 +98,7 @@ export function HomePage() {
             <HeaderActions onReload={reload} />
           </div>
         </header>
-        <div className="flex-1 overflow-auto px-4 py-5 md:px-6">
+        <div ref={contentRef} className="flex-1 overflow-auto px-4 py-5 md:px-6">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">
               {greeting()}
@@ -116,7 +119,7 @@ export function HomePage() {
                       key={f.id}
                       onClick={() => openFile(f)}
                       onContextMenu={(e) => openMenu(e, "file", f)}
-                      className="bg-card hover:border-primary/60 group relative overflow-hidden rounded-lg border text-left transition-colors"
+                      className="bg-card hover:border-primary/60 focus-visible:border-primary group relative overflow-hidden rounded-lg border text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary"
                     >
                       <span className="bg-primary text-primary-foreground absolute top-2 left-2 z-10 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider">
                         New
@@ -150,7 +153,7 @@ export function HomePage() {
                       key={f.id}
                       onClick={() => void openFolder(f.id)}
                       onContextMenu={(e) => openMenu(e, "folder", f)}
-                      className="bg-card hover:border-primary/60 flex items-center gap-3 rounded-lg border px-3 py-3 text-left transition-colors"
+                      className="bg-card hover:border-primary/60 focus-visible:border-primary flex items-center gap-3 rounded-lg border px-3 py-3 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary"
                     >
                       <FolderIcon
                         size={28}
@@ -186,7 +189,7 @@ export function HomePage() {
                       key={f.id}
                       onClick={() => setPreview(f)}
                       onContextMenu={(e) => openMenu(e, "file", f)}
-                      className="bg-card hover:border-primary/60 overflow-hidden rounded-lg border text-left transition-colors"
+                      className="bg-card hover:border-primary/60 focus-visible:border-primary overflow-hidden rounded-lg border text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary"
                     >
                       <div className="bg-muted grid aspect-4/3 place-items-center overflow-hidden">
                         <FileThumb file={f} iconSize={56} />
@@ -224,8 +227,12 @@ export function HomePage() {
                       {recent.map((f) => (
                         <TableRow
                           key={f.id}
-                          className="cursor-pointer last:border-b-0"
+                          tabIndex={0}
+                          className="focus-visible:bg-accent/40 cursor-pointer outline-none last:border-b-0"
                           onClick={() => setPreview(f)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") setPreview(f)
+                          }}
                           onContextMenu={(e) => openMenu(e, "file", f)}
                         >
                           <TableCell className="p-0 py-2 pl-3">

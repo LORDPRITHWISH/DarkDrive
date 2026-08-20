@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import {
   DownloadIcon,
@@ -39,6 +39,7 @@ import { triggerDownload } from "@/lib/download"
 import { SEARCH_TYPE_LABELS } from "@/lib/fileType"
 import { HoverName } from "@/components/HoverName"
 import { useItemMenu } from "@/components/ItemMenu"
+import { useGridKeyNav } from "@/lib/useGridKeyNav"
 import type {
   FileItem,
   SearchFileResult,
@@ -82,6 +83,8 @@ export function SearchPage() {
     onPreview: setPreview,
     onChanged: () => setReloadTick((t) => t + 1),
   })
+  const contentRef = useRef<HTMLDivElement>(null)
+  useGridKeyNav(contentRef)
 
   // The URL is the committed query; the input can drift from it briefly
   // while the user types. Keep it in sync when the URL changes some other
@@ -289,7 +292,7 @@ export function SearchPage() {
           )}
         </div>
 
-        <div className="flex-1 overflow-auto px-4 py-5 md:px-6">
+        <div ref={contentRef} className="flex-1 overflow-auto px-4 py-5 md:px-6">
           {!active ? (
             <div className="text-muted-foreground py-20 text-center text-sm">
               Start typing, or pick a type/folder filter to browse your files.
@@ -354,8 +357,12 @@ export function SearchPage() {
                   {folders.map((f) => (
                     <TableRow
                       key={f.id}
-                      className="cursor-pointer last:border-b-0"
+                      tabIndex={0}
+                      className="focus-visible:bg-accent/40 cursor-pointer outline-none last:border-b-0"
                       onClick={() => nav(`/drive/${f.id}`)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") nav(`/drive/${f.id}`)
+                      }}
                       onContextMenu={(e) => openMenu(e, "folder", f)}
                     >
                       <TableCell className="p-0 py-2 pl-3">
@@ -389,8 +396,12 @@ export function SearchPage() {
                   {files.map((f) => (
                     <TableRow
                       key={f.id}
-                      className="cursor-pointer last:border-b-0"
+                      tabIndex={0}
+                      className="focus-visible:bg-accent/40 cursor-pointer outline-none last:border-b-0"
                       onClick={() => setPreview(f)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") setPreview(f)
+                      }}
                       onContextMenu={(e) => openMenu(e, "file", f)}
                     >
                       <TableCell className="p-0 py-2 pl-3">
@@ -505,7 +516,11 @@ function FolderTile({
           className={folder.isStarred ? "text-yellow-500" : "text-muted-foreground"}
         />
       </button>
-      <button onClick={onOpen} onDoubleClick={onOpen} className="flex flex-col text-left">
+      <button
+        onClick={onOpen}
+        onDoubleClick={onOpen}
+        className="focus-visible:ring-primary flex flex-col rounded-lg text-left outline-none focus-visible:ring-2"
+      >
         <div className="grid aspect-4/3 place-items-center">
           <FolderIcon
             size={72}
@@ -579,7 +594,11 @@ function FileTile({
       >
         <DownloadIcon size={14} />
       </button>
-      <button onClick={onOpen} onDoubleClick={onOpen} className="flex flex-col text-left">
+      <button
+        onClick={onOpen}
+        onDoubleClick={onOpen}
+        className="focus-visible:ring-primary flex flex-col rounded-lg text-left outline-none focus-visible:ring-2"
+      >
         <div className="bg-muted grid aspect-4/3 place-items-center overflow-hidden rounded-lg">
           <FileThumb file={file} iconSize={64} />
         </div>

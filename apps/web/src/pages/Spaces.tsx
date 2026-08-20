@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Link } from "react-router-dom"
 import {
   GlobeIcon,
@@ -19,6 +19,7 @@ import { SpaceEditorDialog } from "@/components/SpaceEditorDialog"
 import { JoinSpaceDialog } from "@/components/JoinSpaceDialog"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
+import { useGridKeyNav } from "@/lib/useGridKeyNav"
 import type { Space } from "@/lib/types"
 
 export function SpacesPage() {
@@ -27,6 +28,8 @@ export function SpacesPage() {
   const [q, setQ] = useState("")
   const [creating, setCreating] = useState(false)
   const [joining, setJoining] = useState(false)
+  const contentRef = useRef<HTMLDivElement>(null)
+  useGridKeyNav(contentRef)
 
   function reload() {
     void loadSpaces()
@@ -63,7 +66,7 @@ export function SpacesPage() {
           </div>
         </header>
 
-        <div className="flex-1 overflow-auto px-4 py-5 md:px-6">
+        <div ref={contentRef} className="flex-1 overflow-auto px-4 py-5 md:px-6">
           <div className="mx-auto max-w-5xl">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
@@ -142,7 +145,7 @@ function SpaceCard({
     <div className="group bg-card hover:border-primary/60 relative flex items-center gap-3 rounded-xl border p-3 transition-colors">
       <Link
         to={`/drive/${space.rootFolderId}`}
-        className="flex min-w-0 flex-1 items-center gap-3"
+        className="focus-visible:ring-primary flex min-w-0 flex-1 items-center gap-3 rounded-lg outline-none focus-visible:ring-2"
       >
         <SpaceLogo space={space} size={40} className="shrink-0" />
         <div className="min-w-0 flex-1">

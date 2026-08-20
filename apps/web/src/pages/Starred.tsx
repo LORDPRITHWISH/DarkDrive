@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   FileIcon,
   FileTextIcon,
@@ -30,6 +30,7 @@ import { iconFor } from "@/lib/fileIcon"
 import type { FileItem, Folder } from "@/lib/types"
 import { HoverName } from "@/components/HoverName"
 import { useItemMenu } from "@/components/ItemMenu"
+import { useGridKeyNav } from "@/lib/useGridKeyNav"
 
 type TypeFilter = "all" | "image" | "video" | "doc" | "other"
 
@@ -62,6 +63,8 @@ export function StarredPage() {
   const [preview, setPreview] = useState<FileItem | null>(null)
   const nav = useNavigate()
   const { openMenu, itemMenu } = useItemMenu({ onPreview: setPreview, onChanged: reload })
+  const contentRef = useRef<HTMLDivElement>(null)
+  useGridKeyNav(contentRef)
 
   function reload() {
     setLoading(true)
@@ -137,7 +140,7 @@ export function StarredPage() {
           </FilterChip>
         </div>
 
-        <div className="flex-1 overflow-auto px-4 py-5 md:px-6">
+        <div ref={contentRef} className="flex-1 overflow-auto px-4 py-5 md:px-6">
           {loading ? (
             <div className="text-muted-foreground py-20 text-center text-sm">
               Loading…
@@ -199,8 +202,12 @@ export function StarredPage() {
                     folders.map((f) => (
                       <TableRow
                         key={f.id}
-                        className="cursor-pointer last:border-b-0"
+                        tabIndex={0}
+                        className="focus-visible:bg-accent/40 cursor-pointer outline-none last:border-b-0"
                         onClick={() => nav(`/drive/${f.id}`)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") nav(`/drive/${f.id}`)
+                        }}
                         onContextMenu={(e) => openMenu(e, "folder", f)}
                       >
                         <TableCell className="p-0 py-2 pl-3">
@@ -221,8 +228,12 @@ export function StarredPage() {
                   {filteredFiles.map((f) => (
                     <TableRow
                       key={f.id}
-                      className="cursor-pointer last:border-b-0"
+                      tabIndex={0}
+                      className="focus-visible:bg-accent/40 cursor-pointer outline-none last:border-b-0"
                       onClick={() => setPreview(f)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") setPreview(f)
+                      }}
                       onContextMenu={(e) => openMenu(e, "file", f)}
                     >
                       <TableCell className="p-0 py-2 pl-3">
@@ -289,7 +300,7 @@ function FolderTile({
       onClick={onOpen}
       onDoubleClick={onOpen}
       onContextMenu={onMenu}
-      className="hover:bg-accent/30 group relative flex flex-col rounded-lg p-1 text-left transition-colors"
+      className="hover:bg-accent/30 focus-visible:ring-primary group relative flex flex-col rounded-lg p-1 text-left outline-none transition-colors focus-visible:ring-2"
     >
       <StarIcon
         size={14}
@@ -330,7 +341,7 @@ function FileTile({
       onClick={onOpen}
       onDoubleClick={onOpen}
       onContextMenu={onMenu}
-      className="hover:bg-accent/30 group relative flex flex-col overflow-visible rounded-lg text-left transition-colors"
+      className="hover:bg-accent/30 focus-visible:ring-primary group relative flex flex-col overflow-visible rounded-lg text-left outline-none transition-colors focus-visible:ring-2"
     >
       <StarIcon
         size={14}

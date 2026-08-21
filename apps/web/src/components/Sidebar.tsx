@@ -7,6 +7,7 @@ import {
   UsersThreeIcon,
   PlusIcon,
   ClockCounterClockwiseIcon,
+  ChartDonutIcon,
   ShieldCheckIcon,
   StarIcon,
   TrashIcon,
@@ -204,6 +205,7 @@ export function Sidebar() {
         {navItem("/recent", "Recent", <ClockCounterClockwiseIcon size={18} />)}
         {navItem("/uploads", "Uploads", <UploadSimpleIcon size={18} />)}
         {navItem("/starred", "Starred", <StarIcon size={18} />)}
+        {navItem("/storage", "Storage", <ChartDonutIcon size={18} />)}
         {navItem("/bin", "Bin", <TrashIcon size={18} />)}
         {user?.role === "ADMIN" &&
           navItem("/admin", "Admin", <ShieldCheckIcon size={18} />)}
@@ -308,6 +310,12 @@ export function Sidebar() {
             </PopoverTrigger>
             <PopoverContent align="start">
               <StorageBreakdown quota={quota} />
+              <Link
+                to="/storage"
+                className="text-primary mt-3 block text-xs hover:underline"
+              >
+                Analyze storage →
+              </Link>
             </PopoverContent>
           </Popover>
           {quota.role === "USER" && (

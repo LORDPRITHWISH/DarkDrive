@@ -22,6 +22,7 @@ import { HomePage } from "@/pages/Home"
 import { BinPage } from "@/pages/Bin"
 import { LandingPage } from "@/pages/Landing"
 import { StarredPage } from "@/pages/Starred"
+import { StoragePage } from "@/pages/Storage"
 import { ShareTargetPage } from "@/pages/ShareTarget"
 import { UploadToaster } from "@/components/UploadToaster"
 import { Toaster } from "@/components/Toaster"
@@ -177,6 +178,14 @@ export function App() {
           element={
             <Protected>
               <StarredPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/storage"
+          element={
+            <Protected>
+              <StoragePage />
             </Protected>
           }
         />

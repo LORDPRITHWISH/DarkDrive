@@ -46,6 +46,30 @@ meRouter.get("/quota", async (req, res) => {
   })
 })
 
+// Backing payload for the storage analyzer (/storage): every file the user is
+// charged for, plus their folders so sizes can be rolled up into a tree. Same
+// scope as /quota above, so the totals agree.
+// ponytail: whole listing in one response — personal-drive scale; paginate if a
+// drive ever gets big enough to feel it.
+meRouter.get("/storage", async (req, res) => {
+  const user = currentUser(req)
+  const [files, folders] = await Promise.all([
+    prisma.file.findMany({
+      where: { ownerId: user.id, isTrashed: false },
+      orderBy: { size: "desc" },
+    }),
+    prisma.folder.findMany({
+      where: { ownerId: user.id, isTrashed: false },
+      orderBy: { name: "asc" },
+    }),
+  ])
+  res.json({
+    files: files.map((f) => ({ ...f, size: Number(f.size) })),
+    folders,
+    quota: Number(user.storageQuotaBytes),
+  })
+})
+
 meRouter.post("/request-upgrade", async (req, res) => {
   const user = currentUser(req)
   const { bytes } = z

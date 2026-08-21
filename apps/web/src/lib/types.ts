@@ -18,6 +18,9 @@ export type QuotaInfo = {
   bytesByType: Record<Exclude<SearchTypeFilter, "all" | "folder">, number>
 }
 
+// Backing payload for the storage analyzer — GET /api/me/storage.
+export type StorageData = { files: FileItem[]; folders: Folder[]; quota: number }
+
 export type RecentFile = FileItem & { accessedAt: string; action: "view" | "download" }
 
 export type NotificationType =

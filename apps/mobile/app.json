@@ -1,0 +1,24 @@
+{
+  "expo": {
+    "name": "DarkDrive",
+    "slug": "darkdrive",
+    "version": "0.0.1",
+    "orientation": "portrait",
+    "scheme": "darkdrive",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "live.zenux.darkdrive",
+      "infoPlist": {
+        "UIFileSharingEnabled": true,
+        "LSSupportsOpeningDocumentsInPlace": true
+      }
+    },
+    "android": {
+      "package": "live.zenux.darkdrive",
+      "edgeToEdgeEnabled": true
+    },
+    "plugins": ["expo-secure-store", "expo-background-task"]
+  }
+}

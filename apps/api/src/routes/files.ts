@@ -69,6 +69,10 @@ type UploadSession = {
   // Set when this upload is a new version of an existing file rather than a
   // new file — see /upload/init and /upload/complete's replace branch.
   replaceFileId?: string
+  // Optimistic-concurrency base: the sha256 the client believed the target
+  // held when it started. Re-checked at complete (an upload can run for
+  // minutes) so a sync client never overwrites an edit it hasn't seen.
+  expectedSha256?: string
 }
 
 // Ceiling on how many past versions a file keeps. Oldest beyond this are
@@ -226,6 +230,7 @@ filesRouter.post("/upload/init", async (req, res) => {
       size: z.number().int().nonnegative(),
       mimeType: z.string().max(255).optional(),
       replaceFileId: z.string().optional(),
+      expectedSha256: z.string().length(64).optional(),
     })
     .parse(req.body)
 
@@ -236,6 +241,12 @@ filesRouter.post("/upload/init", async (req, res) => {
   if (body.replaceFileId) {
     const target = await getFileWithAccess(user.id, body.replaceFileId, "write")
     if (!target) return res.status(403).json({ error: "forbidden" })
+    if (
+      body.expectedSha256 &&
+      target.sha256 &&
+      target.sha256 !== body.expectedSha256
+    )
+      return res.status(409).json({ error: "conflict", currentSha256: target.sha256 })
     folderId = target.folderId
     // Quota is checked against the file's owner (whose usage total the size
     // change actually affects), excluding the outgoing size so a same-size
@@ -278,6 +289,7 @@ filesRouter.post("/upload/init", async (req, res) => {
     chunks: new Set(),
     createdAt: Date.now(),
     replaceFileId: body.replaceFileId,
+    expectedSha256: body.expectedSha256,
   })
   res.status(201).json({ uploadId, chunkSize: CHUNK_SIZE })
 })
@@ -348,11 +360,15 @@ filesRouter.post("/upload/:uploadId/complete", async (req, res) => {
   const key = newStorageKey(s.name)
   const dest = ensureDirFor(key)
   const out = fs.createWriteStream(dest)
+  // Hashed on the way past rather than in a second pass over the assembled
+  // file — the bytes are already in hand here.
+  const hash = crypto.createHash("sha256")
   try {
     for (let i = 0; i < totalChunks; i++) {
       const src = path.join(s.tmpDir, String(i))
       await new Promise<void>((resolve, reject) => {
         const rd = fs.createReadStream(src)
+        rd.on("data", (c) => hash.update(c))
         rd.on("error", reject)
         rd.on("end", () => resolve())
         rd.pipe(out, { end: false })
@@ -374,6 +390,7 @@ filesRouter.post("/upload/:uploadId/complete", async (req, res) => {
   }
 
   const stat = fs.statSync(dest)
+  const sha256 = hash.digest("hex")
   const abort = (status: number, error: string) => {
     try {
       fs.unlinkSync(dest)
@@ -386,6 +403,12 @@ filesRouter.post("/upload/:uploadId/complete", async (req, res) => {
   }
 
   if (replaceTarget) {
+    // The content may have moved on since /upload/init — a long upload leaves
+    // a wide window. Refusing here is what stops a sync client from throwing
+    // away a version it never saw; the client renames its local copy aside
+    // and takes the server's instead.
+    if (s.expectedSha256 && replaceTarget.sha256 && replaceTarget.sha256 !== s.expectedSha256)
+      return abort(409, "conflict")
     // Re-check quota at commit time, same owner-scoped math as /upload/init.
     const owner = await prisma.user.findUnique({ where: { id: replaceTarget.ownerId } })
     const used = await prisma.file.aggregate({
@@ -422,6 +445,7 @@ filesRouter.post("/upload/:uploadId/complete", async (req, res) => {
           storageKey: key,
           size: BigInt(stat.size),
           mimeType: s.mimeType,
+          sha256,
           lastModifiedById: user.id,
           // Old preview is for the replaced content — drop it so the next
           // read regenerates against the new bytes instead of reusing it.
@@ -475,6 +499,7 @@ filesRouter.post("/upload/:uploadId/complete", async (req, res) => {
         size: BigInt(stat.size),
         mimeType: s.mimeType,
         storageKey: key,
+        sha256,
       },
     })
     if (intoSharedSpace) {

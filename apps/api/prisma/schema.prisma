@@ -41,6 +41,23 @@ model User {
   modifiedFiles File[]         @relation("FileLastModifiedBy")
   fileVersions  FileVersion[]
   activityLogs  ActivityLog[]
+  deviceTokens  DeviceToken[]
+}
+
+// A long-lived bearer credential for a non-browser client (the desktop sync
+// daemon, a mobile app). Cookie sessions only work in a browser, so these
+// clients send `Authorization: Bearer <token>` instead. Only the sha256 of the
+// token is stored — the plaintext is shown once at creation, like any API key.
+model DeviceToken {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  name       String
+  lastSeenAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
 }
 
 model Notification {
@@ -161,6 +178,11 @@ model File {
   size                BigInt
   mimeType            String
   storageKey          String    @unique
+  // sha256 of the live content, computed while assembling the upload. Drives
+  // the sync clients: it is how "this file changed" and "these two copies are
+  // identical" are decided without re-transferring bytes. Null for files that
+  // predate it and for URL imports.
+  sha256              String?
   // Storage key of the generated preview thumbnail (a small JPEG), or null if
   // none exists yet. Populated by the thumbnail pipeline (see lib/thumbnails).
   thumbnailKey        String?

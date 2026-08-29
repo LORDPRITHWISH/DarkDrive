@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "DarkGallery",
+    "slug": "darkgallery",
+    "version": "0.0.1",
+    "orientation": "portrait",
+    "scheme": "darkgallery",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "live.zenux.darkgallery"
+    },
+    "android": {
+      "package": "live.zenux.darkgallery",
+      "edgeToEdgeEnabled": true
+    },
+    "plugins": [
+      "expo-secure-store",
+      "expo-background-task",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "DarkGallery backs up your photos to your own DarkDrive.",
+          "savePhotosPermission": "DarkGallery saves photos you download back to your library.",
+          "isAccessMediaLocationEnabled": true
+        }
+      ]
+    ]
+  }
+}

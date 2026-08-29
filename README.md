@@ -4,6 +4,8 @@ Self-hosted Drive clone — folders, files, sharing, collaborative spaces.
 
 - **Frontend** (`apps/web`) — Vite + React 19 + Tailwind 4 + shadcn/ui + **Zustand** + React Router + Socket.IO client
 - **Backend** (`apps/api`) — Express + TypeScript, Prisma (**Postgres**), **Redis** sessions, **Google OAuth** via Passport, Socket.IO for realtime collab, local disk storage with sharded keys
+- **DarkGallery web** (`apps/gallery`) — separate Vite + React app, its own look, same account and storage
+- **DarkGallery mobile** (`apps/gallery-mobile`) — Expo app that backs up the camera roll
 - **Desktop sync** (`apps/sync`) — zero-dependency Node daemon, two-way folder sync
 - **Mobile** (`apps/mobile`) — Expo / React Native app, same sync engine
 - **Sync core** (`packages/sync-core`) — the conflict rules both clients share
@@ -19,6 +21,72 @@ Self-hosted Drive clone — folders, files, sharing, collaborative spaces.
 - Grid and list views, inline rename, breadcrumbs
 - Shareable links per file/folder with permission, expiry, optional password
 - **Collaborative Spaces**: create a space, invite members by email (VIEWER/EDITOR/ADMIN), shared folder tree inside, realtime presence + filesystem change broadcasts over Socket.IO
+
+## DarkGallery
+
+Google Photos to DarkDrive's Google Drive. A separate frontend (web + mobile),
+but not a separate product: every photo is an ordinary DarkDrive `File` owned
+by the same user, so **it draws on the same storage quota**. The only
+difference is where it lives — a second root folder, `My Photos`, sitting
+beside `My Drive` rather than inside it. Nothing in the gallery shows up in
+the drive's folder tree, and the desktop/mobile folder sync ignores it, so
+pairing a laptop doesn't drag the camera roll onto its disk.
+
+What it does: capture-date timeline grouped by month, albums, favorites,
+bin, drag-and-drop upload, full-screen viewer with keyboard navigation, and
+phone camera-roll backup with de-duplication.
+
+**Albums are folders.** An album is a `Folder` under the photos root, and
+membership is a `FileShortcut` into it — the same mechanism that surfaces a
+file inside a shared space. So a photo lives in exactly one place, sits in as
+many albums as you like, and album sharing is the folder sharing that already
+exists.
+
+**Capture dates.** The API reads `DateTimeOriginal` out of a JPEG's EXIF at
+upload (`apps/api/src/lib/exif.ts` — no exiftool needed). For HEIC and video it
+falls back to the date the client supplied; the mobile app reads that from the
+device's media library, which knows it exactly. Failing both, upload time.
+Times are stored and rendered as the wall clock the camera recorded, so a photo
+always lands on the day it was taken regardless of where it's viewed.
+
+### Run it
+
+```bash
+# apps/api/.env — the gallery is a separate origin, so it needs trusting
+GALLERY_URL=http://localhost:4300
+
+# adds User.photosRootFolderId + File.takenAt. Both columns are new and
+# nullable, so Prisma's "might be data loss" warning about the unique index
+# is spurious — existing rows are all NULL, and NULLs don't collide.
+cd apps/api && npx prisma db push --accept-data-loss
+pnpm --filter gallery dev     # http://localhost:4300
+pnpm --filter gallery-mobile dev
+```
+
+Sign-in is the same Google account as DarkDrive — `/api/auth/google?return=<origin>`
+sends the user back to whichever frontend they started from, validated against
+the same allowlist that bounds CORS.
+
+The mobile app pairs with a device token from `/api/devices/pair`, exactly like
+the DarkDrive app; a token minted for either works for both. Backup is one-way
+and additive: nothing on the phone is ever deleted or modified. Each asset is
+hashed once and checked against the server before uploading, so a reinstall or a
+second phone holding the same photos re-uploads nothing. Background scheduling
+is a hint on both platforms, so it also backs up on every foreground.
+
+### Gallery endpoints
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| `GET`  | `/api/gallery/timeline` | `?filter=all\|favorites\|trash&offset=&limit=` — also returns `photosRootId` |
+| `POST` | `/api/gallery/have` | `{ sha256[] }` → which are already backed up |
+| `GET/POST` | `/api/gallery/albums` | list (with covers + counts) / create |
+| `GET/PATCH/DELETE` | `/api/gallery/albums/:id` | contents / rename / delete |
+| `POST/DELETE` | `/api/gallery/albums/:id/items` | `{ fileIds }` add / remove |
+| `PATCH` | `/api/gallery/items` | `{ ids, isStarred?, isTrashed? }` bulk edit |
+
+Uploads reuse `/api/files/upload/*` with `folderId` = the photos root (plus an
+optional `takenAt`), and single-item edits reuse `PATCH /api/files/:id`.
 
 ## Setup
 

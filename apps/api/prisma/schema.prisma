@@ -29,6 +29,13 @@ model User {
   rootFolderId String? @unique
   rootFolder   Folder? @relation("UserRoot", fields: [rootFolderId], references: [id])
 
+  // Second root folder, sibling to "My Drive" — the home of everything in
+  // DarkGallery. Photos are ordinary File rows owned by the user, so they are
+  // charged against the same storageQuotaBytes as the rest of the drive; they
+  // just live outside the My Drive tree instead of inside it.
+  photosRootFolderId String? @unique
+  photosRoot         Folder? @relation("UserPhotosRoot", fields: [photosRootFolderId], references: [id])
+
   folders       Folder[]       @relation("FolderOwner")
   files         File[]         @relation("FileOwner")
   spaces        Space[]        @relation("SpaceOwner")
@@ -156,6 +163,7 @@ model Folder {
   updatedAt    DateTime  @updatedAt
 
   rootOf       User?          @relation("UserRoot")
+  photosRootOf User?          @relation("UserPhotosRoot")
   spaceRootOf  Space?         @relation("SpaceRoot")
   shares       Share[]
   shortcuts    FileShortcut[] @relation("FolderShortcuts")
@@ -206,6 +214,11 @@ model File {
   storyboardKey       String?
   storyboardState     String?
   storyboardMeta      Json?
+  // When the photo/video was actually shot, as opposed to when it was
+  // uploaded — what the gallery timeline sorts and groups by. Read from EXIF
+  // at upload (see lib/exif) or supplied by the client, which on mobile knows
+  // it exactly from the media library. Null for everything non-visual.
+  takenAt             DateTime?
   isHidden            Boolean   @default(false)
   isTrashed           Boolean   @default(false)
   isStarred           Boolean   @default(false)
@@ -236,6 +249,7 @@ model File {
   @@index([ownerId, folderId])
   @@index([spaceId, folderId])
   @@index([deletedAt])
+  @@index([ownerId, takenAt])
 }
 
 // A superseded content blob for a File, kept so a previous "upload new

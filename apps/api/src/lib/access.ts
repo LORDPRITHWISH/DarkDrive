@@ -102,3 +102,14 @@ export async function assertUserRootFolderId(user: User): Promise<string> {
   await prisma.user.update({ where: { id: user.id }, data: { rootFolderId: root.id } })
   return root.id
 }
+
+// The gallery's root folder, created on first use exactly like the drive root
+// above. It is a *second* root (parentId null), not a child of "My Drive", so
+// photos never show up inside the drive tree — while still being ordinary
+// files owned by the user, and so charged against the same storage quota.
+export async function assertUserPhotosRootId(user: User): Promise<string> {
+  if (user.photosRootFolderId) return user.photosRootFolderId
+  const root = await prisma.folder.create({ data: { name: "My Photos", ownerId: user.id } })
+  await prisma.user.update({ where: { id: user.id }, data: { photosRootFolderId: root.id } })
+  return root.id
+}

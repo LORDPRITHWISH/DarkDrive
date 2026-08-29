@@ -1,0 +1,59 @@
+@import "@workspace/ui/globals.css";
+
+/* DarkGallery runs one theme only, and it is nearly black on purpose: a photo
+   grid is the brightest thing on the screen, and any chrome with its own
+   colour fights the pictures for attention. Same shadcn token names as
+   DarkDrive so the shared components drop straight in — just pushed darker,
+   with a warm safelight amber where DarkDrive uses teal. */
+.dark {
+  --background: oklch(0.135 0.004 240);
+  --card: oklch(0.178 0.005 240);
+  --popover: oklch(0.178 0.005 240);
+  --border: oklch(0.268 0.006 240);
+  --input: oklch(0.268 0.006 240);
+  --primary: oklch(0.79 0.148 71);
+  --primary-foreground: oklch(0.17 0.02 60);
+  --ring: oklch(0.79 0.148 71);
+  --radius: 0.5rem;
+
+  /* The gap between contact-sheet tiles. Small enough that the grid reads as
+     one sheet of film rather than a row of cards. */
+  --tile-gap: 3px;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    /* Vignette from the top so the sticky header has something to sit on
+       without needing an opaque bar over the photos. */
+    background-image: radial-gradient(
+      120% 60% at 50% 0%,
+      oklch(0.2 0.01 240) 0%,
+      transparent 70%
+    );
+    background-attachment: fixed;
+  }
+  /* The grid is dense and scrolls a lot; a thin dark scrollbar keeps the
+     browser default from cutting a bright stripe down the side. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+}
+
+/* Selected tiles pull back slightly inside their cell — the shrink, not a
+   border, is what reads as "picked up" at contact-sheet size. */
+@keyframes tile-in {
+  from {
+    opacity: 0;
+    transform: scale(1.04);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

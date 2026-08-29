@@ -446,5 +446,21 @@ foldersRouter.get("/tree/me", async (req, res) => {
     where: { ownerId: user.id, spaceId: null, isTrashed: false },
     select: { id: true, name: true, parentId: true },
   })
-  res.json({ rootId, folders: mine })
+
+  // Only the drive tree. A folder whose parent chain doesn't reach the drive
+  // root is somewhere the move/link/search pickers have no business offering —
+  // today that means the gallery's "My Photos" root and its albums, which are
+  // a second root of their own (see routes/gallery.ts). Depth-guarded like
+  // sync.ts's walk: nothing should create a parent cycle, but an unbounded
+  // loop over user-shaped data isn't worth the risk.
+  const byId = new Map(mine.map((f) => [f.id, f]))
+  const inDrive = (id: string): boolean => {
+    let cur: string | null = id
+    for (let i = 0; cur && i < 64; i++) {
+      if (cur === rootId) return true
+      cur = byId.get(cur)?.parentId ?? null
+    }
+    return false
+  }
+  res.json({ rootId, folders: mine.filter((f) => inDrive(f.id)) })
 })

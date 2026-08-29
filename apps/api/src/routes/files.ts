@@ -40,6 +40,7 @@ import { probeAudioStreams, getAudioVariant } from "../lib/audioTracks.js"
 import { maybeNotifyQuotaNearLimit } from "../lib/notify.js"
 import { logActivity, mergeActivityEvents } from "../lib/activity.js"
 import { importUrlToFile } from "../lib/urlImport.js"
+import { readCaptureDate } from "../lib/exif.js"
 import { getIO } from "../realtime/socket.js"
 
 export const filesRouter = Router()
@@ -73,6 +74,10 @@ type UploadSession = {
   // held when it started. Re-checked at complete (an upload can run for
   // minutes) so a sync client never overwrites an edit it hasn't seen.
   expectedSha256?: string
+  // Capture date the client already knows — the gallery apps read it off the
+  // device's media library, which is authoritative for HEIC and video where
+  // the server can't parse it. EXIF still wins when the file carries it.
+  takenAt?: string
 }
 
 // Ceiling on how many past versions a file keeps. Oldest beyond this are
@@ -231,6 +236,7 @@ filesRouter.post("/upload/init", async (req, res) => {
       mimeType: z.string().max(255).optional(),
       replaceFileId: z.string().optional(),
       expectedSha256: z.string().length(64).optional(),
+      takenAt: z.string().datetime().optional(),
     })
     .parse(req.body)
 
@@ -290,6 +296,7 @@ filesRouter.post("/upload/init", async (req, res) => {
     createdAt: Date.now(),
     replaceFileId: body.replaceFileId,
     expectedSha256: body.expectedSha256,
+    takenAt: body.takenAt,
   })
   res.status(201).json({ uploadId, chunkSize: CHUNK_SIZE })
 })
@@ -483,6 +490,13 @@ filesRouter.post("/upload/:uploadId/complete", async (req, res) => {
   if (BigInt(used._sum.size ?? BigInt(0)) + BigInt(stat.size) > quota)
     return abort(413, "quota_exceeded")
 
+  // The file's own EXIF beats the client's hint — it is what the camera
+  // recorded, while the hint is whatever the uploading client could work out.
+  // Null here just means read paths fall back to createdAt.
+  const takenAt =
+    (s.mimeType.startsWith("image/") ? await readCaptureDate(dest) : null) ??
+    (s.takenAt ? new Date(s.takenAt) : null)
+
   const intoSharedSpace = !!folder.spaceId
   const primaryFolderId = intoSharedSpace
     ? await assertUserRootFolderId(user)
@@ -500,6 +514,7 @@ filesRouter.post("/upload/:uploadId/complete", async (req, res) => {
         mimeType: s.mimeType,
         storageKey: key,
         sha256,
+        takenAt,
       },
     })
     if (intoSharedSpace) {

@@ -18,7 +18,9 @@ import { searchRouter } from "./routes/search.js"
 import { notificationsRouter } from "./routes/notifications.js"
 import { devicesRouter } from "./routes/devices.js"
 import { syncRouter } from "./routes/sync.js"
+import { galleryRouter } from "./routes/gallery.js"
 import { bearerAuth } from "./auth/deviceToken.js"
+import { ALLOWED_ORIGINS } from "./lib/origins.js"
 import { initSocket } from "./realtime/socket.js"
 
 const app = express()
@@ -26,19 +28,9 @@ const app = express()
 app.set("trust proxy", 1)
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }))
 
-// Build the allowlist from WEB_URL + the optional ALLOWED_ORIGINS env var.
-// Using a function lets us log rejections — easiest way to debug "CORS broke
-// after deploy" scenarios where a trailing slash or stale env slips through.
-const ALLOWED_ORIGINS = Array.from(
-  new Set(
-    [
-      env.WEB_URL,
-      ...(env.ALLOWED_ORIGINS?.split(",") ?? []),
-    ]
-      .map((s) => s.trim().replace(/\/+$/, ""))
-      .filter(Boolean)
-  )
-)
+// The allowlist itself lives in lib/origins (it is also what bounds the
+// post-login redirect). Using a function here lets us log rejections — easiest
+// way to debug "CORS broke after deploy" when a stale env slips through.
 console.log("[api] allowed origins:", ALLOWED_ORIGINS)
 
 app.use(
@@ -108,6 +100,7 @@ app.use("/api/search", searchRouter)
 app.use("/api/notifications", notificationsRouter)
 app.use("/api/devices", devicesRouter)
 app.use("/api/sync", syncRouter)
+app.use("/api/gallery", galleryRouter)
 
 // centralized error handler
 app.use((err: any, _req: express.Request, res: express.Response, _n: express.NextFunction) => {

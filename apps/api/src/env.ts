@@ -6,6 +6,9 @@ const schema = z.object({
   PORT: z.coerce.number().default(4000),
   APP_URL: z.string().url(),
   WEB_URL: z.string().url(),
+  // Origin of the DarkGallery frontend, if it's deployed. Trusted for CORS and
+  // as a post-login redirect target, same as WEB_URL.
+  GALLERY_URL: z.string().url().optional(),
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.string().min(1),
   SESSION_SECRET: z.string().min(10),

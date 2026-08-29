@@ -5,12 +5,20 @@ import { env } from "../env.js"
 import { currentUser, requireAuth } from "../middleware/auth.js"
 import { assertUserRootFolderId } from "../lib/access.js"
 import { prisma } from "../db/prisma.js"
+import { safeReturnUrl } from "../lib/origins.js"
 
 export const authRouter = Router()
 
-authRouter.get(
-  "/google",
-  passport.authenticate("google", { scope: ["profile", "email"] })
+// `?return=<origin>` says which frontend to come back to — DarkGallery is a
+// separate origin from the drive UI, so without it every gallery sign-in would
+// land the user on DarkDrive. It rides along as the OAuth `state` parameter
+// rather than in the session, which passport regenerates on login. Untrusted
+// on the way back, hence re-validated in the callback.
+authRouter.get("/google", (req, res, next) =>
+  passport.authenticate("google", {
+    scope: ["profile", "email"],
+    state: safeReturnUrl(req.query.return) ?? undefined,
+  })(req, res, next)
 )
 
 authRouter.get(
@@ -32,7 +40,7 @@ authRouter.get(
         })
         .catch(() => {})
     }
-    res.redirect(`${env.WEB_URL}/`)
+    res.redirect(safeReturnUrl(req.query.state) ?? `${env.WEB_URL}/`)
   }
 )
 

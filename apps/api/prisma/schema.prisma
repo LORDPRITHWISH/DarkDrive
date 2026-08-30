@@ -49,6 +49,34 @@ model User {
   fileVersions  FileVersion[]
   activityLogs  ActivityLog[]
   deviceTokens  DeviceToken[]
+  telegramSession TelegramSession?
+  telegramBotLink TelegramBotLink?
+}
+
+// Links a user's Telegram account for the Saved-Messages import (see
+// routes/telegram.ts). `session` is a gramjs StringSession — a bearer
+// credential for the *linked Telegram account itself*, not just this API, so
+// treat it like the DeviceToken secret it effectively is.
+model TelegramSession {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session   String
+  phone     String
+  createdAt DateTime @default(now())
+}
+
+// Maps a Telegram chat to a DarkDrive user for the forward-to-bot import
+// (see routes/telegram.ts's /bot/* endpoints). Set up by sending /start
+// <code> to the bot after generating a link code — separate from
+// TelegramSession, since this only needs the bot's own credentials, not a
+// login to the user's personal Telegram account.
+model TelegramBotLink {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chatId    String   @unique
+  createdAt DateTime @default(now())
 }
 
 // A long-lived bearer credential for a non-browser client (the desktop sync
@@ -219,6 +247,13 @@ model File {
   // at upload (see lib/exif) or supplied by the client, which on mobile knows
   // it exactly from the media library. Null for everything non-visual.
   takenAt             DateTime?
+  // Source message this file was imported from, as "<chat>:<messageId>" (see
+  // lib/telegram.ts). Checked *before* downloading so an interrupted import
+  // resumes instead of re-fetching gigabytes and creating duplicate rows —
+  // the unique index below is what makes a re-run idempotent. Null for
+  // everything not imported from Telegram; Postgres treats those NULLs as
+  // distinct, so the constraint doesn't collide across ordinary uploads.
+  telegramRef         String?
   isHidden            Boolean   @default(false)
   isTrashed           Boolean   @default(false)
   isStarred           Boolean   @default(false)
@@ -246,6 +281,7 @@ model File {
   versions     FileVersion[]
   activityLogs ActivityLog[]
 
+  @@unique([ownerId, telegramRef])
   @@index([ownerId, folderId])
   @@index([spaceId, folderId])
   @@index([deletedAt])

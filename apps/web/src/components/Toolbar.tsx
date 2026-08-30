@@ -14,6 +14,7 @@ import {
   MagnifyingGlassIcon,
   LinkSimpleIcon,
   LinkIcon,
+  TelegramLogoIcon,
 } from "@phosphor-icons/react"
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -29,6 +30,7 @@ import { useDrive, type SortKey } from "@/store/drive"
 import { NewFolderDialog } from "./NewFolderDialog"
 import { ImportUrlDialog } from "./ImportUrlDialog"
 import { LinkFilesDialog } from "./LinkFilesDialog"
+import { TelegramDialog } from "./TelegramDialog"
 
 const SORT_LABELS: Record<SortKey, string> = {
   name: "Name",
@@ -43,6 +45,7 @@ export function Toolbar() {
   const folderInput = useRef<HTMLInputElement>(null)
   const [newFolderOpen, setNewFolderOpen] = useState(false)
   const [importUrlOpen, setImportUrlOpen] = useState(false)
+  const [telegramOpen, setTelegramOpen] = useState(false)
   const [linkFilesOpen, setLinkFilesOpen] = useState(false)
   const {
     view,
@@ -110,6 +113,11 @@ export function Toolbar() {
         onClose={() => setImportUrlOpen(false)}
         onSubmit={(url, name) => importUrl(url, name)}
       />
+      <Button size="sm" variant="outline" onClick={() => setTelegramOpen(true)}>
+        <TelegramLogoIcon size={16} />
+        <span className="hidden md:inline">Telegram</span>
+      </Button>
+      <TelegramDialog open={telegramOpen} onClose={() => setTelegramOpen(false)} />
       {folder?.spaceId && currentFolderId && (
         <>
           <Button size="sm" variant="outline" onClick={() => setLinkFilesOpen(true)}>

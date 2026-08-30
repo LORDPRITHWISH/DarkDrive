@@ -19,9 +19,11 @@ import { notificationsRouter } from "./routes/notifications.js"
 import { devicesRouter } from "./routes/devices.js"
 import { syncRouter } from "./routes/sync.js"
 import { galleryRouter } from "./routes/gallery.js"
+import { telegramRouter } from "./routes/telegram.js"
 import { bearerAuth } from "./auth/deviceToken.js"
 import { ALLOWED_ORIGINS } from "./lib/origins.js"
 import { initSocket } from "./realtime/socket.js"
+import { initTelegramBot } from "./lib/telegram.js"
 
 const app = express()
 
@@ -101,6 +103,7 @@ app.use("/api/notifications", notificationsRouter)
 app.use("/api/devices", devicesRouter)
 app.use("/api/sync", syncRouter)
 app.use("/api/gallery", galleryRouter)
+app.use("/api/telegram", telegramRouter)
 
 // centralized error handler
 app.use((err: any, _req: express.Request, res: express.Response, _n: express.NextFunction) => {
@@ -112,6 +115,20 @@ app.use((err: any, _req: express.Request, res: express.Response, _n: express.Nex
 
 const server = http.createServer(app)
 initSocket(server)
+
+// Optional — only runs when a bot token is configured (see env.ts).
+// Non-blocking: the API serves normally even if Telegram is unreachable.
+if (env.TELEGRAM_BOT_TOKEN) {
+  if (env.TELEGRAM_API_ID && env.TELEGRAM_API_HASH) {
+    initTelegramBot().catch((err) => console.error("[telegram bot] failed to start:", err))
+  } else {
+    // Easy to trip over: gramjs speaks MTProto, not the HTTP Bot API, so a
+    // BotFather token alone isn't enough — say so instead of staying silent.
+    console.warn(
+      "[telegram bot] TELEGRAM_BOT_TOKEN is set but TELEGRAM_API_ID/TELEGRAM_API_HASH are not — bot disabled. Get them from https://my.telegram.org/apps"
+    )
+  }
+}
 
 server.listen(env.PORT, () => {
   console.log(`[api] listening on ${env.APP_URL} (port ${env.PORT})`)

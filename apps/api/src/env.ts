@@ -33,6 +33,15 @@ const schema = z.object({
   ENABLE_DEV_LOGIN: z
     .preprocess((v) => v === "true" || v === "1", z.boolean())
     .default(false),
+  // From https://my.telegram.org/apps — identifies this app to Telegram, not
+  // any individual user. Optional: the Telegram import feature (routes/
+  // telegram.ts) 400s with a clear error if these aren't set, rather than
+  // being a hard requirement for every deployment.
+  TELEGRAM_API_ID: z.coerce.number().optional(),
+  TELEGRAM_API_HASH: z.string().optional(),
+  // From @BotFather. Optional, on top of the two above — enables the
+  // forward-to-bot import instead of (or alongside) the Saved-Messages pull.
+  TELEGRAM_BOT_TOKEN: z.string().optional(),
 })
 
 export const env = schema.parse(process.env)

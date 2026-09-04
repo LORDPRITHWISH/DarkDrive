@@ -357,10 +357,11 @@ export function TelegramDialog({ open, onClose }: { open: boolean; onClose: () =
                     </Button>
                   </div>
                   <div className="flex gap-2">
-                    <Button size="sm" asChild>
-                      <a href={deepLink} target="_blank" rel="noreferrer">
-                        Open Telegram
-                      </a>
+                    <Button
+                      size="sm"
+                      render={<a href={deepLink} target="_blank" rel="noreferrer" />}
+                    >
+                      Open Telegram
                     </Button>
                     <Button size="sm" variant="ghost" onClick={() => void refresh()}>
                       I've done it

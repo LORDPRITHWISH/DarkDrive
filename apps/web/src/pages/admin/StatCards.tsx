@@ -51,7 +51,7 @@ export function StatCards({ stats }: { stats: AdminStats }) {
   )
 }
 
-function StatCard({
+export function StatCard({
   icon,
   label,
   value,

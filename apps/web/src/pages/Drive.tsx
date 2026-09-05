@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { ArrowCounterClockwiseIcon, MagnifyingGlassMinusIcon, MagnifyingGlassPlusIcon, UploadSimpleIcon } from "@phosphor-icons/react"
-import { Link, useNavigate, useParams } from "react-router-dom"
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { useDrive, zoomToGrid, ZOOM_MIN, ZOOM_MAX, ZOOM_DEFAULT } from "@/store/drive"
 import { Sidebar } from "@/components/Sidebar"
 import { SidebarToggle } from "@/components/SidebarToggle"
@@ -70,6 +70,23 @@ export function DrivePage() {
   useEffect(() => {
     if (folderId) void loadFolder(folderId)
   }, [folderId, loadFolder])
+
+  // ?file=<id> opens that file's preview once the folder's contents land —
+  // this is what the Telegram bot's "saved" message links at. The ref makes
+  // it a one-shot: closing the preview must not reopen it.
+  const [params, setParams] = useSearchParams()
+  const deepLinked = useRef<string | null>(null)
+  useEffect(() => {
+    const id = params.get("file")
+    if (!id || deepLinked.current === id) return
+    const file = files.find((f) => f.id === id)
+    if (!file) return
+    deepLinked.current = id
+    setPreview(file)
+    const next = new URLSearchParams(params)
+    next.delete("file")
+    setParams(next, { replace: true })
+  }, [params, setParams, files, setPreview])
 
   // Build the same flat ordering the user sees (folders first, then files),
   // so ↑/↓ walks the on-screen list.

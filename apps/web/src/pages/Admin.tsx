@@ -26,6 +26,7 @@ import { LogsPanel } from "./admin/LogsPanel"
 import { HourlyChart } from "./admin/HourlyChart"
 import { RecentActivity } from "./admin/RecentActivity"
 import { RecentLogins } from "./admin/RecentLogins"
+import { TelegramPanel } from "./admin/TelegramPanel"
 import { UsersTable } from "./admin/UsersTable"
 import { UpgradeRequests } from "./admin/UpgradeRequests"
 import { SpacesPanel } from "./admin/SpacesPanel"
@@ -190,6 +191,7 @@ function Dashboard({
         >
           <RecentActivity stats={stats} />
           <RecentLogins stats={stats} />
+          <TelegramPanel />
         </TabsContent>
 
         <TabsContent value="server" className="flex flex-col gap-4">

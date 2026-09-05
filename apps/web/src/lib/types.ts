@@ -4,6 +4,9 @@ export type User = {
   name: string
   avatarUrl?: string | null
   rootFolderId: string
+  // Root of the gallery tree ("My Photos") — a second root alongside My
+  // Drive, where Telegram imports and DarkGallery uploads land.
+  photosRootFolderId: string
   role: "USER" | "ADMIN"
   storageQuotaBytes: number
 }

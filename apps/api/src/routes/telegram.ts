@@ -5,6 +5,7 @@ import { currentUser, requireAuth } from "../middleware/auth.js"
 import { getFolderWithAccess, assertUserPhotosRootId } from "../lib/access.js"
 import { getIO } from "../realtime/socket.js"
 import {
+  awaitCodeSent,
   awaitLoginStep,
   createBotLinkCode,
   getBotUsername,
@@ -55,7 +56,10 @@ telegramRouter.post("/login/start", async (req, res) => {
     if (existing) existing.client.disconnect().catch(() => {})
     pendingLogins.delete(user.id)
 
-    startTelegramLogin(user.id, phone)
+    // Waits for Telegram to actually send the code, so PHONE_NUMBER_INVALID
+    // / FLOOD_WAIT answer this request instead of leaving the client on a
+    // code screen for a code that is never coming.
+    await awaitCodeSent(startTelegramLogin(user.id, phone))
     res.status(201).json({ ok: true })
   } catch (err) {
     fail(res, err)

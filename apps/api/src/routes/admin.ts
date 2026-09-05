@@ -1089,7 +1089,7 @@ adminRouter.post("/recycle-bin/purge-all", async (_req, res) => {
 // substring (the panel uses `[thumb]` to isolate the thumbnail pipeline).
 adminRouter.get("/logs", (req, res) => {
   const q = String(req.query.q ?? "").toLowerCase()
-  const limit = Math.min(Number(req.query.limit) || 300, 800)
+  const limit = Math.min(Number(req.query.limit) || 300, 2000)
   const entries = recentLogs().filter((e) => !q || e.msg.toLowerCase().includes(q))
   res.json({ entries: entries.slice(-limit) })
 })

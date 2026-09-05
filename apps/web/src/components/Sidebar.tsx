@@ -3,6 +3,7 @@ import {
   HouseIcon,
   FolderIcon,
   FolderOpenIcon,
+  ImagesIcon,
   FileIcon,
   UsersThreeIcon,
   PlusIcon,
@@ -199,6 +200,12 @@ export function Sidebar() {
             `/drive/${user.rootFolderId}`,
             "My Drive",
             <FolderIcon size={18} />
+          )}
+        {user &&
+          navItem(
+            `/drive/${user.photosRootFolderId}`,
+            "My Photos",
+            <ImagesIcon size={18} />
           )}
         {navItem("/spaces", "Spaces", <UsersThreeIcon size={18} />)}
         {navItem("/search", "Search", <MagnifyingGlassIcon size={18} />)}

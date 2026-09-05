@@ -11,11 +11,21 @@ import { ensureDirFor, newStorageKey } from "../storage/local.js"
 import { queueThumbnail } from "./thumbnails.js"
 import { getIO } from "../realtime/socket.js"
 import { assertUserPhotosRootId } from "./access.js"
+import { logActivity } from "./activity.js"
 
 export function requireTelegramCreds() {
   if (!env.TELEGRAM_API_ID || !env.TELEGRAM_API_HASH)
     throw Object.assign(new Error("telegram_not_configured"), { status: 400 })
   return { apiId: env.TELEGRAM_API_ID, apiHash: env.TELEGRAM_API_HASH }
+}
+
+// Every event this integration produces goes through here. console.* is
+// captured by lib/logbuf, so these lines are what the admin Telegram panel
+// (Admin -> Activity) shows: who sent what, what landed where, and why
+// anything didn't. Structured as JSON so the panel's substring filter can
+// pick out a chat id or a filename.
+function tlog(event: string, data?: Record<string, unknown>) {
+  console.log(`[telegram] ${event}`, data ? JSON.stringify(data) : "")
 }
 
 function deferred<T>() {
@@ -36,7 +46,13 @@ export type PendingLogin = {
   rejectCode?: (err: unknown) => void
   resolvePassword?: (password: string) => void
   rejectPassword?: (err: unknown) => void
+  // Resolves when gramjs actually asks for the code, i.e. Telegram accepted
+  // the number and sent one. /login/start waits on this so a bad number or a
+  // flood-wait fails there instead of silently at verify time.
+  codeRequested: ReturnType<typeof deferred<void>>
   passwordNeeded: ReturnType<typeof deferred<void>>
+  /** passwordNeeded is one-shot; this records that it has already fired. */
+  passwordAsked: boolean
   done: Promise<void>
 }
 
@@ -72,7 +88,9 @@ export function startTelegramLogin(userId: string, phone: string): PendingLogin 
     client,
     phone,
     createdAt: Date.now(),
+    codeRequested: deferred<void>(),
     passwordNeeded: deferred<void>(),
+    passwordAsked: false,
     done: Promise.resolve(),
   }
 
@@ -83,8 +101,10 @@ export function startTelegramLogin(userId: string, phone: string): PendingLogin 
         new Promise<string>((resolve, reject) => {
           pending.resolveCode = resolve
           pending.rejectCode = reject
+          pending.codeRequested.resolve()
         }),
       password: () => {
+        pending.passwordAsked = true
         pending.passwordNeeded.resolve()
         return new Promise<string>((resolve, reject) => {
           pending.resolvePassword = resolve
@@ -104,8 +124,24 @@ export function startTelegramLogin(userId: string, phone: string): PendingLogin 
       })
     })
 
+  // Nothing awaits `done` between /login/start and /login/verify, so a
+  // failure in that window (PHONE_NUMBER_INVALID, FLOOD_WAIT, a login the
+  // user walks away from) is an unhandled rejection — process-fatal on Node.
+  // awaitCodeSent/awaitLoginStep still see the error; this only sinks it and
+  // retires the dead attempt.
+  pending.done.catch(() => {
+    if (pendingLogins.get(userId) === pending) pendingLogins.delete(userId)
+    client.disconnect().catch(() => {})
+  })
+
   pendingLogins.set(userId, pending)
   return pending
+}
+
+// Resolves once Telegram has actually sent the code, rejects with its own
+// error if it never gets that far.
+export function awaitCodeSent(pending: PendingLogin): Promise<void> {
+  return Promise.race([pending.codeRequested.promise, pending.done])
 }
 
 // Races "login finished" against "a password prompt just appeared" so the
@@ -114,8 +150,15 @@ export function startTelegramLogin(userId: string, phone: string): PendingLogin 
 export async function awaitLoginStep(
   pending: PendingLogin
 ): Promise<{ type: "success" } | { type: "password_required" } | { type: "error"; err: unknown }> {
+  const settled = pending.done
+    .then(() => ({ type: "success" as const }))
+    .catch((err) => ({ type: "error" as const, err }))
+  // passwordNeeded stays resolved once it fires, so racing it again on the
+  // call that carries the password would answer "password_required" forever
+  // and a 2FA account could never finish linking.
+  if (pending.passwordAsked) return settled
   return Promise.race([
-    pending.done.then(() => ({ type: "success" as const })).catch((err) => ({ type: "error" as const, err })),
+    settled,
     pending.passwordNeeded.promise.then(() => ({ type: "password_required" as const })),
   ])
 }
@@ -171,9 +214,9 @@ function hashFile(path: string): Promise<string> {
 }
 
 type SaveResult =
-  | { status: "imported"; size: number }
+  | { status: "imported"; size: number; fileId: string }
   | { status: "skipped_quota" }
-  | { status: "already_imported" }
+  | { status: "already_imported"; fileId?: string }
   | { status: "unsupported" }
   | { status: "failed"; err: unknown }
 
@@ -200,7 +243,7 @@ async function saveTelegramMedia(
     where: { ownerId: userId, telegramRef },
     select: { id: true },
   })
-  if (already) return { status: "already_imported" }
+  if (already) return { status: "already_imported", fileId: already.id }
 
   if (usedBytes >= quotaBytes) return { status: "skipped_quota" }
 
@@ -239,7 +282,7 @@ async function saveTelegramMedia(
       },
     })
     queueThumbnail(file.id)
-    return { status: "imported", size: stat.size }
+    return { status: "imported", size: stat.size, fileId: file.id }
   } catch (err) {
     try {
       fs.unlinkSync(dest)
@@ -317,6 +360,7 @@ export async function runTelegramImport(
       })
     )
     progress.total = counts.reduce((a, b) => a + b, 0) || null
+    tlog("saved-messages import start", { userId, folderId, total: progress.total })
 
     const seen = new Set<number>()
     for (const filter of filters) {
@@ -325,6 +369,9 @@ export async function runTelegramImport(
         seen.add(message.id)
 
         let lastTick = 0
+        let loggedPct = -1
+        const startedAt = Date.now()
+        const name = message.file?.name ?? "file"
         const result = await saveTelegramMedia(
           client,
           message,
@@ -337,8 +384,15 @@ export async function runTelegramImport(
             const now = Date.now()
             if (now - lastTick < PROGRESS_INTERVAL_MS) return
             lastTick = now
-            progress.current = { name: message.file?.name ?? "file", downloaded, total }
+            progress.current = { name, downloaded, total }
             emit()
+            // Console gets one line per 10%, not per 250ms tick — the log ring
+            // the admin panel reads is 2000 lines for the whole process.
+            const pct = total > 0 ? Math.floor((downloaded / total) * 100) : 0
+            if (pct >= loggedPct + 10) {
+              loggedPct = pct
+              tlog("saved-messages download", { userId, messageId: message.id, name, pct, downloaded, total })
+            }
           }
         )
         progress.current = null
@@ -347,6 +401,17 @@ export async function runTelegramImport(
         if (result.status === "imported") {
           usedBytes += BigInt(result.size)
           progress.imported++
+          await logActivity({
+            userId,
+            fileId: result.fileId,
+            action: "upload",
+            detail: {
+              source: "telegram-saved-messages",
+              messageId: message.id,
+              name,
+              size: result.size,
+            },
+          })
         } else if (result.status === "already_imported") {
           progress.alreadyImported++
         } else if (result.status === "skipped_quota") {
@@ -355,12 +420,21 @@ export async function runTelegramImport(
           console.error("[telegram import] failed on message", message.id, result.err)
           progress.failed++
         }
+        tlog("saved-messages item", {
+          userId,
+          messageId: message.id,
+          name,
+          status: result.status,
+          size: result.status === "imported" ? result.size : undefined,
+          ms: Date.now() - startedAt,
+        })
         emit()
       }
     }
   } finally {
     progress.current = null
     emit()
+    tlog("saved-messages import finished", { userId, ...progress, current: undefined })
     await client.disconnect().catch(() => {})
   }
 
@@ -398,19 +472,101 @@ export function getBotUsername(): string | null {
   return botUsername
 }
 
+// Declared size, straight off the message — known before a byte is
+// downloaded, so it can go in the log line that starts the download.
+function mediaSize(message: Api.Message): number {
+  const raw = message.file?.size ?? message.document?.size
+  return raw ? Number(raw.toString()) : 0
+}
+
+export function resultText(status: SaveResult["status"], name: string, link?: string): string {
+  const tail = link ? `\n${link}` : ""
+  switch (status) {
+    case "imported":
+      return `Saved \u2713 ${name}\nIt's in My Photos on DarkDrive.${tail}`
+    case "already_imported":
+      return `Already saved \u2713 ${name}${tail}`
+    case "skipped_quota":
+      return "Skipped \u2014 you're out of storage."
+    case "unsupported":
+      return "I can only save photos and videos."
+    default:
+      return "Couldn't save that one, sorry."
+  }
+}
+
+// The "Downloading..." ack becomes the result, rather than piling a second
+// message on top of it. Editing can fail (message deleted, too old), so a
+// plain send is the fallback.
+async function replaceStatus(
+  client: TelegramClient,
+  chatId: Api.Message["chatId"],
+  statusId: number | undefined,
+  text: string
+) {
+  if (statusId !== undefined) {
+    try {
+      await client.editMessage(chatId!, { message: statusId, text })
+      return
+    } catch {}
+  }
+  await client.sendMessage(chatId!, { message: text })
+}
+
+// Anything that isn't media gets an answer. The bot used to ignore text
+// completely, which made it look dead to anyone who said hello to it.
+export async function replyForText(
+  text: string,
+  user: { id: string; email: string; storageQuotaBytes: bigint | null },
+  photosUrl: string
+): Promise<string> {
+  if (text.startsWith("/status")) {
+    const [used, imported] = await Promise.all([
+      prisma.file.aggregate({ _sum: { size: true }, where: { ownerId: user.id, isTrashed: false } }),
+      prisma.file.count({ where: { ownerId: user.id, telegramRef: { not: null } } }),
+    ])
+    const gb = (n: bigint) => (Number(n) / 1024 ** 3).toFixed(2)
+    return [
+      `Linked to ${user.email}`,
+      `${imported} file${imported === 1 ? "" : "s"} imported from Telegram`,
+      `${gb(BigInt(used._sum.size ?? BigInt(0)))} GB of ${gb(user.storageQuotaBytes ?? BigInt(0))} GB used`,
+      "",
+      photosUrl,
+    ].join("\n")
+  }
+  return [
+    "Send or forward a photo or video here and I'll save it straight to your DarkDrive Photos.",
+    "",
+    "/status \u2014 what's linked and how much storage you have left",
+    "/help \u2014 this message",
+    "",
+    `Your photos: ${photosUrl}`,
+  ].join("\n")
+}
+
 async function handleBotMessage(event: NewMessageEvent) {
   const client = botClient
   const message = event.message
   if (!client || !message?.chatId) return
   const chatId = message.chatId.toString()
+  const text = message.message?.trim() ?? ""
+  const media = resolveMediaMeta(message as unknown as Parameters<typeof resolveMediaMeta>[0])
 
-  const text = message.message?.trim()
-  if (text?.startsWith("/start")) {
+  tlog("bot message", {
+    chatId,
+    messageId: message.id,
+    senderId: message.senderId?.toString(),
+    text: text.slice(0, 500) || undefined,
+    media: media ? { ...media, size: mediaSize(message) } : undefined,
+  })
+
+  if (text.startsWith("/start")) {
     const code = text.split(/\s+/)[1]
     const pending = code ? botLinkCodes.get(code) : undefined
     if (!pending || pending.expiresAt < Date.now()) {
+      tlog("bot link rejected", { chatId, code, reason: pending ? "expired" : "unknown_code" })
       await client.sendMessage(message.chatId, {
-        message: "That link code is invalid or expired — grab a fresh one from DarkDrive.",
+        message: "That link code is invalid or expired \u2014 grab a fresh one from DarkDrive.",
       })
       return
     }
@@ -420,6 +576,7 @@ async function handleBotMessage(event: NewMessageEvent) {
       update: { chatId },
       create: { userId: pending.userId, chatId },
     })
+    tlog("bot linked", { chatId, userId: pending.userId })
     await client.sendMessage(message.chatId, {
       message: "Linked! Send or forward photos and videos here and they'll land in your DarkDrive Photos.",
     })
@@ -428,25 +585,54 @@ async function handleBotMessage(event: NewMessageEvent) {
 
   const link = await prisma.telegramBotLink.findUnique({ where: { chatId } })
   if (!link) {
+    tlog("bot message from unlinked chat", { chatId })
     await client.sendMessage(message.chatId, {
       message:
-        "This chat isn't linked to a DarkDrive account yet — grab a link code from DarkDrive and send /start <code> here.",
+        "This chat isn't linked to a DarkDrive account yet \u2014 grab a link code from DarkDrive and send /start <code> here.",
     })
     return
   }
 
-  // Ignore text/stickers/other non-media chatter silently — replying to
-  // every message in a chat meant for dropping photos would get noisy fast.
-  if (!resolveMediaMeta(message as unknown as Parameters<typeof resolveMediaMeta>[0])) return
-
   const user = await prisma.user.findUnique({ where: { id: link.userId } })
-  if (!user) return
+  if (!user) {
+    tlog("bot link points at a missing user", { chatId, userId: link.userId })
+    return
+  }
+  const room = getIO()?.to(`user:${user.id}`)
+
+  if (!media) {
+    // Reads user.photosRootFolderId, only hitting the DB the first time a
+    // given account ever needs the folder created.
+    const photosUrl = `${env.WEB_URL}/drive/${await assertUserPhotosRootId(user)}`
+    const reply = await replyForText(text, user, photosUrl)
+    await client.sendMessage(message.chatId, { message: reply })
+    tlog("bot replied to text", { chatId, user: user.email, text: text.slice(0, 500) })
+    return
+  }
+
   const folderId = await assertUserPhotosRootId(user)
   const used = await prisma.file.aggregate({
     _sum: { size: true },
     where: { ownerId: user.id, isTrashed: false },
   })
   const quota = user.storageQuotaBytes ?? BigInt(0)
+  const ref = `${chatId}:${message.id}`
+  const startedAt = Date.now()
+
+  tlog("bot download start", {
+    chatId,
+    messageId: message.id,
+    user: user.email,
+    name: media.name,
+    size: mediaSize(message),
+    folderId,
+  })
+  const status = await client
+    .sendMessage(message.chatId, { message: `Downloading ${media.name}\u2026` })
+    .catch(() => null)
+
+  let lastTick = 0
+  let loggedPct = -1
   const result = await saveTelegramMedia(
     client,
     message,
@@ -454,20 +640,63 @@ async function handleBotMessage(event: NewMessageEvent) {
     folderId,
     quota,
     BigInt(used._sum.size ?? BigInt(0)),
-    `${chatId}:${message.id}`
+    ref,
+    (downloaded, total) => {
+      const now = Date.now()
+      if (now - lastTick < PROGRESS_INTERVAL_MS) return
+      lastTick = now
+      // Two audiences: the browser gets every tick (it draws a bar), the log
+      // ring gets one line per 10% so a single big file can't flush it.
+      room?.emit("telegram:bot:progress", { id: ref, name: media.name, downloaded, total })
+      const pct = total > 0 ? Math.floor((downloaded / total) * 100) : 0
+      if (pct >= loggedPct + 10) {
+        loggedPct = pct
+        tlog("bot download progress", { chatId, name: media.name, pct, downloaded, total })
+      }
+    }
   )
 
-  getIO()?.to(`user:${user.id}`).emit("telegram:bot:received", { status: result.status })
-  await client.sendMessage(message.chatId, {
-    message:
-      result.status === "imported"
-        ? "Saved ✓"
-        : result.status === "already_imported"
-          ? "Already saved ✓"
-          : result.status === "skipped_quota"
-            ? "Skipped — you're out of storage."
-            : "Couldn't save that one, sorry.",
+  if (result.status === "imported") {
+    await logActivity({
+      userId: user.id,
+      fileId: result.fileId,
+      action: "upload",
+      detail: {
+        source: "telegram-bot",
+        chatId,
+        messageId: message.id,
+        name: media.name,
+        size: result.size,
+        caption: text || undefined,
+      },
+    })
+  }
+  tlog("bot import result", {
+    chatId,
+    messageId: message.id,
+    user: user.email,
+    name: media.name,
+    status: result.status,
+    size: result.status === "imported" ? result.size : mediaSize(message),
+    ms: Date.now() - startedAt,
+    error:
+      result.status === "failed"
+        ? String((result.err as { message?: string })?.message ?? result.err)
+        : undefined,
   })
+
+  room?.emit("telegram:bot:received", { id: ref, name: media.name, status: result.status })
+  // Straight at the file, not just the folder — /drive/:folderId?file=:id
+  // opens the preview (see web pages/Drive.tsx).
+  const fileId =
+    result.status === "imported" || result.status === "already_imported" ? result.fileId : undefined
+  const previewLink = fileId ? `${env.WEB_URL}/drive/${folderId}?file=${fileId}` : undefined
+  await replaceStatus(
+    client,
+    message.chatId,
+    status?.id,
+    resultText(result.status, media.name, previewLink)
+  )
 }
 
 // Connects the bot once at server startup (see index.ts) and leaves it
@@ -485,6 +714,17 @@ export async function initTelegramBot(): Promise<void> {
   const me = await client.getMe()
   botUsername = (me as unknown as { username?: string }).username ?? null
   botClient = client
-  client.addEventHandler(handleBotMessage, new NewMessage({}))
-  console.log(`[telegram bot] connected as @${botUsername ?? "unknown"}`)
+  // A throw inside a gramjs handler is an unhandled rejection, i.e. a silent
+  // death for that message — catch at the one entry point so it lands in the
+  // log the admin panel reads instead.
+  client.addEventHandler(
+    (event) =>
+      handleBotMessage(event).catch((err) =>
+        console.error("[telegram] bot handler failed:", err)
+      ),
+    // incoming only: without it the bot's own replies come back as events
+    // and it answers itself.
+    new NewMessage({ incoming: true })
+  )
+  tlog("bot connected", { username: botUsername })
 }

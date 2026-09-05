@@ -5,7 +5,7 @@
 // need history across deploys.
 export type LogEntry = { t: number; level: "log" | "warn" | "error"; msg: string }
 
-const MAX = 800
+const MAX = 2000
 const buf: LogEntry[] = []
 
 export function recentLogs(): LogEntry[] {

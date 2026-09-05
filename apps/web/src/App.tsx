@@ -29,6 +29,7 @@ import { Toaster } from "@/components/Toaster"
 import { ConfirmDialog } from "@/components/ConfirmDialog"
 import { getSocket } from "@/lib/socket"
 import { useNotifications } from "@/store/notifications"
+import { useDrive } from "@/store/drive"
 import { toast } from "@/store/toast"
 import type { AppNotification } from "@/lib/types"
 
@@ -95,8 +96,64 @@ export function App() {
       toast.info(n.title)
     }
     s.on("notification:new", onNotification)
+
+    // Media forwarded to the Telegram bot is downloaded server-side and can
+    // start at any time, with no request from this tab to hang progress off —
+    // so it gets pushed into the same upload tracker a drag-and-drop uses.
+    const upsertUpload = (id: string, patch: Record<string, unknown>) => {
+      const uploads = useDrive.getState().uploads
+      const row = uploads.find((u) => u.id === id)
+      useDrive.setState({
+        uploads: row
+          ? uploads.map((u) => (u.id === id ? { ...u, ...patch } : u))
+          : [
+              ...uploads,
+              { id, name: "", size: 0, loaded: 0, progress: 0, speed: 0, done: false, ...patch },
+            ],
+      })
+    }
+    const onTgProgress = (p: {
+      id: string
+      name: string
+      downloaded: number
+      total: number
+    }) =>
+      upsertUpload(`tg:${p.id}`, {
+        name: `${p.name} (Telegram)`,
+        size: p.total,
+        loaded: p.downloaded,
+        progress: p.total > 0 ? (p.downloaded / p.total) * 100 : 0,
+      })
+    const onTgDone = (p: { id: string; name: string; status: string }) => {
+      const id = `tg:${p.id}`
+      upsertUpload(id, {
+        name: `${p.name} (Telegram)`,
+        progress: 100,
+        done: true,
+        // Reuse the toaster's own error copy where the wording already exists.
+        error:
+          p.status === "imported" || p.status === "already_imported"
+            ? undefined
+            : p.status === "skipped_quota"
+              ? "quota_exceeded"
+              : p.status,
+      })
+      if (p.status === "imported") void useDrive.getState().refresh()
+      setTimeout(
+        () =>
+          useDrive.setState({
+            uploads: useDrive.getState().uploads.filter((u) => u.id !== id),
+          }),
+        5000
+      )
+    }
+    s.on("telegram:bot:progress", onTgProgress)
+    s.on("telegram:bot:received", onTgDone)
+
     return () => {
       s.off("notification:new", onNotification)
+      s.off("telegram:bot:progress", onTgProgress)
+      s.off("telegram:bot:received", onTgDone)
     }
   }, [])
   return (

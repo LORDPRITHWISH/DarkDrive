@@ -3,7 +3,7 @@ import { z } from "zod"
 import { passport } from "../auth/passport.js"
 import { env } from "../env.js"
 import { currentUser, requireAuth } from "../middleware/auth.js"
-import { assertUserRootFolderId } from "../lib/access.js"
+import { assertUserPhotosRootId, assertUserRootFolderId } from "../lib/access.js"
 import { prisma } from "../db/prisma.js"
 import { safeReturnUrl } from "../lib/origins.js"
 
@@ -117,13 +117,19 @@ authRouter.post("/logout", (req, res) => {
 
 authRouter.get("/me", requireAuth, async (req, res) => {
   const u = currentUser(req)
-  const rootFolderId = await assertUserRootFolderId(u)
+  // Both roots: "My Photos" is a sibling of "My Drive", not a child, so the
+  // sidebar can't reach it by walking the drive tree — it needs the id.
+  const [rootFolderId, photosRootFolderId] = await Promise.all([
+    assertUserRootFolderId(u),
+    assertUserPhotosRootId(u),
+  ])
   res.json({
     id: u.id,
     email: u.email,
     name: u.name,
     avatarUrl: u.avatarUrl,
     rootFolderId,
+    photosRootFolderId,
     role: u.role,
     storageQuotaBytes: Number(u.storageQuotaBytes),
   })

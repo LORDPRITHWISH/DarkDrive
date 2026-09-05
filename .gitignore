@@ -29,6 +29,7 @@ npm-debug.log*
 .DS_Store
 *.pem
 apps/web/.env.production
+apps/gallery/.env.production
 .codex
 
 .superpowers

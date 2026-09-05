@@ -12,6 +12,7 @@ import {
   ShieldCheckIcon,
   StarIcon,
   TrashIcon,
+  UserCircleIcon,
   PushPinSlashIcon,
   UploadIcon,
   UploadSimpleIcon,
@@ -216,6 +217,7 @@ export function Sidebar() {
         {navItem("/bin", "Bin", <TrashIcon size={18} />)}
         {user?.role === "ADMIN" &&
           navItem("/admin", "Admin", <ShieldCheckIcon size={18} />)}
+        {navItem("/profile", "Profile", <UserCircleIcon size={18} />)}
       </nav>
 
       {/* Pinned spaces — the "/spaces" nav item above is the full gateway;
@@ -364,20 +366,29 @@ export function Sidebar() {
           collapsed ? "flex-col" : ""
         }`}
       >
-        {user?.avatarUrl && (
-          <img
-            src={user.avatarUrl}
-            alt={user.name}
-            title={collapsed ? `${user.name}\n${user.email}` : undefined}
-            className="h-8 w-8 rounded-full shrink-0"
-          />
-        )}
-        {!collapsed && (
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-medium">{user?.name}</div>
-            <div className="truncate text-xs text-muted-foreground">{user?.email}</div>
-          </div>
-        )}
+        <Link
+          to="/profile"
+          title={collapsed ? `${user?.name}\n${user?.email}` : "Profile"}
+          className={`flex min-w-0 items-center gap-2 rounded-md hover:bg-accent/60 ${
+            collapsed ? "" : "flex-1 p-1"
+          }`}
+        >
+          {user?.avatarUrl ? (
+            <img
+              src={user.avatarUrl}
+              alt={user.name}
+              className="h-8 w-8 rounded-full shrink-0"
+            />
+          ) : (
+            <UserCircleIcon size={28} className="shrink-0 text-muted-foreground" />
+          )}
+          {!collapsed && (
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-medium">{user?.name}</div>
+              <div className="truncate text-xs text-muted-foreground">{user?.email}</div>
+            </div>
+          )}
+        </Link>
         <ThemeToggle />
         <Button
           size="sm"

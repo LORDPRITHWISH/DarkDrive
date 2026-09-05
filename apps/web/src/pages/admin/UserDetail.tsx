@@ -49,6 +49,7 @@ import {
   TableHeader,
   TableRow,
 } from "@workspace/ui/components/table"
+import { ScrollArea } from "@workspace/ui/components/scroll-area"
 import { apiGet } from "@/lib/api"
 import { formatBytes, formatDate, relativeTime } from "@/lib/format"
 import { iconFor } from "@/lib/fileIcon"
@@ -451,7 +452,7 @@ function Tile({
   )
 }
 
-function StorageSection({ data }: { data: UserDetailData }) {
+export function StorageSection({ data }: { data: UserDetailData }) {
   const s = data.storage
   const segments = TYPE_ORDER.filter((k) => s.bytesByType[k] > 0)
   return (
@@ -822,7 +823,7 @@ function DriveBrowserDialog({
   )
 }
 
-function ActivitySection({ data }: { data: UserDetailData }) {
+export function ActivitySection({ data }: { data: UserDetailData }) {
   const a = data.activity
   return (
     <section>
@@ -861,15 +862,50 @@ type TimelineEvent = {
   fileId?: string | null
 }
 
-function TimelineSection({
+// Group events into time buckets the way Google-style feeds do (same idea as
+// RecentActivity's bucket()), so the "view all" modal reads as a story
+// instead of a flat log.
+function timelineBucket(iso: string): { key: string; label: string; order: number } {
+  const then = new Date(iso)
+  const now = new Date()
+  const day0 = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const hours = (now.getTime() - then.getTime()) / 3600000
+  if (hours < 1) return { key: "last-hour", label: "Last hour", order: 0 }
+  if (then.getTime() >= day0.getTime())
+    return { key: "today", label: "Earlier today", order: 1 }
+  const y = new Date(day0)
+  y.setDate(y.getDate() - 1)
+  if (then.getTime() >= y.getTime())
+    return { key: "yesterday", label: "Yesterday", order: 2 }
+  const w = new Date(day0)
+  w.setDate(w.getDate() - 7)
+  if (then.getTime() >= w.getTime())
+    return { key: "week", label: "This week", order: 3 }
+  return { key: "older", label: "Older", order: 4 }
+}
+
+function groupByBucket(events: TimelineEvent[]) {
+  const groups = new Map<string, { label: string; order: number; items: TimelineEvent[] }>()
+  for (const e of events) {
+    const b = timelineBucket(e.at)
+    if (!groups.has(b.key)) groups.set(b.key, { label: b.label, order: b.order, items: [] })
+    groups.get(b.key)!.items.push(e)
+  }
+  return Array.from(groups.values()).sort((a, b) => a.order - b.order)
+}
+
+export function TimelineSection({
   data,
-  loadingFileId,
+  loadingFileId = null,
   onOpenFile,
 }: {
   data: UserDetailData
-  loadingFileId: string | null
-  onOpenFile: (id: string) => void
+  loadingFileId?: string | null
+  // Omitted on the profile page: it has no admin route to fetch a file
+  // record with, so timeline rows there are read-only.
+  onOpenFile?: (id: string) => void
 }) {
+  const [showAll, setShowAll] = useState(false)
   const events: TimelineEvent[] = []
 
   events.push({
@@ -941,47 +977,114 @@ function TimelineSection({
 
   return (
     <section>
-      <SectionTitle icon={ClockCounterClockwiseIcon}>Lifecycle timeline</SectionTitle>
+      <SectionTitle
+        icon={ClockCounterClockwiseIcon}
+        right={
+          events.length > 10 && (
+            <button
+              type="button"
+              onClick={() => setShowAll(true)}
+              className="text-primary text-xs hover:underline"
+            >
+              View all
+            </button>
+          )
+        }
+      >
+        Lifecycle timeline
+      </SectionTitle>
       <div className="bg-card rounded-lg border p-2">
         <ul className="flex flex-col">
-          {events.map((e) => {
-            const Icon = e.icon
-            const openable = !!e.fileId
-            return (
-              <li key={e.key}>
-                <button
-                  type="button"
-                  disabled={!openable || loadingFileId === e.fileId}
-                  onClick={() => e.fileId && onOpenFile(e.fileId)}
-                  className={`flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-left ${
-                    openable
-                      ? "hover:bg-accent/40 disabled:opacity-60"
-                      : "cursor-default"
-                  }`}
-                >
-                  <span
-                    className={`${e.tint} grid h-6 w-6 shrink-0 place-items-center rounded-full`}
-                  >
-                    <Icon size={12} weight="fill" />
-                  </span>
-                  <span className="min-w-0 flex-1 truncate text-sm">{e.node}</span>
-                  <span
-                    className="text-muted-foreground shrink-0 text-xs tabular-nums"
-                    title={formatDate(e.at)}
-                  >
-                    {relativeTime(e.at)}
-                  </span>
-                </button>
-              </li>
-            )
-          })}
+          {events.slice(0, 10).map((e) => (
+            <TimelineRow
+              key={e.key}
+              event={e}
+              loadingFileId={loadingFileId}
+              onOpenFile={onOpenFile}
+            />
+          ))}
         </ul>
       </div>
+
+      <Dialog open={showAll} onOpenChange={setShowAll}>
+        <DialogContent className="flex h-[70vh] w-full max-w-2xl flex-col gap-0 overflow-hidden p-0">
+          <DialogHeader className="border-b px-4 py-3">
+            <DialogTitle className="text-sm font-semibold">Lifecycle timeline</DialogTitle>
+          </DialogHeader>
+          <ScrollArea className="flex-1">
+            <div className="p-2">
+              {groupByBucket(events.slice(0, 50)).map((group) => (
+                <div key={group.label} className="mb-1">
+                  <div className="text-muted-foreground px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider">
+                    {group.label}
+                  </div>
+                  <ul className="flex flex-col">
+                    {group.items.map((e) => (
+                      <TimelineRow
+                        key={e.key}
+                        event={e}
+                        loadingFileId={loadingFileId}
+                        onOpenFile={onOpenFile}
+                        detailed
+                      />
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
     </section>
   )
 }
 
-function LoginSection({ data }: { data: UserDetailData }) {
+function TimelineRow({
+  event: e,
+  loadingFileId,
+  onOpenFile,
+  detailed = false,
+}: {
+  event: TimelineEvent
+  loadingFileId: string | null
+  onOpenFile?: (id: string) => void
+  // Modal-only: room for the absolute timestamp alongside the relative one,
+  // instead of it living in a hover title.
+  detailed?: boolean
+}) {
+  const Icon = e.icon
+  const openable = !!e.fileId && !!onOpenFile
+  return (
+    <li>
+      <button
+        type="button"
+        disabled={!openable || loadingFileId === e.fileId}
+        onClick={() => e.fileId && onOpenFile?.(e.fileId)}
+        className={`flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-left ${
+          openable ? "hover:bg-accent/40 disabled:opacity-60" : "cursor-default"
+        }`}
+      >
+        <span className={`${e.tint} grid h-6 w-6 shrink-0 place-items-center rounded-full`}>
+          <Icon size={12} weight="fill" />
+        </span>
+        <span className="min-w-0 flex-1 truncate text-sm">{e.node}</span>
+        {detailed && (
+          <span className="text-muted-foreground hidden shrink-0 text-xs sm:block">
+            {formatDate(e.at)}
+          </span>
+        )}
+        <span
+          className="text-muted-foreground w-14 shrink-0 text-right text-xs tabular-nums"
+          title={detailed ? undefined : formatDate(e.at)}
+        >
+          {relativeTime(e.at)}
+        </span>
+      </button>
+    </li>
+  )
+}
+
+export function LoginSection({ data }: { data: UserDetailData }) {
   const l = data.logins
   return (
     <section>
@@ -1040,7 +1143,7 @@ function LoginSection({ data }: { data: UserDetailData }) {
   )
 }
 
-function SharingSection({ data }: { data: UserDetailData }) {
+export function SharingSection({ data }: { data: UserDetailData }) {
   const s = data.sharing
   return (
     <section>

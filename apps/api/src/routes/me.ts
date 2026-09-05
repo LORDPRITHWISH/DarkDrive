@@ -3,6 +3,7 @@ import { z } from "zod"
 import { prisma } from "../db/prisma.js"
 import { currentUser, requireAuth } from "../middleware/auth.js"
 import { fileCategory, type FileCategory } from "../lib/fileType.js"
+import { buildUserDetail } from "../lib/userDetail.js"
 
 declare module "express-session" {
   interface SessionData {
@@ -12,6 +13,14 @@ declare module "express-session" {
 
 export const meRouter = Router()
 meRouter.use(requireAuth)
+
+// The profile page: the same lifecycle aggregate the admin drawer shows,
+// scoped to whoever is asking.
+meRouter.get("/detail", async (req, res) => {
+  const data = await buildUserDetail(currentUser(req).id)
+  if (!data) return res.status(404).json({ error: "not_found" })
+  res.json(data)
+})
 
 meRouter.get("/quota", async (req, res) => {
   const user = currentUser(req)

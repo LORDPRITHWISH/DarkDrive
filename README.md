@@ -201,7 +201,9 @@ device. `/api/files/upload/init` takes an `expectedSha256` and answers `409` if
 the server moved on underneath, which is what triggers it.
 
 Environment: `DD_HOME` relocates the config/state dir (run several syncs on one
-machine), `DD_POLL_MS` changes the 5s poll interval.
+machine), `DD_POLL_MS` changes the 5s poll interval, `DD_API` sets the server
+for a first run with no `--api=` and no saved config (otherwise
+`https://api.darkdrive.zenux.live`).
 
 ## Mobile (`apps/mobile`)
 

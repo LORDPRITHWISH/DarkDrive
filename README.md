@@ -3,7 +3,7 @@
 Self-hosted Drive clone — folders, files, sharing, collaborative spaces.
 
 - **Frontend** (`apps/web`) — Vite + React 19 + Tailwind 4 + shadcn/ui + **Zustand** + React Router + Socket.IO client
-- **Backend** (`apps/api`) — Express + TypeScript, Prisma (**Postgres**), **Redis** sessions, **Google OAuth** via Passport, Socket.IO for realtime collab, local disk storage with sharded keys
+- **Backend** (`apps/api`) — Express + TypeScript, Prisma (**Postgres**), **Redis** sessions, **Google OAuth** via Passport, Socket.IO for realtime collab, pluggable storage (local disk with sharded keys, or S3-compatible)
 - **DarkGallery web** (`apps/gallery`) — separate Vite + React app, its own look, same account and storage
 - **DarkGallery mobile** (`apps/gallery-mobile`) — Expo app that backs up the camera roll
 - **Desktop sync** (`apps/sync`) — zero-dependency Node daemon, two-way folder sync
@@ -245,4 +245,37 @@ Presence: `presence:join`, `presence:leave`
 
 ## Storage layout
 
-Uploads are placed under `apps/api/storage/<2-char-shard>/<nanoid><ext>`. The DB `File.storageKey` is the relative path. Deleting a DB record unlinks the on-disk file.
+Uploads are placed under `apps/api/storage/<2-char-shard>/<nanoid><ext>`. The DB `File.storageKey` is the relative path, prefixed with which backend wrote it (`local:...` or `s3:...` — see below). Deleting a DB record unlinks the blob (`apps/api/src/storage/`).
+
+Two interchangeable backends:
+
+- **`local`** (default) — files live under `STORAGE_DIR` on the server's own disk.
+- **`s3`** — files are pushed to an S3-compatible bucket (Vultr Object Storage, AWS S3, R2, ...). `STORAGE_DIR` is still used as local scratch space either way: chunked-upload assembly, ffmpeg/libreoffice temp files, and (for the S3 driver) a working copy when a tool needs a real file path.
+
+Which one **new uploads** go to is switched live from **Admin → Server → Storage backend** — no restart needed. `S3_*` credentials (`apps/api/.env.example`) still have to be set for the S3 option to be selectable there; the panel only lets you flip between backends that are actually configured. Switching never touches files that already exist: every stored key carries its own backend as a prefix, so a file written under `local` keeps loading from local disk even after an admin switches new uploads to `s3`, and vice versa. There's no bulk-migration step — moving old files to the new backend, if you want that, is a manual copy.
+
+### Growing local storage: Vultr Block Storage
+
+If you're staying on `STORAGE_DRIVER=local` and the boot disk is filling up, attach a [Vultr Block Storage](https://my.vultr.com/blockstorage/) volume and point `STORAGE_DIR` at its mount — no code change needed, `STORAGE_DIR` already just points at a directory.
+
+```bash
+# 1. Create the volume in the Vultr control panel (Block Storage → Add),
+#    same region as the server, then attach it to the instance. It shows
+#    up as a new block device — confirm the name:
+lsblk
+
+# 2. Format it (once — skip this on a volume that already has data):
+sudo mkfs.ext4 /dev/vdb
+
+# 3. Mount it:
+sudo mkdir -p /mnt/darkdrive-storage
+sudo mount /dev/vdb /mnt/darkdrive-storage
+
+# 4. Persist the mount across reboots — add to /etc/fstab:
+echo '/dev/vdb /mnt/darkdrive-storage ext4 defaults,nofail,discard 0 0' | sudo tee -a /etc/fstab
+
+# 5. Point the API at it and restart:
+#    STORAGE_DIR=/mnt/darkdrive-storage   (apps/api/.env)
+```
+
+If you're migrating an existing deployment (not a fresh volume), copy the current `STORAGE_DIR` contents over first (`rsync -a old-storage/ /mnt/darkdrive-storage/`) before switching the env var, so existing `File.storageKey` paths keep resolving.

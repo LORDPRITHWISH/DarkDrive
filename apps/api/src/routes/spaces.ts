@@ -7,13 +7,7 @@ import { nanoid } from "nanoid"
 import { prisma } from "../db/prisma.js"
 import { currentUser, requireAuth } from "../middleware/auth.js"
 import { notify } from "../lib/notify.js"
-import {
-  STORAGE_ROOT,
-  absolutePath,
-  ensureDirFor,
-  newStorageKey,
-  removeFile,
-} from "../storage/local.js"
+import { storage, newStorageKey, newScratchPath, SCRATCH_ROOT } from "../storage/index.js"
 
 export const spacesRouter = Router()
 spacesRouter.use(requireAuth)
@@ -22,7 +16,7 @@ spacesRouter.use(requireAuth)
 const logoUpload = multer({
   storage: multer.diskStorage({
     destination: (_req, _file, cb) => {
-      const tmp = path.join(STORAGE_ROOT, ".tmp")
+      const tmp = path.join(SCRATCH_ROOT, ".tmp")
       fs.mkdirSync(tmp, { recursive: true })
       cb(null, tmp)
     },
@@ -261,8 +255,7 @@ spacesRouter.get("/:id/overview", async (req, res) => {
 spacesRouter.post("/logo", logoUpload.single("logo"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "no_file" })
   const key = newStorageKey(req.file.originalname)
-  const dest = ensureDirFor(key)
-  fs.renameSync(req.file.path, dest)
+  await storage.putFile(key, req.file.path)
   res.status(201).json({ logoKey: key })
 })
 
@@ -274,11 +267,11 @@ spacesRouter.get("/:id/logo", async (req, res) => {
     select: { logoKey: true },
   })
   if (!s?.logoKey) return res.status(404).json({ error: "no_logo" })
-  const abs = absolutePath(s.logoKey)
-  if (!fs.existsSync(abs)) return res.status(410).json({ error: "gone" })
+  const result = await storage.readStream(s.logoKey)
+  if (!result) return res.status(410).json({ error: "gone" })
   // Logos rarely change (rewrites get a new key) — let the browser cache them.
   res.setHeader("Cache-Control", "public, max-age=86400")
-  fs.createReadStream(abs).pipe(res)
+  result.stream.pipe(res)
 })
 
 // Owner-only: update space attributes.
@@ -309,7 +302,7 @@ spacesRouter.patch("/:id", async (req, res) => {
     space.logoKey !== updated.logoKey
   ) {
     try {
-      removeFile(space.logoKey)
+      await storage.remove(space.logoKey)
     } catch {}
   }
   res.json(updated)

@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
-import { absolutePath, ensureDirFor } from "../storage/local.js"
+import { storage, newScratchPath } from "../storage/index.js"
 import { run } from "./thumbnails.js"
 
 export type AudioStreamInfo = {
@@ -100,13 +100,13 @@ const inflight = new Map<string, Promise<string | null>>()
 // audio, etc.) — ffmpeg's own failure is the validation, no separate check.
 export function getAudioVariant(
   fileId: string,
-  absSrc: string,
+  sourceKey: string,
   streamIndex: number
 ): Promise<string | null> {
   const cacheId = `${fileId}:${streamIndex}`
   const existing = inflight.get(cacheId)
   if (existing) return existing
-  const p = doGetVariant(fileId, absSrc, streamIndex).finally(() =>
+  const p = doGetVariant(fileId, sourceKey, streamIndex).finally(() =>
     inflight.delete(cacheId)
   )
   inflight.set(cacheId, p)
@@ -115,55 +115,56 @@ export function getAudioVariant(
 
 async function doGetVariant(
   fileId: string,
-  absSrc: string,
+  sourceKey: string,
   streamIndex: number
 ): Promise<string | null> {
   const key = derivedKey(fileId, streamIndex)
-  const abs = absolutePath(key)
-  if (fs.existsSync(abs)) return key
+  if (await storage.stat(key)) return key
 
   return withSlot(async () => {
-    if (fs.existsSync(abs)) return key
-    const out = ensureDirFor(key)
-    const ok = await run(
-      "ffmpeg",
-      [
-        "-i",
-        absSrc,
-        "-map",
-        "0:v:0",
-        "-map",
-        `0:${streamIndex}`,
-        "-c:v",
-        "copy",
-        "-c:a",
-        "aac",
-        "-b:a",
-        "192k",
-        "-movflags",
-        "+faststart",
-        "-y",
-        out,
-      ],
-      REMUX_TIMEOUT
-    )
-    if (!ok || !fs.existsSync(out) || fs.statSync(out).size === 0) {
+    if (await storage.stat(key)) return key
+    const local = await storage.localPath(sourceKey)
+    if (!local) return null
+    const out = newScratchPath()
+    try {
+      const ok = await run(
+        "ffmpeg",
+        [
+          "-i",
+          local.path,
+          "-map",
+          "0:v:0",
+          "-map",
+          `0:${streamIndex}`,
+          "-c:v",
+          "copy",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "192k",
+          "-movflags",
+          "+faststart",
+          "-y",
+          out,
+        ],
+        REMUX_TIMEOUT
+      )
+      if (!ok || !fs.existsSync(out) || fs.statSync(out).size === 0) return null
+      await storage.putFile(key, out)
+      return key
+    } finally {
+      local.cleanup()
       try {
         fs.rmSync(out, { force: true })
       } catch {}
-      return null
     }
-    return key
   })
 }
 
 // Drops every cached audio variant for a file — called when the file itself
 // is purged so derivatives don't outlive it on disk.
-export function removeAudioVariants(fileId: string): void {
+export async function removeAudioVariants(fileId: string): Promise<void> {
   try {
-    fs.rmSync(absolutePath(path.posix.join("derived-audio", fileId)), {
-      recursive: true,
-      force: true,
-    })
+    await storage.removePrefix(path.posix.join("derived-audio", fileId))
   } catch {}
 }

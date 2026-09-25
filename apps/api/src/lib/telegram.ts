@@ -7,7 +7,7 @@ import { StringSession } from "telegram/sessions/index.js"
 import { NewMessage, type NewMessageEvent } from "telegram/events/index.js"
 import { env } from "../env.js"
 import { prisma } from "../db/prisma.js"
-import { ensureDirFor, newStorageKey } from "../storage/local.js"
+import { storage, newStorageKey, newScratchPath } from "../storage/index.js"
 import { queueThumbnail } from "./thumbnails.js"
 import { getIO } from "../realtime/socket.js"
 import { assertUserPhotosRootId } from "./access.js"
@@ -254,7 +254,7 @@ async function saveTelegramMedia(
     return { status: "skipped_quota" }
 
   const key = newStorageKey(meta.name)
-  const dest = ensureDirFor(key)
+  const dest = newScratchPath()
   try {
     await client.downloadMedia(message, {
       outputFile: dest,
@@ -268,19 +268,30 @@ async function saveTelegramMedia(
       return { status: "skipped_quota" }
     }
     const sha256 = await hashFile(dest)
-    const file = await prisma.file.create({
-      data: {
-        name: meta.name,
-        folderId,
-        ownerId: userId,
-        size: BigInt(stat.size),
-        mimeType: meta.mimeType,
-        storageKey: key,
-        sha256,
-        telegramRef,
-        takenAt: message.date ? new Date(message.date * 1000) : null,
-      },
-    })
+    await storage.putFile(key, dest)
+    let file
+    try {
+      file = await prisma.file.create({
+        data: {
+          name: meta.name,
+          folderId,
+          ownerId: userId,
+          size: BigInt(stat.size),
+          mimeType: meta.mimeType,
+          storageKey: key,
+          sha256,
+          telegramRef,
+          takenAt: message.date ? new Date(message.date * 1000) : null,
+        },
+      })
+    } catch (err) {
+      // storage.putFile already committed the blob above — the local `dest`
+      // is gone, so cleanup on a failed DB write has to target the storage
+      // key instead (see the plain fs.unlinkSync(dest) in the outer catch,
+      // which only ever runs before this point).
+      await storage.remove(key).catch(() => {})
+      throw err
+    }
     queueThumbnail(file.id)
     return { status: "imported", size: stat.size, fileId: file.id }
   } catch (err) {

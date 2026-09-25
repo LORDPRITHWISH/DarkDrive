@@ -8,7 +8,7 @@ import { prisma } from "../db/prisma.js"
 import { currentUser, requireAuth } from "../middleware/auth.js"
 import { getFolderWithAccess, assertUserRootFolderId } from "../lib/access.js"
 import { renderImage } from "../lib/thumbnails.js"
-import { absolutePath, ensureDirFor, newStorageKey, removeFile, STORAGE_ROOT } from "../storage/local.js"
+import { storage, newStorageKey, newScratchPath, SCRATCH_ROOT } from "../storage/index.js"
 import { logActivity } from "../lib/activity.js"
 
 // Sniff the real format from magic bytes rather than trusting the `.jpg`
@@ -24,7 +24,7 @@ function sniffImageContentType(head: Buffer): string {
 const thumbUpload = multer({
   storage: multer.diskStorage({
     destination: (_req, _file, cb) => {
-      const tmp = path.join(STORAGE_ROOT, ".tmp")
+      const tmp = path.join(SCRATCH_ROOT, ".tmp")
       fs.mkdirSync(tmp, { recursive: true })
       cb(null, tmp)
     },
@@ -99,15 +99,20 @@ foldersRouter.get("/:id/thumbnail", async (req, res) => {
   const folder = await getFolderWithAccess(user.id, req.params.id, "read", { role: user.role })
   if (!folder) return res.status(404).json({ error: "not_found" })
   if (!folder.thumbnailKey) return res.status(404).json({ error: "no_thumbnail" })
-  const abs = absolutePath(folder.thumbnailKey)
-  if (!fs.existsSync(abs)) return res.status(404).json({ error: "gone" })
-  const head = Buffer.alloc(12)
-  const fd = fs.openSync(abs, "r")
-  fs.readSync(fd, head, 0, 12, 0)
-  fs.closeSync(fd)
-  res.setHeader("Content-Type", sniffImageContentType(head))
-  res.setHeader("Cache-Control", "private, max-age=86400")
-  fs.createReadStream(abs).pipe(res)
+  const local = await storage.localPath(folder.thumbnailKey)
+  if (!local) return res.status(404).json({ error: "gone" })
+  try {
+    const head = Buffer.alloc(12)
+    const fd = fs.openSync(local.path, "r")
+    fs.readSync(fd, head, 0, 12, 0)
+    fs.closeSync(fd)
+    res.setHeader("Content-Type", sniffImageContentType(head))
+    res.setHeader("Cache-Control", "private, max-age=86400")
+    fs.createReadStream(local.path).pipe(res).on("close", () => local.cleanup())
+  } catch {
+    local.cleanup()
+    res.status(404).json({ error: "gone" })
+  }
 })
 
 // Upload or replace a folder's custom thumbnail image.
@@ -121,17 +126,18 @@ foldersRouter.post("/:id/thumbnail", thumbUpload.single("thumbnail"), async (req
   // Storage/serving always assume JPEG (`.jpg` key, `image/jpeg` content-type),
   // so re-encode whatever image/* format was uploaded rather than storing raw bytes.
   const key = newStorageKey(`folder-thumb-${folder.id}.jpg`)
-  const dest = ensureDirFor(key)
+  const dest = newScratchPath()
   const ok = await renderImage(file.path, dest)
   try { fs.unlinkSync(file.path) } catch {}
   if (!ok) return res.status(400).json({ error: "unsupported_image" })
+  await storage.putFile(key, dest)
 
   const oldKey = folder.thumbnailKey
   const updated = await prisma.folder.update({
     where: { id: folder.id },
     data: { thumbnailKey: key },
   })
-  if (oldKey) { try { removeFile(oldKey) } catch {} }
+  if (oldKey) { try { await storage.remove(oldKey) } catch {} }
   await logActivity({ userId: user.id, folderId: folder.id, action: "thumbnail" })
 
   res.json(updated)
@@ -145,7 +151,7 @@ foldersRouter.delete("/:id/thumbnail", async (req, res) => {
   if (!folder.thumbnailKey) return res.json({ ok: true })
   const oldKey = folder.thumbnailKey
   await prisma.folder.update({ where: { id: folder.id }, data: { thumbnailKey: null } })
-  try { removeFile(oldKey) } catch {}
+  try { await storage.remove(oldKey) } catch {}
   await logActivity({ userId: user.id, folderId: folder.id, action: "thumbnail" })
   res.json({ ok: true })
 })

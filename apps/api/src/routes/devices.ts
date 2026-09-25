@@ -1,6 +1,7 @@
 import { Router } from "express"
 import { z } from "zod"
 import { prisma } from "../db/prisma.js"
+import { env } from "../env.js"
 import { currentUser, requireAuth } from "../middleware/auth.js"
 import { newToken } from "../auth/deviceToken.js"
 
@@ -14,9 +15,20 @@ export const devicesRouter = Router()
 //
 // ponytail: manual copy/paste. Swap for an OAuth-style device-code flow
 // (client polls for approval) if pairing ever needs to be one-click.
-devicesRouter.get("/pair", requireAuth, (req, res) => {
-  const user = currentUser(req)
-  res.type("html").send(`<!doctype html>
+//
+// A signed-out browser gets sent through Google and back here, rather than a
+// 401 body — this link is opened straight from the app on a fresh phone, where
+// no session exists yet.
+devicesRouter.get(
+  "/pair",
+  (req, res, next) => {
+    if (req.user) return next()
+    const back = new URL("/api/devices/pair", env.APP_URL).toString()
+    res.redirect(`/api/auth/google?return=${encodeURIComponent(back)}`)
+  },
+  (req, res) => {
+    const user = currentUser(req)
+    res.type("html").send(`<!doctype html>
 <html><head><meta charset="utf-8"><title>Pair a device · DarkDrive</title>
 <style>
   :root{color-scheme:dark}
@@ -55,7 +67,8 @@ document.getElementById("go").onclick = async () => {
 }
 </script>
 </div></body></html>`)
-})
+  }
+)
 
 devicesRouter.use(requireAuth)
 

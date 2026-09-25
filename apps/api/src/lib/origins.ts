@@ -7,7 +7,14 @@ import { env } from "../env.js"
 // drifting apart as frontends are added.
 export const ALLOWED_ORIGINS: string[] = Array.from(
   new Set(
-    [env.WEB_URL, env.GALLERY_URL, ...(env.ALLOWED_ORIGINS?.split(",") ?? [])]
+    // APP_URL is the API itself: the pairing page is served from here, so a
+    // tester who signs in mid-pair has to be allowed back to it.
+    [
+      env.APP_URL,
+      env.WEB_URL,
+      env.GALLERY_URL,
+      ...(env.ALLOWED_ORIGINS?.split(",") ?? []),
+    ]
       .map((s) => s?.trim().replace(/\/+$/, ""))
       .filter((s): s is string => !!s)
   )

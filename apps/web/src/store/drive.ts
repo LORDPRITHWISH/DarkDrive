@@ -820,13 +820,34 @@ export const useDrive = create<DriveState>((set, get) => ({
     }
     socket.on("import:progress", onProgress)
 
+    // The POST only returns 202 — the real outcome arrives as "import:done"
+    // once the server finishes, which can be well past any HTTP timeout.
+    let onDone: (p: { clientId: string; error?: string; file?: { name: string } }) => void
+    const finished = new Promise<{ file: { name: string } }>((resolve, reject) => {
+      onDone = (p) => {
+        if (p.clientId !== uid) return
+        if (p.file) resolve({ file: p.file })
+        else reject(Object.assign(new Error(p.error), { body: { error: p.error } }))
+      }
+      socket.on("import:done", onDone)
+    })
+    // Offline past the recovery window → "import:done" is gone for good. The
+    // file may still land, so refresh and stop spinning instead of hanging.
+    const onReconnect = () => {
+      if (socket.recovered) return
+      onDone({ clientId: uid, error: "connection_lost_check_folder" })
+      void get().refresh()
+    }
+    socket.on("connect", onReconnect)
+
     try {
-      const res = await apiJson<{ file: { name: string } }>("/api/files/import-url", "POST", {
+      await apiJson("/api/files/import-url", "POST", {
         folderId,
         url,
         name: name?.trim() || undefined,
         clientId: uid,
       })
+      const res = await finished
       set({
         uploads: get().uploads.map((u) =>
           u.id === uid
@@ -852,6 +873,8 @@ export const useDrive = create<DriveState>((set, get) => ({
       })
     } finally {
       socket.off("import:progress", onProgress)
+      socket.off("import:done", onDone!)
+      socket.off("connect", onReconnect)
       setTimeout(() => set({ uploads: get().uploads.filter((u) => u.id !== uid) }), 5000)
     }
   },

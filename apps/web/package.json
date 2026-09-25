@@ -20,6 +20,7 @@
     "react-dom": "^19.2.4",
     "react-router-dom": "^6.28.0",
     "socket.io-client": "^4.8.1",
+    "toqr": "^0.1.1",
     "zustand": "^5.0.2"
   },
   "devDependencies": {

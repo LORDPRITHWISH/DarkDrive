@@ -3,11 +3,34 @@ import { Strategy as GoogleStrategy } from "passport-google-oauth20"
 import { prisma } from "../db/prisma.js"
 import { env } from "../env.js"
 
-passport.serializeUser((user: any, done) => done(null, user.id))
+// Temp-session logins (routes/tempSessions.ts) serialize as {id, t} instead
+// of a bare id, so deserializeUser knows to re-check that session's row.
+passport.serializeUser((user: Express.User, done) =>
+  done(null, user.tempSession ? { id: user.id, t: user.tempSession.id } : user.id)
+)
 
-passport.deserializeUser(async (id: string, done) => {
+passport.deserializeUser(async (key: string | { id: string; t: string }, done) => {
   try {
-    const user = await prisma.user.findUnique({ where: { id } })
+    // A temp session ends the moment its row expires or is deleted. Checked
+    // here because this is the one place both HTTP and the socket pass
+    // through — and the cookie can't be trusted to expire it (see the
+    // TempSession model).
+    if (typeof key === "object") {
+      const t = await prisma.tempSession.findUnique({
+        where: { id: key.t },
+        include: { user: true },
+      })
+      if (!t || t.expiresAt <= new Date() || t.user.disabledAt) return done(null, false)
+      // Throttled: one page of thumbnails is dozens of requests.
+      if (!t.lastSeenAt || Date.now() - t.lastSeenAt.getTime() > 60_000) {
+        prisma.tempSession
+          .update({ where: { id: t.id }, data: { lastSeenAt: new Date() } })
+          .catch(() => {})
+      }
+      return done(null, { ...t.user, tempSession: { id: t.id, expiresAt: t.expiresAt } })
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: key } })
     // Disabled accounts get treated as logged-out on every request so their
     // active sessions effectively stop working the moment the admin flips the
     // flag.

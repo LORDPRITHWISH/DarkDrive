@@ -9,6 +9,9 @@ export type User = {
   photosRootFolderId: string
   role: "USER" | "ADMIN"
   storageQuotaBytes: number
+  // Set when this browser signed in with a temporary code (see
+  // components/TempSessionsCard) — when the session ends.
+  tempSessionExpiresAt: string | null
 }
 
 export type QuotaInfo = {

@@ -25,6 +25,7 @@ import { StarredPage } from "@/pages/Starred"
 import { StoragePage } from "@/pages/Storage"
 import { ProfilePage } from "@/pages/Profile"
 import { ShareTargetPage } from "@/pages/ShareTarget"
+import { TempLoginPage } from "@/pages/TempLogin"
 import { UploadToaster } from "@/components/UploadToaster"
 import { Toaster } from "@/components/Toaster"
 import { ConfirmDialog } from "@/components/ConfirmDialog"
@@ -32,6 +33,7 @@ import { getSocket } from "@/lib/socket"
 import { useNotifications } from "@/store/notifications"
 import { useDrive } from "@/store/drive"
 import { toast } from "@/store/toast"
+import { formatDate } from "@/lib/format"
 import type { AppNotification } from "@/lib/types"
 
 // Login is a hard server/page redirect (Google OAuth callback, dev-login),
@@ -65,7 +67,29 @@ function Protected({ children }: { children: React.ReactNode }) {
   }, [user, loading, loc.pathname, nav])
   if (loading) return <div className="grid min-h-svh place-items-center">Loading…</div>
   if (!user) return <Navigate to="/login" replace />
-  return <>{children}</>
+  return (
+    <>
+      {user.tempSessionExpiresAt && <TempSessionPill expiresAt={user.tempSessionExpiresAt} />}
+      {children}
+    </>
+  )
+}
+
+// Marks a temporary-session login on every page, and signs the tab out the
+// moment it ends — otherwise the next click would just start 401-ing.
+function TempSessionPill({ expiresAt }: { expiresAt: string }) {
+  useEffect(() => {
+    const t = setTimeout(
+      () => window.location.assign("/login"),
+      new Date(expiresAt).getTime() - Date.now()
+    )
+    return () => clearTimeout(t)
+  }, [expiresAt])
+  return (
+    <div className="pointer-events-none fixed top-2 left-1/2 z-50 -translate-x-1/2 rounded-full border border-amber-500/40 bg-amber-500/15 px-3 py-1 text-xs whitespace-nowrap text-amber-600 backdrop-blur dark:text-amber-400">
+      Temporary session · ends {formatDate(expiresAt)}
+    </div>
+  )
 }
 
 function Root() {
@@ -166,6 +190,7 @@ export function App() {
         <Route path="/" element={<Root />} />
         <Route path="/landing" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/t/:code?" element={<TempLoginPage />} />
         <Route path="/s/:token" element={<SharePage />} />
         <Route
           path="/home"

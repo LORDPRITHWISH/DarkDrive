@@ -401,6 +401,12 @@ export function LoginPage() {
                 />
                 Continue with Google
               </Button>
+              <Link
+                to="/t"
+                className="text-muted-foreground hover:text-foreground mt-3 block text-center text-xs hover:underline"
+              >
+                Have a temporary sign-in code?
+              </Link>
 
               {devLoginEnabled && (
                 <form

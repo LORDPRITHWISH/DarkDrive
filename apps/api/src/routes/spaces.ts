@@ -5,7 +5,7 @@ import path from "node:path"
 import multer from "multer"
 import { nanoid } from "nanoid"
 import { prisma } from "../db/prisma.js"
-import { currentUser, requireAuth } from "../middleware/auth.js"
+import { currentUser, denyTempSession, requireAuth } from "../middleware/auth.js"
 import { notify } from "../lib/notify.js"
 import { storage, newStorageKey, newScratchPath, SCRATCH_ROOT } from "../storage/index.js"
 
@@ -536,7 +536,7 @@ spacesRouter.delete("/:id/members/:userId", async (req, res) => {
 // omit either for "never expires" / "unlimited uses".
 // Invite links always grant VIEWER — upload rights (EDITOR) can only be
 // gained by request, approved by the owner. See /:id/request-editor below.
-spacesRouter.post("/:id/invites", async (req, res) => {
+spacesRouter.post("/:id/invites", denyTempSession, async (req, res) => {
   const user = currentUser(req)
   const body = z
     .object({

@@ -57,6 +57,7 @@ model User {
   fileVersions  FileVersion[]
   activityLogs  ActivityLog[]
   deviceTokens  DeviceToken[]
+  tempSessions  TempSession[]
   telegramSession TelegramSession?
   telegramBotLink TelegramBotLink?
 }
@@ -97,6 +98,32 @@ model DeviceToken {
   user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   tokenHash  String    @unique
   name       String
+  lastSeenAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
+}
+
+// A time-boxed browser login for a device the user doesn't trust (a library
+// PC, a friend's laptop). A signed-in device creates it and gets a one-time
+// code — typed, scanned as a QR, or opened as a link; claiming it signs that
+// other browser in until `expiresAt`. Enforced per request in passport's
+// deserializeUser, not by the cookie: express-session re-extends the store
+// TTL on every request, so the cookie alone would outlive the duration.
+// Deleting the row ends the session (revoke, or sign-out on that device).
+model TempSession {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  // sha256 of the one-time code. Nulled on claim, which is what makes a code
+  // work exactly once.
+  codeHash   String?   @unique
+  expiresAt  DateTime
+  claimedAt  DateTime?
+  // The browser that claimed it, for the session list.
+  ip         String?
+  userAgent  String?
   lastSeenAt DateTime?
   createdAt  DateTime  @default(now())
 

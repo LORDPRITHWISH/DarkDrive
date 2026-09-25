@@ -21,6 +21,9 @@ export const REQUEST_SLABS: { label: string; bytes: number }[] = [
   { label: "50 GB", bytes: 50 * 1024 ** 3 },
   { label: "100 GB", bytes: 100 * 1024 ** 3 },
   { label: "500 GB", bytes: 500 * 1024 ** 3 },
+  { label: "600 GB", bytes: 600 * 1024 ** 3 },
+  { label: "750 GB", bytes: 750 * 1024 ** 3 },
+  { label: "1000 GB", bytes: 1000 * 1024 ** 3 },
 ]
 
 type Props = {

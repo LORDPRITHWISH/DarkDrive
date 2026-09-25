@@ -107,6 +107,10 @@ if (env.NODE_ENV === "development") {
 }
 
 authRouter.post("/logout", (req, res) => {
+  // Signing out on the untrusted device ends that temp session for good,
+  // same as revoking it from the session list.
+  const temp = req.user?.tempSession
+  if (temp) prisma.tempSession.deleteMany({ where: { id: temp.id } }).catch(() => {})
   req.logout(() => {
     req.session?.destroy(() => {
       res.clearCookie("dd.sid")
@@ -132,5 +136,8 @@ authRouter.get("/me", requireAuth, async (req, res) => {
     photosRootFolderId,
     role: u.role,
     storageQuotaBytes: Number(u.storageQuotaBytes),
+    // Non-null only on a temp-session login; the web app shows it and signs
+    // the tab out when it passes.
+    tempSessionExpiresAt: req.user?.tempSession?.expiresAt ?? null,
   })
 })

@@ -13,6 +13,7 @@ import { Sidebar } from "@/components/Sidebar"
 import { SidebarToggle } from "@/components/SidebarToggle"
 import { HeaderActions } from "@/components/HeaderActions"
 import { TelegramDialog } from "@/components/TelegramDialog"
+import { TempSessionsCard } from "@/components/TempSessionsCard"
 import { StatCard } from "@/pages/admin/StatCards"
 import {
   ActivitySection,
@@ -37,6 +38,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@workspace/ui/componen
 import { apiGet, apiJson } from "@/lib/api"
 import { formatBytes, formatDate, relativeTime } from "@/lib/format"
 import { toast } from "@/store/toast"
+import { useAuth } from "@/store/auth"
 import type { UserDetail } from "@/lib/types"
 
 type TelegramStatus = {
@@ -112,6 +114,9 @@ function Overview({ data }: { data: UserDetail }) {
   const u = data.user
   const s = data.storage
   const a = data.activity
+  // A temp session can't manage devices, Telegram or other temp sessions
+  // (the API 403s them), so the tab would just be a wall of errors.
+  const isTemp = useAuth((st) => !!st.user?.tempSessionExpiresAt)
 
   return (
     <div className="flex flex-col gap-4">
@@ -174,7 +179,7 @@ function Overview({ data }: { data: UserDetail }) {
       <Tabs defaultValue="overview">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="connections">Connections</TabsTrigger>
+          {!isTemp && <TabsTrigger value="connections">Connections</TabsTrigger>}
           <TabsTrigger value="activity">Activity</TabsTrigger>
           <TabsTrigger value="sharing">Sharing</TabsTrigger>
         </TabsList>
@@ -201,8 +206,8 @@ function Overview({ data }: { data: UserDetail }) {
   )
 }
 
-// Everything the account is wired into: Telegram (account + bot) and paired
-// sync devices. The Telegram flows themselves live in <TelegramDialog>, which
+// Everything the account is wired into: Telegram (account + bot), paired
+// sync devices, and temporary sessions. The Telegram flows themselves live in <TelegramDialog>, which
 // the toolbar opens too — this only summarizes and launches it.
 function Connections() {
   const [tg, setTg] = useState<TelegramStatus | null>(null)
@@ -356,6 +361,8 @@ function Connections() {
           )}
         </CardContent>
       </Card>
+
+      <TempSessionsCard />
 
       <TelegramDialog
         open={tgOpen}

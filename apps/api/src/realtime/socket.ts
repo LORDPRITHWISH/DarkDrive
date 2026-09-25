@@ -54,6 +54,7 @@ export function initSocket(httpServer: HttpServer) {
     const req: any = socket.request
     if (!req.user) return next(new Error("unauthorized"))
     ;(socket.data as any).userId = req.user.id
+    ;(socket.data as any).tempSession = req.user.tempSession
     next()
   })
 
@@ -63,6 +64,19 @@ export function initSocket(httpServer: HttpServer) {
     // Personal room for server-initiated pushes (notifications) that don't
     // belong to any space.
     socket.join(`user:${userId}`)
+
+    // A socket never re-authenticates, so a temp session's socket has to be
+    // ended with it: revoking disconnects this room (routes/tempSessions.ts),
+    // expiry is the timer.
+    const temp: Express.User["tempSession"] = (socket.data as any).tempSession
+    if (temp) {
+      socket.join(`temp:${temp.id}`)
+      const timer = setTimeout(
+        () => socket.disconnect(true),
+        new Date(temp.expiresAt).getTime() - Date.now()
+      )
+      socket.on("disconnect", () => clearTimeout(timer))
+    }
 
     socket.on("space:join", async (spaceId: string, ack?: (ok: boolean) => void) => {
       const member = await prisma.spaceMember.findUnique({

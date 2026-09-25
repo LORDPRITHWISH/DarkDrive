@@ -20,6 +20,8 @@ import { devicesRouter } from "./routes/devices.js"
 import { syncRouter } from "./routes/sync.js"
 import { galleryRouter } from "./routes/gallery.js"
 import { telegramRouter } from "./routes/telegram.js"
+import { tempSessionsRouter } from "./routes/tempSessions.js"
+import { denyTempSession } from "./middleware/auth.js"
 import { bearerAuth } from "./auth/deviceToken.js"
 import { ALLOWED_ORIGINS } from "./lib/origins.js"
 import { initSocket } from "./realtime/socket.js"
@@ -97,13 +99,14 @@ app.use("/api/files", filesRouter)
 app.use("/api/shares", sharesRouter)
 app.use("/api/spaces", spacesRouter)
 app.use("/api/me", meRouter)
-app.use("/api/admin", adminRouter)
+app.use("/api/admin", denyTempSession, adminRouter)
 app.use("/api/search", searchRouter)
 app.use("/api/notifications", notificationsRouter)
-app.use("/api/devices", devicesRouter)
+app.use("/api/devices", denyTempSession, devicesRouter)
 app.use("/api/sync", syncRouter)
 app.use("/api/gallery", galleryRouter)
-app.use("/api/telegram", telegramRouter)
+app.use("/api/telegram", denyTempSession, telegramRouter)
+app.use("/api/temp-sessions", tempSessionsRouter)
 
 // centralized error handler
 app.use((err: any, _req: express.Request, res: express.Response, _n: express.NextFunction) => {

@@ -86,7 +86,7 @@ const PRESETS = [
 type UpdateFn = (id: string, patch: Record<string, unknown>) => void | Promise<void>
 
 // Best-effort "Chrome · macOS" label from a raw user-agent string.
-function parseUA(ua: string | null): string {
+export function parseUA(ua: string | null): string {
   if (!ua) return "Unknown device"
   const browser = /Edg\//.test(ua)
     ? "Edge"

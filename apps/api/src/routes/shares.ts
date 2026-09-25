@@ -3,7 +3,7 @@ import { z } from "zod"
 import bcrypt from "bcryptjs"
 import { nanoid } from "nanoid"
 import { prisma } from "../db/prisma.js"
-import { currentUser, requireAuth } from "../middleware/auth.js"
+import { currentUser, denyTempSession, requireAuth } from "../middleware/auth.js"
 import { getFileWithAccess, getFolderWithAccess } from "../lib/access.js"
 import { streamStoredFile } from "../lib/stream.js"
 import { env } from "../env.js"
@@ -12,7 +12,7 @@ import { logActivity } from "../lib/activity.js"
 export const sharesRouter = Router()
 
 // Create a share link (authenticated)
-sharesRouter.post("/", requireAuth, async (req, res) => {
+sharesRouter.post("/", requireAuth, denyTempSession, async (req, res) => {
   const user = currentUser(req)
   const body = z
     .object({

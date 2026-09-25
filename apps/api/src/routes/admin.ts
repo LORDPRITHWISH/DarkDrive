@@ -6,7 +6,13 @@ import { prisma } from "../db/prisma.js"
 import { redis } from "../db/redis.js"
 import { currentUser, requireAuth } from "../middleware/auth.js"
 import { assertUserRootFolderId } from "../lib/access.js"
-import { removeFile, STORAGE_ROOT } from "../storage/local.js"
+import {
+  storage,
+  SCRATCH_ROOT,
+  getActiveDriverName,
+  setActiveDriverName,
+  isS3Configured,
+} from "../storage/index.js"
 import { removeAudioVariants } from "../lib/audioTracks.js"
 import { notify } from "../lib/notify.js"
 import { recentLogs } from "../lib/logbuf.js"
@@ -49,7 +55,7 @@ adminRouter.get("/server-stats", async (_req, res) => {
     | { total: number; free: number; used: number; pct: number }
     | null = null
   try {
-    const s = await fsp.statfs(STORAGE_ROOT)
+    const s = await fsp.statfs(SCRATCH_ROOT)
     const total = Number(s.bsize) * Number(s.blocks)
     const free = Number(s.bsize) * Number(s.bavail)
     const used = total - free
@@ -132,6 +138,27 @@ function cpuSnapshot() {
   }
   return { idle, total }
 }
+
+// --- storage backend ---------------------------------------------------
+// Which backend NEW uploads are written to. Switching here never touches
+// existing files: every stored key carries its own backend as a prefix (see
+// storage/index.ts), so files already on disk/in the bucket keep resolving
+// correctly regardless of what's active now.
+adminRouter.get("/storage-driver", (_req, res) => {
+  res.json({ active: getActiveDriverName(), s3Configured: isS3Configured() })
+})
+
+adminRouter.post("/storage-driver", async (req, res) => {
+  const { driver } = z.object({ driver: z.enum(["local", "s3"]) }).parse(req.body)
+  try {
+    await setActiveDriverName(driver)
+  } catch (err) {
+    if ((err as Error).message === "s3_not_configured")
+      return res.status(400).json({ error: "s3_not_configured" })
+    throw err
+  }
+  res.json({ active: getActiveDriverName() })
+})
 
 // Comprehensive dashboard stats. All aggregated from existing tables in a
 // single endpoint — the panel is read-mostly so this is fine for now; swap in
@@ -811,10 +838,10 @@ adminRouter.post("/recycle-bin/purge", async (req, res) => {
     })
     if (!file || !file.deletedAt) return res.status(404).json({ error: "not_found" })
     await prisma.file.delete({ where: { id } }) // cascades to versions
-    try { removeFile(file.storageKey) } catch {}
-    if (file.thumbnailKey) { try { removeFile(file.thumbnailKey) } catch {} }
-    for (const v of file.versions) { try { removeFile(v.storageKey) } catch {} }
-    removeAudioVariants(file.id)
+    try { await storage.remove(file.storageKey) } catch {}
+    if (file.thumbnailKey) { try { await storage.remove(file.thumbnailKey) } catch {} }
+    for (const v of file.versions) { try { await storage.remove(v.storageKey) } catch {} }
+    await removeAudioVariants(file.id)
     return res.json({ ok: true })
   }
 
@@ -838,13 +865,13 @@ adminRouter.post("/recycle-bin/purge", async (req, res) => {
   ])
   await prisma.folder.delete({ where: { id } }) // cascades to the subtree
   for (const f of files) {
-    try { removeFile(f.storageKey) } catch {}
-    if (f.thumbnailKey) { try { removeFile(f.thumbnailKey) } catch {} }
-    for (const v of f.versions) { try { removeFile(v.storageKey) } catch {} }
-    removeAudioVariants(f.id)
+    try { await storage.remove(f.storageKey) } catch {}
+    if (f.thumbnailKey) { try { await storage.remove(f.thumbnailKey) } catch {} }
+    for (const v of f.versions) { try { await storage.remove(v.storageKey) } catch {} }
+    await removeAudioVariants(f.id)
   }
   for (const f of folders) {
-    if (f.thumbnailKey) { try { removeFile(f.thumbnailKey) } catch {} }
+    if (f.thumbnailKey) { try { await storage.remove(f.thumbnailKey) } catch {} }
   }
   res.json({ ok: true })
 })
@@ -871,13 +898,13 @@ adminRouter.post("/recycle-bin/purge-all", async (_req, res) => {
     prisma.folder.deleteMany({ where: { deletedAt: { not: null } } }),
   ])
   for (const f of files) {
-    try { removeFile(f.storageKey) } catch {}
-    if (f.thumbnailKey) { try { removeFile(f.thumbnailKey) } catch {} }
-    for (const v of f.versions) { try { removeFile(v.storageKey) } catch {} }
-    removeAudioVariants(f.id)
+    try { await storage.remove(f.storageKey) } catch {}
+    if (f.thumbnailKey) { try { await storage.remove(f.thumbnailKey) } catch {} }
+    for (const v of f.versions) { try { await storage.remove(v.storageKey) } catch {} }
+    await removeAudioVariants(f.id)
   }
   for (const f of folders) {
-    if (f.thumbnailKey) { try { removeFile(f.thumbnailKey) } catch {} }
+    if (f.thumbnailKey) { try { await storage.remove(f.thumbnailKey) } catch {} }
   }
   res.json({ ok: true, files: files.length, folders: folders.length })
 })

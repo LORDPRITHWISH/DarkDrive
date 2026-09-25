@@ -12,13 +12,7 @@ import { prisma } from "../db/prisma.js"
 import { currentUser, requireAuth } from "../middleware/auth.js"
 import { env } from "../env.js"
 import { Prisma } from "@prisma/client"
-import {
-  absolutePath,
-  ensureDirFor,
-  newStorageKey,
-  removeFile,
-  STORAGE_ROOT,
-} from "../storage/local.js"
+import { storage, newStorageKey, newScratchPath, SCRATCH_ROOT } from "../storage/index.js"
 import {
   assertUserRootFolderId,
   getFileWithAccess,
@@ -55,7 +49,7 @@ const MAX_CHUNK_BYTES = 32 * 1024 * 1024
 // Upload sessions past this age are cleaned up; clients must re-init.
 const SESSION_TTL_MS = 60 * 60 * 1000
 
-const UPLOADS_ROOT = path.join(STORAGE_ROOT, ".uploads")
+const UPLOADS_ROOT = path.join(SCRATCH_ROOT, ".uploads")
 fs.mkdirSync(UPLOADS_ROOT, { recursive: true })
 
 type UploadSession = {
@@ -109,7 +103,7 @@ setInterval(() => {
 const chunkUpload = multer({
   storage: multer.diskStorage({
     destination: (_req, _file, cb) => {
-      const tmp = path.join(STORAGE_ROOT, ".tmp")
+      const tmp = path.join(SCRATCH_ROOT, ".tmp")
       fs.mkdirSync(tmp, { recursive: true })
       cb(null, tmp)
     },
@@ -181,7 +175,7 @@ filesRouter.get("/:id/preview", async (req, res) => {
       return res.status(403).json({ error: "forbidden" })
     }
 
-    return streamStoredFile(req, res, file, { disposition: "inline" })
+    return await streamStoredFile(req, res, file, { disposition: "inline" })
   }
 
   if (!req.user) return res.status(401).json({ error: "unauthorized" })
@@ -365,7 +359,7 @@ filesRouter.post("/upload/:uploadId/complete", async (req, res) => {
   }
 
   const key = newStorageKey(s.name)
-  const dest = ensureDirFor(key)
+  const dest = newScratchPath()
   const out = fs.createWriteStream(dest)
   // Hashed on the way past rather than in a second pass over the assembled
   // file — the bytes are already in hand here.
@@ -426,6 +420,8 @@ filesRouter.post("/upload/:uploadId/complete", async (req, res) => {
     const quota = owner?.storageQuotaBytes ?? BigInt(0)
     if (usedBytes + BigInt(stat.size) > quota) return abort(413, "quota_exceeded")
 
+    await storage.putFile(key, dest)
+
     let overflow: { id: string; storageKey: string }[] = []
     const updated = await prisma.$transaction(async (tx) => {
       await tx.fileVersion.create({
@@ -466,7 +462,7 @@ filesRouter.post("/upload/:uploadId/complete", async (req, res) => {
     })
     for (const o of overflow) {
       try {
-        removeFile(o.storageKey)
+        await storage.remove(o.storageKey)
       } catch {}
     }
 
@@ -496,6 +492,8 @@ filesRouter.post("/upload/:uploadId/complete", async (req, res) => {
   const takenAt =
     (s.mimeType.startsWith("image/") ? await readCaptureDate(dest) : null) ??
     (s.takenAt ? new Date(s.takenAt) : null)
+
+  await storage.putFile(key, dest)
 
   const intoSharedSpace = !!folder.spaceId
   const primaryFolderId = intoSharedSpace
@@ -611,7 +609,7 @@ filesRouter.post("/import-url", async (req, res) => {
     } catch {}
     const preliminaryName = (body.name?.trim() || urlBasename || "download").slice(0, 255)
     const key = newStorageKey(preliminaryName)
-    const dest = ensureDirFor(key)
+    const dest = newScratchPath()
 
     let result: { size: number; mimeType: string | null; suggestedName: string | null }
     try {
@@ -655,6 +653,8 @@ filesRouter.post("/import-url", async (req, res) => {
       } catch {}
       return res.status(413).json({ error: "quota_exceeded" })
     }
+
+    await storage.putFile(key, dest)
 
     const mimeType = resolveMime(preliminaryName, result.mimeType)
     const name = (
@@ -765,9 +765,9 @@ filesRouter.get("/:id/download", async (req, res) => {
   const streamIndex =
     typeof audioParam === "string" ? Number(audioParam) : file.audioTrackIndex ?? NaN
   if (Number.isInteger(streamIndex)) {
-    const key = await getAudioVariant(file.id, absolutePath(file.storageKey), streamIndex)
+    const key = await getAudioVariant(file.id, file.storageKey, streamIndex)
     if (!key) return res.status(422).json({ error: "audio_track_unavailable" })
-    return streamStoredFile(
+    return await streamStoredFile(
       req,
       res,
       { name: file.name, mimeType: "video/mp4", storageKey: key },
@@ -775,7 +775,7 @@ filesRouter.get("/:id/download", async (req, res) => {
     )
   }
 
-  streamStoredFile(req, res, file, {
+  await streamStoredFile(req, res, file, {
     disposition: req.query.inline === "1" ? "inline" : "attachment",
   })
 })
@@ -787,9 +787,13 @@ filesRouter.get("/:id/audio-tracks", async (req, res) => {
   const user = currentUser(req)
   const file = await getFileWithAccess(user.id, req.params.id, "read", { role: user.role })
   if (!file) return res.status(404).json({ error: "not_found" })
-  const abs = absolutePath(file.storageKey)
-  if (!fs.existsSync(abs)) return res.json({ tracks: [] })
-  res.json({ tracks: await probeAudioStreams(abs) })
+  const local = await storage.localPath(file.storageKey)
+  if (!local) return res.json({ tracks: [] })
+  try {
+    res.json({ tracks: await probeAudioStreams(local.path) })
+  } finally {
+    local.cleanup()
+  }
 })
 
 // Serve a file's preview thumbnail (a small JPEG). Generated on demand the
@@ -816,14 +820,14 @@ function uniqueEntryName(used: Map<string, number>, name: string): string {
   return `${base} (${count})${ext}`
 }
 
-function appendFileEntry(
+async function appendFileEntry(
   archive: Archiver,
   file: { name: string; storageKey: string },
   entryPath: string
 ) {
-  const abs = absolutePath(file.storageKey)
-  if (!fs.existsSync(abs)) return
-  archive.file(abs, { name: entryPath })
+  const result = await storage.readStream(file.storageKey)
+  if (!result) return
+  archive.append(result.stream, { name: entryPath })
 }
 
 // Recursively mirrors a folder's contents into the archive under `prefix`.
@@ -858,7 +862,7 @@ async function appendFolderToArchive(
   const used = new Map<string, number>()
   for (const file of files) {
     const entryName = uniqueEntryName(used, file.name)
-    appendFileEntry(archive, file, `${prefix}/${entryName}`)
+    await appendFileEntry(archive, file, `${prefix}/${entryName}`)
     downloadedFileIds.push(file.id)
   }
   for (const sub of subfolders) {
@@ -926,7 +930,7 @@ filesRouter.post(
       for (const item of resolved) {
         if (item.type === "file") {
           const entryName = uniqueEntryName(rootUsed, item.file.name)
-          appendFileEntry(archive, item.file, entryName)
+          await appendFileEntry(archive, item.file, entryName)
           downloadedFileIds.push(item.file.id)
         } else {
           const entryName = uniqueEntryName(rootUsed, item.folder.name)
@@ -996,17 +1000,23 @@ filesRouter.post("/:id/extract", async (req, res) => {
   const folder = await getFolderWithAccess(user.id, body.folderId, "write")
   if (!folder) return res.status(403).json({ error: "forbidden" })
 
-  const abs = absolutePath(file.storageKey)
-  if (!fs.existsSync(abs)) return res.status(410).json({ error: "gone" })
+  // unzipper reads the central directory lazily, on demand, throughout the
+  // extraction loop below — so the local copy has to stay put for the whole
+  // handler, not just this call. Cleaned up in the `finally` further down.
+  const local = await storage.localPath(file.storageKey)
+  if (!local) return res.status(410).json({ error: "gone" })
 
   let zip: unzipper.CentralDirectory
   try {
-    zip = await unzipper.Open.file(abs)
+    zip = await unzipper.Open.file(local.path)
   } catch {
+    local.cleanup()
     return res.status(400).json({ error: "invalid_zip" })
   }
-  if (zip.files.length > MAX_ZIP_ENTRIES)
+  if (zip.files.length > MAX_ZIP_ENTRIES) {
+    local.cleanup()
     return res.status(413).json({ error: "too_many_entries" })
+  }
 
   const totalFiles = zip.files.reduce((n, e) => n + (e.type === "File" ? 1 : 0), 0)
 
@@ -1023,8 +1033,10 @@ filesRouter.post("/:id/extract", async (req, res) => {
     where: { ownerId: user.id, isTrashed: false },
   })
   const quota = user.storageQuotaBytes ?? BigInt(0)
-  if (BigInt(used._sum.size ?? BigInt(0)) + BigInt(totalDeclaredSize) > quota)
+  if (BigInt(used._sum.size ?? BigInt(0)) + BigInt(totalDeclaredSize) > quota) {
+    local.cleanup()
     return res.status(413).json({ error: "quota_exceeded" })
+  }
 
   const intoSharedSpace = !!folder.spaceId
   const uploaderRootFolderId = intoSharedSpace ? await assertUserRootFolderId(user) : null
@@ -1073,7 +1085,7 @@ filesRouter.post("/:id/extract", async (req, res) => {
       const treeFolderId = await resolveDir(parts.slice(0, -1))
       const name = parts[parts.length - 1]
       const key = newStorageKey(name)
-      const dest = ensureDirFor(key)
+      const dest = newScratchPath()
       await new Promise<void>((resolve, reject) => {
         entry
           .stream()
@@ -1082,6 +1094,7 @@ filesRouter.post("/:id/extract", async (req, res) => {
           .on("error", reject)
       })
       const stat = fs.statSync(dest)
+      await storage.putFile(key, dest)
       const mimeType = resolveMime(name)
 
       const created = await prisma.file.create({
@@ -1114,6 +1127,8 @@ filesRouter.post("/:id/extract", async (req, res) => {
     // place beats a complex multi-row/multi-file rollback.
     console.error("[extract] failed partway through:", err)
     return res.status(207).json({ error: "partial_extract", folder: rootFolder, extracted })
+  } finally {
+    local.cleanup()
   }
 
   void maybeNotifyQuotaNearLimit(
@@ -1138,14 +1153,14 @@ filesRouter.get("/:id/thumbnail", async (req, res) => {
   }
   if (!key) return res.status(404).json({ error: "no_thumbnail" })
 
-  const abs = absolutePath(key)
-  if (!fs.existsSync(abs)) return res.status(404).json({ error: "gone" })
+  const result = await storage.readStream(key)
+  if (!result) return res.status(404).json({ error: "gone" })
 
   res.setHeader("Content-Type", "image/jpeg")
   // Thumbnails are content-addressed by storage key, so a given URL is stable;
   // private since the file may live in a non-public space.
   res.setHeader("Cache-Control", "private, max-age=86400")
-  fs.createReadStream(abs).pipe(res)
+  result.stream.pipe(res)
 })
 
 // Don't keep retrying files we've already determined can't be storyboarded
@@ -1175,12 +1190,12 @@ filesRouter.get("/:id/storyboard.jpg", async (req, res) => {
   const result = await resolveStoryboard(file)
   if (!result) return res.status(404).json({ error: "no_storyboard" })
 
-  const abs = absolutePath(result.key)
-  if (!fs.existsSync(abs)) return res.status(404).json({ error: "gone" })
+  const served = await storage.readStream(result.key)
+  if (!served) return res.status(404).json({ error: "gone" })
 
   res.setHeader("Content-Type", "image/jpeg")
   res.setHeader("Cache-Control", "private, max-age=86400")
-  fs.createReadStream(abs).pipe(res)
+  served.stream.pipe(res)
 })
 
 // Serve the storyboard as a WebVTT track (one cue per sprite tile) so it can
@@ -1229,12 +1244,15 @@ filesRouter.get("/:id/subtitle.vtt", async (req, res) => {
   if (!isSubtitleFile(file.name)) {
     return res.status(415).json({ error: "unsupported_subtitle" })
   }
-  const abs = absolutePath(file.storageKey)
+  const local = await storage.localPath(file.storageKey)
+  if (!local) return res.status(410).json({ error: "gone" })
   let raw: string
   try {
-    raw = fs.readFileSync(abs, "utf8")
+    raw = fs.readFileSync(local.path, "utf8")
   } catch {
     return res.status(410).json({ error: "gone" })
+  } finally {
+    local.cleanup()
   }
   allowFrameEmbedding(res)
   res.setHeader("Content-Type", "text/vtt; charset=utf-8")
@@ -1355,7 +1373,7 @@ filesRouter.get("/:id/versions/:versionId/download", async (req, res) => {
     where: { id: req.params.versionId, fileId: file.id },
   })
   if (!version) return res.status(404).json({ error: "not_found" })
-  streamStoredFile(
+  await streamStoredFile(
     req,
     res,
     { name: file.name, mimeType: version.mimeType, storageKey: version.storageKey },
@@ -1415,7 +1433,7 @@ filesRouter.post("/:id/versions/:versionId/restore", async (req, res) => {
     // in a pathological (versions-per-file <= cap) edge case — skip its blob.
     if (o.id === version.id) continue
     try {
-      removeFile(o.storageKey)
+      await storage.remove(o.storageKey)
     } catch {}
   }
 

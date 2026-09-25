@@ -4,11 +4,7 @@ import os from "node:os"
 import path from "node:path"
 import { prisma } from "../db/prisma.js"
 import { resolveMime } from "./fileType.js"
-import {
-  absolutePath,
-  ensureDirFor,
-  newStorageKey,
-} from "../storage/local.js"
+import { storage, newStorageKey, newScratchPath } from "../storage/index.js"
 
 // Longest-edge of the generated thumbnail, in pixels, and JPEG quality. 512px
 // is plenty for a grid card while staying small on disk / over the wire.
@@ -446,8 +442,7 @@ async function doGenerate(fileId: string): Promise<string | null> {
   if (!file) return null
 
   // Already have a usable thumbnail on disk — reuse it.
-  if (file.thumbnailKey && fs.existsSync(absolutePath(file.thumbnailKey)))
-    return file.thumbnailKey
+  if (file.thumbnailKey && (await storage.stat(file.thumbnailKey))) return file.thumbnailKey
 
   const kind = thumbKind(file)
   if (!kind) {
@@ -455,28 +450,30 @@ async function doGenerate(fileId: string): Promise<string | null> {
     return null
   }
 
-  const src = absolutePath(file.storageKey)
-  if (!fs.existsSync(src)) {
-    // Marked failed, not left pending: the backfill below pages by "still has
-    // no state", so an unmarked row would be handed back forever.
-    await mark(file.id, null, "failed")
-    console.error(`[thumb] source missing on disk: ${file.name} (${file.id}) -> ${file.storageKey}`)
-    return null
-  }
-
   return withSlot(async () => {
     const started = Date.now()
+    // Resolved inside the concurrency slot, not before: under the S3 driver
+    // this downloads the source to a temp file, and there's no reason to
+    // hold that (and its disk space) while queued behind other jobs.
+    const local = await storage.localPath(file.storageKey)
+    if (!local) {
+      // Marked failed, not left pending: the backfill below pages by "still
+      // has no state", so an unmarked row would be handed back forever.
+      await mark(file.id, null, "failed")
+      console.error(`[thumb] source missing: ${file.name} (${file.id}) -> ${file.storageKey}`)
+      return null
+    }
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ddthumb-"))
     try {
       const outJpg = path.join(tmpDir, "thumb.jpg")
-      const ok = await renderTo(kind, src, outJpg, tmpDir)
+      const ok = await renderTo(kind, local.path, outJpg, tmpDir)
       if (!ok || !fs.existsSync(outJpg) || fs.statSync(outJpg).size === 0) {
         await mark(file.id, null, "failed")
         console.error(`[thumb] failed ${kind}: ${file.name} (${file.id}) in ${Date.now() - started}ms`)
         return null
       }
       const key = newStorageKey(`${file.id}.jpg`)
-      fs.copyFileSync(outJpg, ensureDirFor(key))
+      await storage.putFile(key, outJpg)
       await mark(file.id, key, "ready")
       console.log(`[thumb] ok ${kind}: ${file.name} (${file.id}) in ${Date.now() - started}ms`)
       return key
@@ -485,6 +482,7 @@ async function doGenerate(fileId: string): Promise<string | null> {
       console.error(`[thumb] error ${kind}: ${file.name} (${file.id})`, e)
       return null
     } finally {
+      local.cleanup()
       try {
         fs.rmSync(tmpDir, { recursive: true, force: true })
       } catch {}
@@ -571,7 +569,7 @@ async function doGenerateStoryboard(
   })) as StoryboardFile | null
   if (!file) return null
 
-  if (file.storyboardKey && fs.existsSync(absolutePath(file.storyboardKey)) && file.storyboardMeta)
+  if (file.storyboardKey && file.storyboardMeta && (await storage.stat(file.storyboardKey)))
     return { key: file.storyboardKey, meta: file.storyboardMeta as StoryboardMeta }
 
   if (!canStoryboard(file)) {
@@ -579,23 +577,22 @@ async function doGenerateStoryboard(
     return null
   }
 
-  const src = absolutePath(file.storageKey)
-  if (!fs.existsSync(src)) {
-    await markStoryboard(file.id, null, "failed", null)
-    return null
-  }
-
   return withSlot(async () => {
     const started = Date.now()
+    const local = await storage.localPath(file.storageKey)
+    if (!local) {
+      await markStoryboard(file.id, null, "failed", null)
+      return null
+    }
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ddstoryboard-"))
     try {
-      const duration = await probeDuration(src)
+      const duration = await probeDuration(local.path)
       if (duration <= 0) {
         await markStoryboard(file.id, null, "failed", null)
         return null
       }
       const outJpg = path.join(tmpDir, "storyboard.jpg")
-      const grid = await renderStoryboard(src, outJpg, duration)
+      const grid = await renderStoryboard(local.path, outJpg, duration)
       const size = grid && fs.existsSync(outJpg) ? await probeImageSize(outJpg) : null
       if (!grid || !size) {
         await markStoryboard(file.id, null, "failed", null)
@@ -611,7 +608,7 @@ async function doGenerateStoryboard(
         frames: Math.min(grid.cols * grid.rows, Math.ceil(duration / grid.interval)),
       }
       const key = newStorageKey(`${file.id}.storyboard.jpg`)
-      fs.copyFileSync(outJpg, ensureDirFor(key))
+      await storage.putFile(key, outJpg)
       await markStoryboard(file.id, key, "ready", meta)
       console.log(`[storyboard] ok: ${file.name} (${file.id}) in ${Date.now() - started}ms`)
       return { key, meta }
@@ -620,6 +617,7 @@ async function doGenerateStoryboard(
       console.error(`[storyboard] error: ${file.name} (${file.id})`, e)
       return null
     } finally {
+      local.cleanup()
       try {
         fs.rmSync(tmpDir, { recursive: true, force: true })
       } catch {}

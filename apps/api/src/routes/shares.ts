@@ -162,7 +162,7 @@ sharesRouter.get("/:token/download/:fileId?", async (req, res) => {
       return res.status(403).json({ error: "forbidden" })
   }
 
-  streamStoredFile(req, res, file, {
+  await streamStoredFile(req, res, file, {
     disposition: req.query.inline === "1" ? "inline" : "attachment",
   })
 })

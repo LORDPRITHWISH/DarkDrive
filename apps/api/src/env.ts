@@ -17,6 +17,23 @@ const schema = z.object({
   GOOGLE_CALLBACK_URL: z.string().url(),
   STORAGE_DIR: z.string().default("./storage"),
   MAX_UPLOAD_MB: z.coerce.number().default(2048),
+  // "local" keeps files on STORAGE_DIR (a plain disk, or a mounted block
+  // storage volume for more room). "s3" pushes the same bytes to an
+  // S3-compatible bucket (Vultr Object Storage, AWS S3, R2, ...) instead —
+  // STORAGE_DIR is still used as local scratch space either way (chunked
+  // upload assembly, ffmpeg/libreoffice temp files).
+  STORAGE_DRIVER: z.enum(["local", "s3"]).default("local"),
+  S3_ENDPOINT: z.string().url().optional(),
+  S3_REGION: z.string().default("us-east-1"),
+  S3_BUCKET: z.string().optional(),
+  S3_ACCESS_KEY_ID: z.string().optional(),
+  S3_SECRET_ACCESS_KEY: z.string().optional(),
+  // Path-style URLs (https://endpoint/bucket/key) instead of virtual-hosted
+  // (https://bucket.endpoint/key) — required by most non-AWS S3-compatible
+  // providers, including Vultr Object Storage.
+  S3_FORCE_PATH_STYLE: z
+    .preprocess((v) => v === "true" || v === "1", z.boolean())
+    .default(true),
   // Optional — set to `.your-domain.tld` in production so the session cookie
   // is valid across subdomains (e.g. darkdrive.zenux.live + api.darkdrive.zenux.live).
   COOKIE_DOMAIN: z.string().optional(),

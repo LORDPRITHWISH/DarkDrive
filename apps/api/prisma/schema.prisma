@@ -12,6 +12,14 @@ enum UserRole {
   ADMIN
 }
 
+// Tiny generic key-value store for admin-editable settings that need to
+// survive a restart but don't warrant their own table — e.g. which storage
+// backend new uploads go to (see apps/api/src/storage/index.ts).
+model AppSetting {
+  key   String @id
+  value String
+}
+
 model User {
   id        String   @id @default(cuid())
   googleId  String   @unique

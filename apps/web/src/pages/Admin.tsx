@@ -20,6 +20,7 @@ import { DuplicatesList } from "./admin/DuplicatesList"
 import { TrashPanel } from "./admin/TrashPanel"
 import { RecycleBinPanel } from "./admin/RecycleBinPanel"
 import { ServerPanel } from "./admin/ServerPanel"
+import { StorageBackendPanel } from "./admin/StorageBackendPanel"
 import { ServerSummary } from "./admin/ServerSummary"
 import { ThumbnailsPanel } from "./admin/ThumbnailsPanel"
 import { LogsPanel } from "./admin/LogsPanel"
@@ -196,6 +197,7 @@ function Dashboard({
 
         <TabsContent value="server" className="flex flex-col gap-4">
           <ServerPanel />
+          <StorageBackendPanel />
           <ThumbnailsPanel />
           <LogsPanel />
         </TabsContent>

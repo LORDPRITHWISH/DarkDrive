@@ -1,6 +1,5 @@
-import fs from "node:fs"
 import type { Request, Response } from "express"
-import { absolutePath } from "../storage/local.js"
+import { storage } from "../storage/index.js"
 import { allowFrameEmbedding } from "./embed.js"
 
 type StreamTarget = {
@@ -19,26 +18,18 @@ type StreamOptions = {
 // `Range` is what lets the browser seek/scrub a <video> without downloading the
 // whole file first — a plain pipe() advertises no `Accept-Ranges`, so players
 // fall back to a single non-seekable stream.
-export function streamStoredFile(
+export async function streamStoredFile(
   req: Request,
   res: Response,
   file: StreamTarget,
   opts: StreamOptions
-): void {
-  const abs = absolutePath(file.storageKey)
-  let stat: fs.Stats
-  try {
-    stat = fs.statSync(abs)
-  } catch {
+): Promise<void> {
+  const info = await storage.stat(file.storageKey)
+  if (!info) {
     res.status(410).json({ error: "gone" })
     return
   }
-  if (!stat.isFile()) {
-    res.status(410).json({ error: "gone" })
-    return
-  }
-
-  const total = stat.size
+  const total = info.size
 
   if (opts.disposition === "inline") allowFrameEmbedding(res)
   res.setHeader("Accept-Ranges", "bytes")
@@ -69,7 +60,7 @@ export function streamStoredFile(
       res.end()
       return
     }
-    pipeRange(res, abs, start, end)
+    await pipeRange(res, file.storageKey, start, end)
     return
   }
 
@@ -78,7 +69,7 @@ export function streamStoredFile(
     res.end()
     return
   }
-  pipeRange(res, abs)
+  await pipeRange(res, file.storageKey)
 }
 
 // Parses a single-range `bytes=start-end` header against a known total size.
@@ -114,11 +105,16 @@ function parseRange(
   return { start, end }
 }
 
-function pipeRange(res: Response, abs: string, start?: number, end?: number) {
-  const stream =
-    start === undefined
-      ? fs.createReadStream(abs)
-      : fs.createReadStream(abs, { start, end })
+async function pipeRange(res: Response, storageKey: string, start?: number, end?: number) {
+  const result = await storage.readStream(
+    storageKey,
+    start === undefined ? undefined : { start, end: end! }
+  )
+  if (!result) {
+    if (!res.headersSent) res.status(410).json({ error: "gone" })
+    return
+  }
+  const { stream } = result
   stream.on("error", () => {
     if (!res.headersSent) res.status(500)
     res.destroy()

@@ -24,6 +24,10 @@ const CONFIG_DIR = process.env.DD_HOME ?? path.join(os.homedir(), ".darkdrive")
 const CONFIG_FILE = path.join(CONFIG_DIR, "config.json")
 const STATE_FILE = path.join(CONFIG_DIR, "state.json")
 const POLL_MS = Number(process.env.DD_POLL_MS ?? 5000)
+// Where to sync to, in order: --api=, whatever the last run saved, DD_API, then
+// the hosted instance — so an unconfigured run reaches a real server instead of
+// a dead local port.
+const DEFAULT_API = "https://api.darkdrive.zenux.live"
 const PART_SUFFIX = ".dd-part"
 const IGNORE = new Set([".darkdrive", ".DS_Store", "Thumbs.db", "desktop.ini", "$RECYCLE.BIN"])
 
@@ -42,7 +46,7 @@ function loadConfig(): Config {
     ? (JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8")) as Partial<Config>)
     : {}
   const cfg: Config = {
-    apiUrl: (flag("api") ?? saved.apiUrl ?? "http://localhost:4000").replace(/\/+$/, ""),
+    apiUrl: (flag("api") ?? saved.apiUrl ?? process.env.DD_API ?? DEFAULT_API).replace(/\/+$/, ""),
     token: flag("token") ?? saved.token ?? "",
     dir: path.resolve(flag("dir") ?? saved.dir ?? path.join(os.homedir(), "DarkDrive")),
     device: flag("device") ?? saved.device ?? os.hostname(),

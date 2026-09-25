@@ -25,6 +25,9 @@ export function getIO(): Server | null {
 
 export function initSocket(httpServer: HttpServer) {
   io = new Server(httpServer, {
+    // Replays events (e.g. "import:done") a client missed during a short
+    // disconnect — otherwise its import toaster would spin forever.
+    connectionStateRecovery: { maxDisconnectionDuration: 2 * 60 * 1000 },
     // Function-style origin so we can log rejections and normalize away
     // trailing slashes — same logic as the Express CORS middleware.
     cors: {

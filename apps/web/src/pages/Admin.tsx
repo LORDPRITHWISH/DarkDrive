@@ -21,6 +21,7 @@ import { TrashPanel } from "./admin/TrashPanel"
 import { RecycleBinPanel } from "./admin/RecycleBinPanel"
 import { ServerPanel } from "./admin/ServerPanel"
 import { StorageBackendPanel } from "./admin/StorageBackendPanel"
+import { S3Panel } from "./admin/S3Panel"
 import { ServerSummary } from "./admin/ServerSummary"
 import { ThumbnailsPanel } from "./admin/ThumbnailsPanel"
 import { LogsPanel } from "./admin/LogsPanel"
@@ -145,6 +146,7 @@ function Dashboard({
           <TabsTrigger value="spaces">Spaces</TabsTrigger>
           <TabsTrigger value="activity">Activity</TabsTrigger>
           <TabsTrigger value="server">Server</TabsTrigger>
+          <TabsTrigger value="s3">S3</TabsTrigger>
           <TabsTrigger value="users">Users</TabsTrigger>
           <TabsTrigger value="upgrades">
             Upgrade requests
@@ -200,6 +202,10 @@ function Dashboard({
           <StorageBackendPanel />
           <ThumbnailsPanel />
           <LogsPanel />
+        </TabsContent>
+
+        <TabsContent value="s3">
+          <S3Panel />
         </TabsContent>
 
         <TabsContent value="users">

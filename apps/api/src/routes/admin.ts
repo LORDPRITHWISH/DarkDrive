@@ -14,6 +14,7 @@ import {
   isS3Configured,
 } from "../storage/index.js"
 import { removeAudioVariants } from "../lib/audioTracks.js"
+import { s3Overview, scanProgress, runBucketScan } from "../lib/s3Analytics.js"
 import { notify } from "../lib/notify.js"
 import { recentLogs } from "../lib/logbuf.js"
 import { backfillProgress, backfillThumbnails, toolStatus } from "../lib/thumbnails.js"
@@ -158,6 +159,28 @@ adminRouter.post("/storage-driver", async (req, res) => {
     throw err
   }
   res.json({ active: getActiveDriverName() })
+})
+
+// --- S3 analytics ------------------------------------------------------
+// DB view + live bucket probe. The DB part works even when S3 isn't
+// configured, so the panel can still show "0 files on S3" and the local split.
+adminRouter.get("/s3", async (_req, res) => {
+  res.json(await s3Overview())
+})
+
+// Full-bucket reconciliation (every object vs every DB reference). Can take a
+// while on a big bucket, so it runs in the background — poll GET /s3/scan.
+// ponytail: background job on this process, no queue — same shape as the
+// thumbnail backfill above.
+adminRouter.get("/s3/scan", (_req, res) => {
+  res.json(scanProgress())
+})
+
+adminRouter.post("/s3/scan", (_req, res) => {
+  if (!isS3Configured()) return res.status(400).json({ error: "s3_not_configured" })
+  if (scanProgress().running) return res.status(409).json({ error: "already_running" })
+  void runBucketScan()
+  res.json({ ok: true })
 })
 
 // Comprehensive dashboard stats. All aggregated from existing tables in a

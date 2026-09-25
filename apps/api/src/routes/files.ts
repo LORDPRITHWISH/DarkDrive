@@ -586,6 +586,8 @@ filesRouter.post("/import-url", async (req, res) => {
   if (inFlight >= MAX_CONCURRENT_IMPORTS)
     return res.status(429).json({ error: "too_many_imports" })
   importsInFlight.set(user.id, inFlight + 1)
+  const done = (payload: { error: string } | { file: unknown }) =>
+    getIO()?.to(`user:${user.id}`).emit("import:done", { clientId: body.clientId, ...payload })
 
   try {
     const used = await prisma.file.aggregate({
@@ -611,6 +613,11 @@ filesRouter.post("/import-url", async (req, res) => {
     const key = newStorageKey(preliminaryName)
     const dest = newScratchPath()
 
+    // A big download outlives Node's 300s requestTimeout (and any proxy's),
+    // which dropped the connection and made the client show "failed" while
+    // this kept running. So answer now and report the outcome over the socket.
+    res.status(202).json({ accepted: true })
+
     let result: { size: number; mimeType: string | null; suggestedName: string | null }
     try {
       result = await importUrlToFile(body.url, dest, {
@@ -635,9 +642,9 @@ filesRouter.post("/import-url", async (req, res) => {
         fs.unlinkSync(dest)
       } catch {}
       const msg = err?.message ?? "import_failed"
-      if (msg === "too_large") return res.status(413).json({ error: "too_large" })
-      if (msg === "blocked_address") return res.status(400).json({ error: "url_not_allowed" })
-      return res.status(502).json({ error: "fetch_failed" })
+      if (msg === "too_large") return done({ error: "too_large" })
+      if (msg === "blocked_address") return done({ error: "url_not_allowed" })
+      return done({ error: "fetch_failed" })
     }
 
     // Re-check quota with the authoritative downloaded size — mirrors the
@@ -651,7 +658,7 @@ filesRouter.post("/import-url", async (req, res) => {
       try {
         fs.unlinkSync(dest)
       } catch {}
-      return res.status(413).json({ error: "quota_exceeded" })
+      return done({ error: "quota_exceeded" })
     }
 
     await storage.putFile(key, dest)
@@ -692,7 +699,11 @@ filesRouter.post("/import-url", async (req, res) => {
     queueThumbnail(rec.id)
     void maybeNotifyQuotaNearLimit(user.id, usedBytes2 + BigInt(result.size), quota)
 
-    res.status(201).json({ file: { ...rec, size: Number(rec.size) } })
+    done({ file: { ...rec, size: Number(rec.size) } })
+  } catch (err) {
+    // Past the 202 there's no response left to fail — tell the client instead.
+    if (!res.headersSent) throw err
+    done({ error: "import_failed" })
   } finally {
     const n = (importsInFlight.get(user.id) ?? 1) - 1
     if (n <= 0) importsInFlight.delete(user.id)

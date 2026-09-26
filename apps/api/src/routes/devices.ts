@@ -42,7 +42,8 @@ devicesRouter.get(
         name: z.string().trim().min(1).max(60).catch("Computer"),
       })
       .safeParse(req.query)
-    if (q.success) return res.type("html").send(allowPage(user.email, q.data))
+    const nonce = res.locals.cspNonce as string
+    if (q.success) return res.type("html").send(allowPage(user.email, q.data, nonce))
     res.type("html").send(`<!doctype html>
 <html><head><meta charset="utf-8"><title>Pair a device · DarkDrive</title>
 <style>
@@ -66,7 +67,7 @@ devicesRouter.get(
   <input id="name" placeholder="e.g. Laptop" autofocus>
   <button id="go">Create token</button>
   <div id="out"></div>
-<script>
+<script nonce="${nonce}">
 const out = document.getElementById("out")
 document.getElementById("go").onclick = async () => {
   const name = document.getElementById("name").value.trim() || "Device"
@@ -178,7 +179,8 @@ devicesRouter.delete("/:id", async (req, res) => {
 /** Consent page for the desktop app's browser sign-in. */
 function allowPage(
   email: string,
-  p: { port: number; state: string; name: string }
+  p: { port: number; state: string; name: string },
+  nonce: string
 ) {
   // Everything user-supplied reaches the page as JSON inside the script and is
   // shown via textContent; "<" escaped so a name can't close the tag.
@@ -204,7 +206,7 @@ function allowPage(
   <p>Let the DarkDrive app on <b id="name"></b> sync the files of <b id="email"></b>?</p>
   <button id="go" autofocus>Allow</button>
   <div id="out" class="warn"></div>
-<script>
+<script nonce="${nonce}">
 const d = ${data}
 document.getElementById("name").textContent = d.name
 document.getElementById("email").textContent = d.email

@@ -4,6 +4,7 @@ import { prisma } from "../db/prisma.js"
 import { env } from "../env.js"
 import { sessionMiddleware } from "../auth/session.js"
 import { passport } from "../auth/passport.js"
+import { bearerAuth } from "../auth/deviceToken.js"
 import type { Request, Response, NextFunction } from "express"
 
 const SOCKET_ORIGINS = Array.from(
@@ -49,6 +50,8 @@ export function initSocket(httpServer: HttpServer) {
   io.use(wrap(sessionMiddleware))
   io.use(wrap(passport.initialize()))
   io.use(wrap(passport.session()))
+  // The desktop app's drive window signs in with a device token, not a cookie.
+  io.use(wrap(bearerAuth))
 
   io.use((socket, next) => {
     const req: any = socket.request

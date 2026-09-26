@@ -12,7 +12,7 @@
   "private": true,
   "main": "dist/main.cjs",
   "scripts": {
-    "build": "esbuild src/main.ts src/preload.cts --bundle --platform=node --format=cjs --external:electron --outdir=dist --out-extension:.js=.cjs && esbuild node_modules/sync/dist/index.js --bundle --platform=node --format=esm --outfile=dist/sync.mjs && esbuild src/renderer.ts --bundle --format=esm --outfile=dist/renderer.js",
+    "build": "esbuild src/main.ts src/preload.cts src/drive-preload.cts --bundle --platform=node --format=cjs --external:electron --outdir=dist --out-extension:.js=.cjs && esbuild node_modules/sync/dist/index.js --bundle --platform=node --format=esm --outfile=dist/sync.mjs && esbuild src/renderer.ts --bundle --format=esm --outfile=dist/renderer.js",
     "start": "pnpm build && env -u ELECTRON_RUN_AS_NODE electron .",
     "dist": "pnpm build && electron-builder --publish never",
     "typecheck": "tsc --noEmit"

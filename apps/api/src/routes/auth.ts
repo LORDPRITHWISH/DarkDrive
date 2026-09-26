@@ -3,7 +3,7 @@ import { z } from "zod"
 import { passport } from "../auth/passport.js"
 import { env } from "../env.js"
 import { currentUser, requireAuth } from "../middleware/auth.js"
-import { assertUserPhotosRootId, assertUserRootFolderId } from "../lib/access.js"
+import { assertUserPhotosRootId, assertUserRootFolderId, assertUserSyncRootId } from "../lib/access.js"
 import { prisma } from "../db/prisma.js"
 import { safeReturnUrl } from "../lib/origins.js"
 
@@ -121,11 +121,12 @@ authRouter.post("/logout", (req, res) => {
 
 authRouter.get("/me", requireAuth, async (req, res) => {
   const u = currentUser(req)
-  // Both roots: "My Photos" is a sibling of "My Drive", not a child, so the
-  // sidebar can't reach it by walking the drive tree — it needs the id.
-  const [rootFolderId, photosRootFolderId] = await Promise.all([
+  // Every root: "My Photos" and "Synced Folders" are siblings of "My Drive",
+  // not children, so the sidebar can't reach them by walking the drive tree.
+  const [rootFolderId, photosRootFolderId, syncRootFolderId] = await Promise.all([
     assertUserRootFolderId(u),
     assertUserPhotosRootId(u),
+    assertUserSyncRootId(u),
   ])
   res.json({
     id: u.id,
@@ -134,6 +135,7 @@ authRouter.get("/me", requireAuth, async (req, res) => {
     avatarUrl: u.avatarUrl,
     rootFolderId,
     photosRootFolderId,
+    syncRootFolderId,
     role: u.role,
     storageQuotaBytes: Number(u.storageQuotaBytes),
     // Non-null only on a temp-session login; the web app shows it and signs

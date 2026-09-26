@@ -1,11 +1,37 @@
 import { useState } from "react"
-import { FolderIcon } from "@phosphor-icons/react"
+import { ArrowsClockwiseIcon, FolderIcon } from "@phosphor-icons/react"
 import { Input } from "@workspace/ui/components/input"
 import type { Folder } from "@/lib/types"
 import { apiUrl } from "@/lib/config"
 import { StarToggle } from "./StarToggle"
 import { isInternalDrag, readItemDrag, type DragItem } from "./dnd"
 import { HoverName } from "@/components/HoverName"
+import { useAuth } from "@/store/auth"
+
+// The folder icon, badged on the folders the desktop app syncs (the direct
+// children of "Synced Folders"): they mirror a folder on someone's computer
+// rather than being made here.
+export function FolderGlyph({ folder, size }: { folder: Folder; size: number }) {
+  const synced = useAuth((s) => !!s.user && s.user.syncRootFolderId === folder.parentId)
+  return (
+    <span className="relative inline-flex shrink-0">
+      <FolderIcon
+        size={size}
+        weight="fill"
+        style={{ color: folder.color || undefined }}
+        className={folder.color ? "" : "text-primary"}
+      />
+      {synced && (
+        <span
+          className="bg-background text-primary absolute right-0 bottom-0 grid place-items-center rounded-full p-[6%]"
+          title="Synced with a computer"
+        >
+          <ArrowsClockwiseIcon size={Math.max(8, Math.round(size * 0.35))} weight="bold" />
+        </span>
+      )}
+    </span>
+  )
+}
 
 function FolderThumb({ folderId }: { folderId: string }) {
   const [failed, setFailed] = useState(false)
@@ -109,21 +135,11 @@ export function FolderCard({
           <>
             <FolderThumb folderId={folder.id} />
             <div className="bg-background/80 absolute right-2 bottom-2 z-10 rounded-md p-1 backdrop-blur-sm">
-              <FolderIcon
-                size={16}
-                weight="fill"
-                style={{ color: folder.color || undefined }}
-                className={folder.color ? "" : "text-primary"}
-              />
+              <FolderGlyph folder={folder} size={16} />
             </div>
           </>
         ) : (
-          <FolderIcon
-            size={iconSize}
-            weight="fill"
-            style={{ color: folder.color || undefined }}
-            className={folder.color ? "" : "text-primary"}
-          />
+          <FolderGlyph folder={folder} size={iconSize} />
         )}
       </div>
       <div className="px-2 pb-2">

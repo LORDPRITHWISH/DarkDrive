@@ -1,15 +1,11 @@
 import { useState } from "react"
-import {
-  DotsThreeIcon,
-  FolderIcon,
-  LinkSimpleIcon,
-  StarIcon,
-} from "@phosphor-icons/react"
+import { DotsThreeIcon, LinkSimpleIcon, StarIcon } from "@phosphor-icons/react"
 import type { FileItem, Folder } from "@/lib/types"
 import { formatBytes, formatDate } from "@/lib/format"
 import { FileThumb } from "./FileThumb"
 import { isInternalDrag, readItemDrag, type DragItem } from "./dnd"
 import { HoverName } from "@/components/HoverName"
+import { FolderGlyph } from "./FolderCard"
 import {
   Table,
   TableBody,
@@ -94,12 +90,7 @@ export function FileListView({
           >
             <TableCell className="p-0 py-2 pl-4">
               <div className="flex items-center gap-2">
-                <FolderIcon
-                  size={20}
-                  weight="fill"
-                  style={{ color: f.color || undefined }}
-                  className={f.color ? "" : "text-primary"}
-                />
+                <FolderGlyph folder={f} size={20} />
                 <HoverName
                   as="span"
                   name={f.name}

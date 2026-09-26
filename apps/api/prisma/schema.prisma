@@ -44,6 +44,12 @@ model User {
   photosRootFolderId String? @unique
   photosRoot         Folder? @relation("UserPhotosRoot", fields: [photosRootFolderId], references: [id])
 
+  // Third root, "Synced Folders": one child per folder the desktop app keeps
+  // in sync with a folder on someone's computer. Its direct children are what
+  // the app offers to other devices, and what the web badges as synced.
+  syncRootFolderId String? @unique
+  syncRoot         Folder? @relation("UserSyncRoot", fields: [syncRootFolderId], references: [id])
+
   folders       Folder[]       @relation("FolderOwner")
   files         File[]         @relation("FileOwner")
   spaces        Space[]        @relation("SpaceOwner")
@@ -227,6 +233,7 @@ model Folder {
 
   rootOf       User?          @relation("UserRoot")
   photosRootOf User?          @relation("UserPhotosRoot")
+  syncRootOf   User?          @relation("UserSyncRoot")
   spaceRootOf  Space?         @relation("SpaceRoot")
   shares       Share[]
   shortcuts    FileShortcut[] @relation("FolderShortcuts")

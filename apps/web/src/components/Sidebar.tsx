@@ -1,5 +1,7 @@
 import { Link, useLocation } from "react-router-dom"
 import {
+  ArrowsClockwiseIcon,
+  DesktopIcon,
   HouseIcon,
   FolderIcon,
   FolderOpenIcon,
@@ -42,6 +44,10 @@ import { Popover, PopoverContent, PopoverTrigger } from "@workspace/ui/component
 import { ThemeToggle } from "@/components/ThemeToggle"
 import { MobileTabBar } from "@/components/MobileTabBar"
 
+// Set by the desktop app (apps/desktop, drive-preload.cts) when this page is
+// its drive window. Absent in a browser.
+const desktop = (window as { darkdriveDesktop?: { openSyncSettings(): void } }).darkdriveDesktop
+
 export function Sidebar() {
   const user = useAuth((s) => s.user)
   const { spaces, loadSpaces, togglePinSpace, upload, currentFolderId } = useDrive()
@@ -82,18 +88,16 @@ export function Sidebar() {
       : 0
   const nearLimit = pct >= 80
 
+  const navClass = (active: boolean) =>
+    `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors [&_svg]:shrink-0 md:gap-2 md:rounded-md md:py-2 ${
+      collapsed ? "justify-center px-2" : ""
+    } ${
+      active
+        ? "bg-accent text-accent-foreground"
+        : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+    }`
   const navItem = (to: string, label: string, icon: React.ReactNode) => (
-    <Link
-      to={to}
-      title={collapsed ? label : undefined}
-      className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors [&_svg]:shrink-0 md:gap-2 md:rounded-md md:py-2 ${
-        collapsed ? "justify-center px-2" : ""
-      } ${
-        loc.pathname === to
-          ? "bg-accent text-accent-foreground"
-          : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
-      }`}
-    >
+    <Link to={to} title={collapsed ? label : undefined} className={navClass(loc.pathname === to)}>
       {icon}
       {!collapsed && <span>{label}</span>}
     </Link>
@@ -208,6 +212,23 @@ export function Sidebar() {
             "My Photos",
             <ImagesIcon size={18} />
           )}
+        {user &&
+          navItem(
+            `/drive/${user.syncRootFolderId}`,
+            "Synced Folders",
+            <ArrowsClockwiseIcon size={18} />
+          )}
+        {desktop && (
+          <button
+            type="button"
+            onClick={() => desktop.openSyncSettings()}
+            title={collapsed ? "Sync settings" : undefined}
+            className={navClass(false)}
+          >
+            <DesktopIcon size={18} />
+            {!collapsed && <span>Sync settings</span>}
+          </button>
+        )}
         {navItem("/spaces", "Spaces", <UsersThreeIcon size={18} />)}
         {navItem("/search", "Search", <MagnifyingGlassIcon size={18} />)}
         {navItem("/recent", "Recent", <ClockCounterClockwiseIcon size={18} />)}

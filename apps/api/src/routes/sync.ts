@@ -3,7 +3,7 @@ import type { User } from "@prisma/client"
 import { z } from "zod"
 import { prisma } from "../db/prisma.js"
 import { currentUser, requireAuth } from "../middleware/auth.js"
-import { assertUserRootFolderId } from "../lib/access.js"
+import { assertUserRootFolderId, assertUserSyncRootId } from "../lib/access.js"
 
 export const syncRouter = Router()
 syncRouter.use(requireAuth)
@@ -51,27 +51,34 @@ function pathBuilder(byId: Map<string, FolderRow>, rootId: string) {
   }
 }
 
-// Every folder in the user's own drive (not spaces, and not the photos root,
-// which is a second parentless root that pathOf never reaches).
+// Every folder the user owns outside spaces. pathOf resolves paths within My
+// Drive, syncedPathOf within "Synced Folders"; both return null for anything
+// under another root (e.g. the photos root).
 async function loadDrive(user: User) {
-  const driveRoot = await assertUserRootFolderId(user)
+  const [driveRoot, syncedRoot] = await Promise.all([assertUserRootFolderId(user), assertUserSyncRootId(user)])
   const folders: FolderRow[] = await prisma.folder.findMany({
     where: { ownerId: user.id, spaceId: null },
     select: { id: true, name: true, parentId: true, isTrashed: true, deletedAt: true, updatedAt: true },
   })
   const byId = new Map(folders.map((f) => [f.id, f]))
-  return { driveRoot, folders, byId, pathOf: pathBuilder(byId, driveRoot) }
+  return {
+    driveRoot, syncedRoot, folders, byId,
+    pathOf: pathBuilder(byId, driveRoot),
+    syncedPathOf: pathBuilder(byId, syncedRoot),
+  }
 }
 
-// The folder a client syncs against: `root` if it names a live folder inside
-// the user's drive, the whole drive if it's absent. Anything else (someone
-// else's folder, a space, the photos root, the bin) is refused outright, not
-// quietly widened to the whole drive, which would pour every file onto a
-// disk that asked for one folder.
+// The folder a client syncs against: `root` if it names a live folder in the
+// user's drive or in Synced Folders (the desktop app), the whole drive if
+// it's absent (the mobile app). Anything else (someone else's folder, a
+// space, the photos root, the bin) is refused outright, not quietly widened
+// to the whole drive, which would pour every file onto a disk that asked for
+// one folder.
 function syncRoot(drive: Awaited<ReturnType<typeof loadDrive>>, raw: unknown): string | null {
   if (raw === undefined || raw === "") return drive.driveRoot
   const f = typeof raw === "string" ? drive.byId.get(raw) : undefined
-  if (!f || f.isTrashed || f.deletedAt || drive.pathOf(f.id) === null) return null
+  if (!f || f.isTrashed || f.deletedAt) return null
+  if (drive.pathOf(f.id) === null && drive.syncedPathOf(f.id) === null) return null
   return f.id
 }
 
@@ -140,16 +147,36 @@ syncRouter.get("/changes", async (req, res) => {
   res.json({ cursor: cursor.toISOString(), folders: changedFolders, files: changedFiles })
 })
 
-// The picker in the desktop app: every live folder in the drive, by path.
+// The synced folders, for the desktop app's "sync one here" picker.
 syncRouter.get("/folders", async (req, res) => {
-  const drive = await loadDrive(currentUser(req))
-  const out = []
-  for (const f of drive.folders) {
-    if (f.isTrashed || f.deletedAt) continue
-    const path = drive.pathOf(f.id)
-    if (path !== null) out.push({ id: f.id, path })
-  }
-  res.json(out.sort((a, b) => a.path.localeCompare(b.path)))
+  const parentId = await assertUserSyncRootId(currentUser(req))
+  res.json(
+    await prisma.folder.findMany({
+      where: { parentId, isTrashed: false },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    })
+  )
+})
+
+// A new synced folder, for a folder the desktop app starts syncing from its
+// computer. Two computers can each have an "Important Docs" with nothing in
+// common, and quietly merging them would be a nasty surprise, so the second
+// becomes "Important Docs (2)". Joining an existing one is the picker above.
+syncRouter.post("/folders", async (req, res) => {
+  const user = currentUser(req)
+  const body = z.object({ name: z.string().trim().min(1).max(255) }).safeParse(req.body)
+  if (!body.success || /[\\/]/.test(body.data.name) || body.data.name === "." || body.data.name === "..")
+    return res.status(400).json({ error: "bad_name" })
+  const parentId = await assertUserSyncRootId(user)
+  const taken = new Set(
+    (await prisma.folder.findMany({ where: { parentId, isTrashed: false }, select: { name: true } })).map((f) => f.name)
+  )
+  let name = body.data.name
+  for (let i = 2; taken.has(name); i++) name = `${body.data.name} (${i})`
+  res.status(201).json(
+    await prisma.folder.create({ data: { name, ownerId: user.id, parentId }, select: { id: true, name: true } })
+  )
 })
 
 // Resolve a path to a folder id, creating any missing segments. Sync clients

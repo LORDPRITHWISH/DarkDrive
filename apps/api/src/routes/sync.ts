@@ -1,4 +1,5 @@
 import { Router } from "express"
+import type { User } from "@prisma/client"
 import { z } from "zod"
 import { prisma } from "../db/prisma.js"
 import { currentUser, requireAuth } from "../middleware/auth.js"
@@ -12,7 +13,10 @@ syncRouter.use(requireAuth)
 // loop on user-shaped data is not worth the risk.
 const MAX_DEPTH = 64
 
-type FolderRow = { id: string; name: string; parentId: string | null }
+type FolderRow = {
+  id: string; name: string; parentId: string | null
+  isTrashed: boolean; deletedAt: Date | null; updatedAt: Date
+}
 
 // Path of a folder relative to the drive root, POSIX-separated. "" is the
 // root itself; null means the folder hangs off something outside this drive
@@ -47,6 +51,30 @@ function pathBuilder(byId: Map<string, FolderRow>, rootId: string) {
   }
 }
 
+// Every folder in the user's own drive (not spaces, and not the photos root,
+// which is a second parentless root that pathOf never reaches).
+async function loadDrive(user: User) {
+  const driveRoot = await assertUserRootFolderId(user)
+  const folders: FolderRow[] = await prisma.folder.findMany({
+    where: { ownerId: user.id, spaceId: null },
+    select: { id: true, name: true, parentId: true, isTrashed: true, deletedAt: true, updatedAt: true },
+  })
+  const byId = new Map(folders.map((f) => [f.id, f]))
+  return { driveRoot, folders, byId, pathOf: pathBuilder(byId, driveRoot) }
+}
+
+// The folder a client syncs against: `root` if it names a live folder inside
+// the user's drive, the whole drive if it's absent. Anything else (someone
+// else's folder, a space, the photos root, the bin) is refused outright, not
+// quietly widened to the whole drive, which would pour every file onto a
+// disk that asked for one folder.
+function syncRoot(drive: Awaited<ReturnType<typeof loadDrive>>, raw: unknown): string | null {
+  if (raw === undefined || raw === "") return drive.driveRoot
+  const f = typeof raw === "string" ? drive.byId.get(raw) : undefined
+  if (!f || f.isTrashed || f.deletedAt || drive.pathOf(f.id) === null) return null
+  return f.id
+}
+
 // Everything in the user's own drive that changed since `since`, as paths.
 // Deletes are included (isTrashed/deletedAt) so clients know to remove the
 // local copy — no separate change journal is needed because every mutation
@@ -55,6 +83,9 @@ function pathBuilder(byId: Map<string, FolderRow>, rootId: string) {
 // A rename or move of a folder does NOT bump its descendants' updatedAt, so
 // clients must handle a changed folder path by moving the local directory;
 // the children then follow on disk for free.
+//
+// ?root=<folderId> scopes it to one folder: paths are relative to it and
+// nothing outside it is reported.
 syncRouter.get("/changes", async (req, res) => {
   const user = currentUser(req)
   const since = new Date(String(req.query.since ?? 0))
@@ -63,15 +94,14 @@ syncRouter.get("/changes", async (req, res) => {
   // Captured before the reads: a row written mid-query is then re-delivered
   // next poll rather than missed. Applying a change twice is a no-op.
   const cursor = new Date()
-  const rootId = await assertUserRootFolderId(user)
-
   // Every folder, not just changed ones — needed to resolve parent chains.
-  const folders = await prisma.folder.findMany({
-    where: { ownerId: user.id, spaceId: null },
-    select: { id: true, name: true, parentId: true, isTrashed: true, deletedAt: true, updatedAt: true },
-  })
-  const byId = new Map(folders.map((f) => [f.id, f]))
-  const pathOf = pathBuilder(byId, rootId)
+  const drive = await loadDrive(user)
+  const rootId = syncRoot(drive, req.query.root)
+  if (!rootId) return res.status(404).json({ error: "sync_root_gone" })
+  const { folders } = drive
+  // Rooted at the sync folder, so anything outside it resolves to null and
+  // is skipped below.
+  const pathOf = pathBuilder(drive.byId, rootId)
 
   const files = await prisma.file.findMany({
     where: { ownerId: user.id, spaceId: null, updatedAt: { gt: since } },
@@ -110,12 +140,28 @@ syncRouter.get("/changes", async (req, res) => {
   res.json({ cursor: cursor.toISOString(), folders: changedFolders, files: changedFiles })
 })
 
+// The picker in the desktop app: every live folder in the drive, by path.
+syncRouter.get("/folders", async (req, res) => {
+  const drive = await loadDrive(currentUser(req))
+  const out = []
+  for (const f of drive.folders) {
+    if (f.isTrashed || f.deletedAt) continue
+    const path = drive.pathOf(f.id)
+    if (path !== null) out.push({ id: f.id, path })
+  }
+  res.json(out.sort((a, b) => a.path.localeCompare(b.path)))
+})
+
 // Resolve a path to a folder id, creating any missing segments. Sync clients
-// work in paths; every other write endpoint works in folder ids.
+// work in paths; every other write endpoint works in folder ids. `root`
+// scopes it the same way as /changes.
 syncRouter.post("/folder", async (req, res) => {
   const user = currentUser(req)
-  const { path } = z.object({ path: z.string().max(4096) }).parse(req.body)
-  const rootId = await assertUserRootFolderId(user)
+  const body = z.object({ path: z.string().max(4096), root: z.string().optional() }).safeParse(req.body)
+  if (!body.success) return res.status(400).json({ error: "invalid" })
+  const { path } = body.data
+  const rootId = syncRoot(await loadDrive(user), body.data.root)
+  if (!rootId) return res.status(404).json({ error: "sync_root_gone" })
 
   let parentId = rootId
   const parts = path.split("/").map((s) => s.trim()).filter(Boolean)

@@ -37,6 +37,17 @@ function setSignedIn(yes: boolean) {
 const errMsg = (err: unknown) => String((err as Error).message).replace(/^.*Error: /, "")
 const formConfig = () => Object.fromEntries(new FormData(form)) as Config
 
+// Show the folder's current name (it may have been renamed on the web) and
+// offer every folder in the drive as a suggestion.
+async function loadRemoteFolders() {
+  const folders = await dd.remoteFolders()
+  $("remote-folders").replaceChildren(
+    ...folders.filter((f) => f.path).map((f) => Object.assign(document.createElement("option"), { value: f.path }))
+  )
+  const current = folders.find((f) => f.id === field("remoteFolderId").value)
+  if (current) field("remotePath").value = current.path
+}
+
 function append(line: string) {
   const stick = logEl.scrollTop + logEl.clientHeight >= logEl.scrollHeight - 4
   logEl.textContent += line + "\n"
@@ -48,6 +59,7 @@ const field = (name: keyof Config) => form.elements.namedItem(name) as HTMLInput
 const cfg = await dd.getConfig()
 for (const k of Object.keys(cfg) as (keyof Config)[]) field(k).value = cfg[k]
 setSignedIn(!!cfg.token)
+loadRemoteFolders()
 
 const state = await dd.getState()
 setRunning(state.running)
@@ -64,7 +76,9 @@ form.onsubmit = async (e) => {
   error.textContent = ""
   try {
     await dd.saveConfig(formConfig())
+    field("remoteFolderId").value = (await dd.getConfig()).remoteFolderId
     setSignedIn(!!field("token").value)
+    loadRemoteFolders()
   } catch (err) {
     error.textContent = errMsg(err)
   }
@@ -79,8 +93,11 @@ signin.onclick = async () => {
   $("hint").textContent = "Finish signing in in your browser…"
   try {
     await dd.signIn(formConfig())
-    field("token").value = (await dd.getConfig()).token
+    const saved = await dd.getConfig()
+    field("token").value = saved.token
+    field("remoteFolderId").value = saved.remoteFolderId
     setSignedIn(true)
+    loadRemoteFolders()
   } catch (err) {
     if (attempt !== attempts) return
     error.textContent = errMsg(err)

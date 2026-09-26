@@ -10,6 +10,7 @@ const api = {
   installUpdate: () => ipcRenderer.invoke("update:install"),
   start: () => ipcRenderer.invoke("sync:start"),
   stop: () => ipcRenderer.invoke("sync:stop"),
+  remoteFolders: (): Promise<{ id: string; path: string }[]> => ipcRenderer.invoke("remote:folders"),
   pickDir: (): Promise<string | null> => ipcRenderer.invoke("dir:pick"),
   openFolder: () => ipcRenderer.invoke("open:folder"),
   signIn: (cfg: Config): Promise<void> => ipcRenderer.invoke("sign-in", cfg),

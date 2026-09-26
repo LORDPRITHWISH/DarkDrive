@@ -28,6 +28,7 @@
   button:focus-visible,input:focus-visible{outline:2px solid #60a5fa;outline-offset:1px}
   .account{display:flex;align-items:center;gap:12px}
   #account{flex:1}
+  .note{font-size:11px;color:#737373}
   #hint{font-size:12px;color:#a3a3a3}
   #hint:empty{display:none}
   details{display:grid;gap:12px}
@@ -57,15 +58,21 @@
     <button id="signin" type="button">Sign in with Google</button>
   </div>
   <div id="hint"></div>
-  <label>Sync folder
+  <label>Folder on this computer
     <div class="row">
       <input name="dir" required>
       <button id="pick" type="button">Choose…</button>
     </div>
   </label>
+  <label>DarkDrive folder
+    <input name="remotePath" list="remote-folders" placeholder="My Drive (everything)" autocomplete="off">
+    <datalist id="remote-folders"></datalist>
+    <span class="note">Pick a folder, or type a new name to create it. Leave empty to sync your whole drive.</span>
+  </label>
   <label>Device name
     <input name="device">
   </label>
+  <input type="hidden" name="remoteFolderId">
   <details>
     <summary>Advanced</summary>
     <label>Server

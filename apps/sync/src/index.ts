@@ -31,7 +31,8 @@ const DEFAULT_API = "https://api.darkdrive.zenux.live"
 const PART_SUFFIX = ".dd-part"
 const IGNORE = new Set([".darkdrive", ".DS_Store", "Thumbs.db", "desktop.ini", "$RECYCLE.BIN"])
 
-type Config = { apiUrl: string; token: string; dir: string; device: string }
+// remoteFolderId: the DarkDrive folder the local dir mirrors; "" = whole drive.
+type Config = { apiUrl: string; token: string; dir: string; device: string; remoteFolderId: string }
 type Entry = { id: string; sha: string; size: number; mtimeMs: number }
 type State = { cursor: string; files: Record<string, Entry>; folders: Record<string, string> }
 
@@ -50,6 +51,7 @@ function loadConfig(): Config {
     token: flag("token") ?? saved.token ?? "",
     dir: path.resolve(flag("dir") ?? saved.dir ?? path.join(os.homedir(), "DarkDrive")),
     device: flag("device") ?? saved.device ?? os.hostname(),
+    remoteFolderId: flag("remote-folder") ?? saved.remoteFolderId ?? "",
   }
   if (!cfg.token) {
     console.error(
@@ -60,7 +62,9 @@ function loadConfig(): Config {
     )
     process.exit(1)
   }
-  fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2), { mode: 0o600 })
+  // Spread over what was saved so keys the desktop app keeps here (the
+  // folder's display path) survive a daemon start.
+  fs.writeFileSync(CONFIG_FILE, JSON.stringify({ ...saved, ...cfg }, null, 2), { mode: 0o600 })
   fs.mkdirSync(cfg.dir, { recursive: true })
   return cfg
 }
@@ -207,7 +211,7 @@ function reprefix(from: string, to: string) {
 async function pull() {
   const data = await api<{ cursor: string; folders: RemoteFolder[]; files: RemoteFile[] }>(
     "GET",
-    `/api/sync/changes?since=${encodeURIComponent(state.cursor)}`
+    `/api/sync/changes?since=${encodeURIComponent(state.cursor)}&root=${encodeURIComponent(cfg.remoteFolderId)}`
   )
 
   // Folders first: creating and moving directories before the files that go
@@ -297,7 +301,10 @@ const folderIds = new Map<string, string>()
 async function ensureFolder(rel: string): Promise<string> {
   const hit = folderIds.get(rel)
   if (hit) return hit
-  const { id } = await api<{ id: string }>("POST", "/api/sync/folder", { path: rel })
+  const { id } = await api<{ id: string }>("POST", "/api/sync/folder", {
+    path: rel,
+    root: cfg.remoteFolderId,
+  })
   folderIds.set(rel, id)
   return id
 }

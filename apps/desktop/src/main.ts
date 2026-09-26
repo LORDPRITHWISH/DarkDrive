@@ -29,7 +29,12 @@ const LOG_LINES = 300
 const UPDATE_CHECK_MS = 4 * 60 * 60 * 1000
 const SIGN_IN_TIMEOUT_MS = 10 * 60 * 1000
 
-export type Config = { apiUrl: string; token: string; dir: string; device: string }
+// remoteFolderId is what the daemon syncs against ("" = the whole drive);
+// remotePath is only for showing it, and is what the form edits.
+export type Config = {
+  apiUrl: string; token: string; dir: string; device: string
+  remoteFolderId: string; remotePath: string
+}
 
 function readConfig(): Config {
   let saved: Partial<Config> = {}
@@ -41,6 +46,8 @@ function readConfig(): Config {
     token: saved.token ?? "",
     dir: saved.dir ?? path.join(os.homedir(), "DarkDrive"),
     device: saved.device ?? os.hostname(),
+    remoteFolderId: saved.remoteFolderId ?? "",
+    remotePath: saved.remotePath ?? "",
   }
 }
 
@@ -56,6 +63,8 @@ function writeConfig(input: Config) {
     token: String(input.token).trim(),
     dir: String(input.dir).trim(),
     device: String(input.device).trim() || os.hostname(),
+    remoteFolderId: String(input.remoteFolderId),
+    remotePath: String(input.remotePath),
   }
   if (!path.isAbsolute(next.dir)) throw new Error("Folder must be an absolute path")
   const prev = readConfig()
@@ -63,10 +72,46 @@ function writeConfig(input: Config) {
   // Point it at a different folder or account and push() reads every tracked
   // file as "deleted locally" and trashes it remotely. Dropping the state makes
   // the next run a fresh reconcile instead, which only ever adds or moves aside.
-  if (next.dir !== prev.dir || next.apiUrl !== prev.apiUrl || next.token !== prev.token)
+  // A different DarkDrive folder is the same hazard from the other side.
+  if (
+    next.dir !== prev.dir ||
+    next.apiUrl !== prev.apiUrl ||
+    next.token !== prev.token ||
+    next.remoteFolderId !== prev.remoteFolderId
+  )
     fs.rmSync(STATE_FILE, { force: true })
   fs.mkdirSync(CONFIG_DIR, { recursive: true })
   fs.writeFileSync(CONFIG_FILE, JSON.stringify(next, null, 2), { mode: 0o600 })
+}
+
+// ----------------------------------------------------- DarkDrive folders
+
+async function apiCall<T>(cfg: Config, method: string, route: string, body?: unknown): Promise<T> {
+  const r = await fetch(httpUrl(cfg.apiUrl) + route, {
+    method,
+    headers: { Authorization: `Bearer ${cfg.token}`, "content-type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+  if (!r.ok) throw new Error(`${method} ${route} -> ${r.status}`)
+  return r.json() as Promise<T>
+}
+
+/**
+ * Turn the typed DarkDrive path into the folder id the daemon needs, creating
+ * the folder if it doesn't exist yet: typing "Laptop" is how you make one.
+ * Re-resolved on every save, so a folder renamed on the web still matches by
+ * its new name as shown in the picker.
+ */
+async function withRemoteFolder(cfg: Config): Promise<Config> {
+  const remotePath = String(cfg.remotePath).split("/").map((s) => s.trim()).filter(Boolean).join("/")
+  if (!remotePath) return { ...cfg, remotePath, remoteFolderId: "" }
+  if (!cfg.token) throw new Error("Sign in first, then pick a DarkDrive folder")
+  try {
+    const { id } = await apiCall<{ id: string }>(cfg, "POST", "/api/sync/folder", { path: remotePath })
+    return { ...cfg, remotePath, remoteFolderId: id }
+  } catch {
+    throw new Error(`Couldn't open "${remotePath}" on DarkDrive. Check your connection and try again.`)
+  }
 }
 
 // --------------------------------------------------------------- sign-in
@@ -242,17 +287,35 @@ function registerAutostart() {
 }
 
 ipcMain.handle("config:get", () => readConfig())
-ipcMain.handle("config:save", async (_e, cfg: Config) => {
-  writeConfig(cfg)
+/**
+ * Stop the daemon, write the config, start it again. The order matters: the
+ * daemon saves state.json on its way out, so stopping it after writeConfig
+ * would write back the very state writeConfig just dropped, and the
+ * folder-change guard in writeConfig would silently not happen.
+ */
+async function applyConfig(cfg: Config) {
   await stop()
-  start()
+  try {
+    writeConfig(cfg)
+  } finally {
+    start()
+  }
+}
+
+ipcMain.handle("config:save", async (_e, cfg: Config) => {
+  await applyConfig(await withRemoteFolder(cfg))
 })
 ipcMain.handle("sign-in", async (_e, cfg: Config) => {
   const token = await signIn(cfg.apiUrl, cfg.device)
-  writeConfig({ ...cfg, token })
-  await stop()
-  start()
+  await applyConfig(await withRemoteFolder({ ...cfg, token }))
   show() // the browser has focus now; bring the user back
+})
+// Suggestions for the picker. Empty when signed out or offline; the field
+// still takes a typed path either way.
+ipcMain.handle("remote:folders", async () => {
+  const cfg = readConfig()
+  if (!cfg.token) return []
+  return apiCall<{ id: string; path: string }[]>(cfg, "GET", "/api/sync/folders").catch(() => [])
 })
 ipcMain.handle("state:get", () => ({ running: !!daemon, log, version: app.getVersion(), updateReady }))
 ipcMain.handle("update:install", () => autoUpdater.quitAndInstall())

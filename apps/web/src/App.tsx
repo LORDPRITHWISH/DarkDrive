@@ -26,6 +26,7 @@ import { StoragePage } from "@/pages/Storage"
 import { ProfilePage } from "@/pages/Profile"
 import { ShareTargetPage } from "@/pages/ShareTarget"
 import { TempLoginPage } from "@/pages/TempLogin"
+import { PairPage } from "@/pages/Pair"
 import { UploadToaster } from "@/components/UploadToaster"
 import { Toaster } from "@/components/Toaster"
 import { ConfirmDialog } from "@/components/ConfirmDialog"
@@ -39,10 +40,11 @@ import type { AppNotification } from "@/lib/types"
 // Login is a hard server/page redirect (Google OAuth callback, dev-login),
 // so a normal router return-URL doesn't survive it. We stash the path in
 // localStorage instead — for the cases where landing back on /home after login
-// would silently drop what the user came to do: /invite links, and /share-target
-// (files are already parked in the SW cache and would otherwise be stranded).
+// would silently drop what the user came to do: /invite links, /share-target
+// (files are already parked in the SW cache and would otherwise be stranded),
+// and /pair (the query string carries the desktop app's loopback port/state).
 const RETURN_TO_KEY = "dd.returnTo"
-const RETURN_TO_PATHS = ["/invite/", "/share-target"]
+const RETURN_TO_PATHS = ["/invite/", "/share-target", "/pair"]
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, loading, fetchMe } = useAuth()
@@ -53,18 +55,19 @@ function Protected({ children }: { children: React.ReactNode }) {
   }, [fetchMe])
   useEffect(() => {
     if (loading) return
+    const here = loc.pathname + loc.search
     if (!user) {
       if (RETURN_TO_PATHS.some((p) => loc.pathname.startsWith(p))) {
-        localStorage.setItem(RETURN_TO_KEY, loc.pathname)
+        localStorage.setItem(RETURN_TO_KEY, here)
       }
       return
     }
     const returnTo = localStorage.getItem(RETURN_TO_KEY)
-    if (returnTo && returnTo !== loc.pathname) {
+    if (returnTo && returnTo !== here) {
       localStorage.removeItem(RETURN_TO_KEY)
       nav(returnTo, { replace: true })
     }
-  }, [user, loading, loc.pathname, nav])
+  }, [user, loading, loc.pathname, loc.search, nav])
   if (loading) return <div className="grid min-h-svh place-items-center">Loading…</div>
   if (!user) return <Navigate to="/login" replace />
   return (
@@ -285,6 +288,14 @@ export function App() {
           element={
             <Protected>
               <BinPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/pair"
+          element={
+            <Protected>
+              <PairPage />
             </Protected>
           }
         />

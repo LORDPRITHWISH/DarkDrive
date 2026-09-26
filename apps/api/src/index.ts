@@ -1,5 +1,4 @@
 import "./lib/logbuf.js" // patches console — must load before anything that logs
-import crypto from "node:crypto"
 import http from "node:http"
 import express from "express"
 import cors from "cors"
@@ -31,24 +30,7 @@ import { initTelegramBot } from "./lib/telegram.js"
 const app = express()
 
 app.set("trust proxy", 1)
-
-// Per-request nonce so the pairing pages' inline <script> tags (devices.ts)
-// can run under CSP without a blanket 'unsafe-inline' on script-src.
-app.use((_req, res, next) => {
-  res.locals.cspNonce = crypto.randomBytes(16).toString("base64")
-  next()
-})
-app.use(
-  helmet({
-    crossOriginResourcePolicy: { policy: "cross-origin" },
-    contentSecurityPolicy: {
-      directives: {
-        ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-        "script-src": ["'self'", (_req, res) => `'nonce-${(res as express.Response).locals.cspNonce}'`],
-      },
-    },
-  })
-)
+app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }))
 
 // The allowlist itself lives in lib/origins (it is also what bounds the
 // post-login redirect). Using a function here lets us log rejections — easiest

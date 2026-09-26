@@ -14,6 +14,8 @@ export type DesktopState = {
   log: string[]
   version: string
   updateReady: string | null
+  /** The pairing page a sign-in is waiting on, to paste into another browser. */
+  signInUrl: string | null
 }
 
 export type Desktop = {
@@ -23,6 +25,8 @@ export type Desktop = {
   /** Opens the browser to approve this computer; the app reloads signed in. */
   signIn(): Promise<void>
   signOut(): Promise<void>
+  /** Claims a temporary login code; answers the claim's HTTP status (200: the app reloads signed in). */
+  tempSignIn(code: string): Promise<number>
   saveServer(s: { apiUrl: string; webUrl: string; device: string }): Promise<void>
   getState(): Promise<DesktopState>
   /** Calls `fn` whenever getState() would answer differently. Returns the unsubscribe. */
@@ -33,7 +37,10 @@ export type Desktop = {
   addLocalFolder(): Promise<void>
   addRemoteFolder(id: string): Promise<void>
   removeFolder(id: string): Promise<void>
-  openFolder(id: string): Promise<void>
+  /** Where a file or folder is on this computer, if a synced folder has it here. */
+  localPath(type: "file" | "folder", id: string): Promise<string | null>
+  /** In the file manager: a folder opened, a file selected in its folder. */
+  show(type: "file" | "folder", id: string): Promise<void>
   installUpdate(): Promise<void>
 }
 

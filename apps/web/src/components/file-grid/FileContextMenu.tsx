@@ -1,5 +1,7 @@
+import { useEffect, useState } from "react"
 import {
   ArrowsOutCardinalIcon,
+  DesktopIcon,
   DownloadIcon,
   EyeIcon as OpenEyeIcon,
   EyeSlashIcon,
@@ -18,6 +20,8 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@workspace/ui/components/dropdown-menu"
+import { desktop } from "@/lib/desktop"
+import { toast } from "@/store/toast"
 
 export type MenuPos = {
   x: number
@@ -73,6 +77,14 @@ export function FileContextMenu({
   onAddToSpace,
 }: Props) {
   const isShortcut = !!menu.shortcutId
+  // In the desktop app, whether this item is in a folder synced here. Asked
+  // per menu (it's a local lookup), and tagged with the id it's for, since
+  // the menu can move to another item before the answer comes back.
+  const [local, setLocal] = useState<{ id: string; path: string | null }>()
+  useEffect(() => {
+    void desktop?.localPath(menu.type, menu.id).then((path) => setLocal({ id: menu.id, path }))
+  }, [menu.type, menu.id])
+  const localPath = local?.id === menu.id ? local.path : null
   const isZip = menu.type === "file" && /\.zip$/i.test(menu.name)
   return (
     <DropdownMenu open onOpenChange={(open) => !open && onClose()}>
@@ -120,6 +132,18 @@ export function FileContextMenu({
           <DropdownMenuItem onClick={onOpenLocation}>
             <MapPinIcon size={16} />
             Open location
+          </DropdownMenuItem>
+        )}
+        {localPath && (
+          <DropdownMenuItem
+            title={localPath}
+            onClick={() => {
+              desktop!.show(menu.type, menu.id).catch((e: Error) => toast.error(e.message))
+              onClose()
+            }}
+          >
+            <DesktopIcon size={16} />
+            Show on this computer
           </DropdownMenuItem>
         )}
         {onDownload && (

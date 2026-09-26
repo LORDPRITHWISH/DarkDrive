@@ -113,14 +113,21 @@ export function setup() {
   })
 }
 
-/** Sign the app's API requests with `s.token`, and reload it. Again whenever the account changes. */
-export function authorize(s: Settings) {
+/**
+ * Sign the app's API requests, and reload it. Again whenever the account
+ * changes. This computer's device token signs them or, failing that, a
+ * temporary login's session cookie: added here like the token, not left in
+ * the cookie jar, where to the API this page (darkdrive://app) is a third
+ * party its cookie may not be sent for.
+ */
+export function authorize(s: Settings, tempSession = "") {
   const api = new URL(s.apiUrl)
   const ws = api.protocol.replace("http", "ws") // Socket.IO's websocket upgrade
+  const auth: Record<string, string> | null = s.token ? { Authorization: `Bearer ${s.token}` } : tempSession ? { Cookie: tempSession } : null
   drive().webRequest.onBeforeSendHeaders((d, cb) => {
     const u = new URL(d.url)
     const toApi = u.host === api.host && (u.protocol === api.protocol || u.protocol === ws)
-    cb({ requestHeaders: toApi && s.token ? { ...d.requestHeaders, Authorization: `Bearer ${s.token}` } : d.requestHeaders })
+    cb({ requestHeaders: toApi && auth ? { ...d.requestHeaders, ...auth } : d.requestHeaders })
   })
   // Reloaded rather than told: the page reads the API's address once, at start.
   win?.loadURL(APP_URL)

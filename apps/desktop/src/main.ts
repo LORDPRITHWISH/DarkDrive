@@ -36,6 +36,9 @@ const plainPage = (html: string) =>
   `<!doctype html><meta charset="utf-8"><title>DarkDrive</title><body style="margin:0;min-height:100vh;display:grid;place-items:center;background:#0a0a0a;color:#e5e5e5;font:16px system-ui,sans-serif"><div style="text-align:center">${html}</div></body>`
 
 let cancelSignIn = () => {}
+// The pairing page a sign-in is waiting on, shown in the app too: the browser
+// that opens may not be the one the user is signed in to DarkDrive with.
+let signInUrl: string | null = null
 
 /**
  * Browser sign-in (RFC 8252): listen on a loopback port, send the browser to
@@ -75,14 +78,21 @@ function signIn(apiUrl: string, device: string): Promise<{ token: string; id: st
     })
     const timer = setTimeout(() => (finish(), reject(new Error("Sign-in timed out. Try again."))), SIGN_IN_TIMEOUT_MS)
     // close() also drops the browser's keep-alive socket once the reply is out.
-    const finish = () => (clearTimeout(timer), server.close())
+    const finish = () => {
+      clearTimeout(timer)
+      server.close()
+      signInUrl = null
+      changed()
+    }
     cancelSignIn = () => (finish(), resolve(null))
     server.on("error", reject)
     // 127.0.0.1, never 0.0.0.0: the port must not be reachable from the network.
     server.listen(0, "127.0.0.1", () => {
       const { port } = server.address() as { port: number }
       const q = new URLSearchParams({ port: String(port), state, name: device || os.hostname() })
-      shell.openExternal(`${base}/api/devices/pair?${q}`)
+      signInUrl = `${base}/api/devices/pair?${q}`
+      changed()
+      shell.openExternal(signInUrl).catch((e) => addLine(`[desktop] couldn't open a browser: ${e.message}`))
     })
   })
 }
@@ -96,11 +106,16 @@ async function revoke(s: Settings) {
   if (s.token && s.deviceId) await apiCall(s, "DELETE", `/api/devices/${s.deviceId}`).catch(() => {})
 }
 
+// A temporary login (apps/api routes/tempSessions.ts), for a computer that
+// isn't yours: a cookie session, never a device token, so nothing syncs.
+// Only ever in memory, so quitting the app ends it on this computer too.
+let tempSession = ""
+
 /**
  * Daemons read the token and device name when they start, so an account
  * change restarts them all, and the window reloads under the new one.
  * `fresh` is a new sign-in, which may be a different account: its folders are
- * then checked against that account.
+ * then checked against that account. Any temporary login ends.
  */
 async function saveAccount(patch: Partial<Settings>, fresh = false) {
   await folders.pause()
@@ -110,6 +125,7 @@ async function saveAccount(patch: Partial<Settings>, fresh = false) {
     if (fresh) s.folders = await folders.forAccount(s).catch(() => s.folders)
     writeSettings(s)
   } finally {
+    tempSession = ""
     folders.resume(readSettings())
     drive.authorize(readSettings())
   }
@@ -231,7 +247,7 @@ ipcMain.on("desktop:config", (e) => {
 
 bridge("state", () => {
   const { apiUrl, webUrl, device, folders: list } = readSettings()
-  return { apiUrl, webUrl, device, folders: list, syncing: folders.isRunning(), log, version: app.getVersion(), updateReady }
+  return { apiUrl, webUrl, device, folders: list, syncing: folders.isRunning(), log, version: app.getVersion(), updateReady, signInUrl }
 })
 
 bridge("sign-in", async () => {
@@ -245,8 +261,28 @@ bridge("sign-in", async () => {
 
 bridge("sign-out", async () => {
   const old = readSettings()
+  // Signing out of a temporary login ends it for good, not just here.
+  if (tempSession)
+    await fetch(`${httpUrl(old.apiUrl)}/api/auth/logout`, { method: "POST", headers: { Cookie: tempSession } }).catch(() => {})
   await saveAccount({ token: "", deviceId: "" })
   await revoke(old)
+})
+
+// Answers the claim's HTTP status, which the web app's /t page puts in words.
+bridge("temp-sign-in", async (code: string) => {
+  const s = readSettings()
+  // Like a browser already signed in: a login code is for another device, and
+  // this one belongs to someone whose sync would keep running underneath.
+  if (s.token) return 409
+  const r = await fetch(`${httpUrl(s.apiUrl)}/api/temp-sessions/claim`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ code: String(code) }),
+  })
+  if (!r.ok) return r.status
+  tempSession = r.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ")
+  drive.authorize(s, tempSession)
+  return 200
 })
 
 // Where this computer signs in. A token is only good on the server that made it.
@@ -279,9 +315,13 @@ bridge("folders:add-remote", async (id: string) => {
   if (parent) folders.addRemote(readSettings(), remote, parent)
 })
 bridge("folders:remove", (id: string) => folders.remove(readSettings(), id))
-bridge("folders:open", (id: string) => {
-  const f = readSettings().folders.find((f) => f.id === id)
-  if (f) shell.openPath(f.dir)
+// By id, never by a path from the page: main finds the path itself.
+bridge("local-path", (type: "file" | "folder", id: string) => folders.localPath(readSettings(), type, id))
+bridge("show", (type: "file" | "folder", id: string) => {
+  const p = folders.localPath(readSettings(), type, id)
+  if (!p) throw new Error("That isn't on this computer.")
+  if (type === "folder") shell.openPath(p)
+  else shell.showItemInFolder(p)
 })
 
 // ------------------------------------------------------------------ main

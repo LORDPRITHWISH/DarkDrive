@@ -113,3 +113,12 @@ export async function assertUserPhotosRootId(user: User): Promise<string> {
   await prisma.user.update({ where: { id: user.id }, data: { photosRootFolderId: root.id } })
   return root.id
 }
+
+// "Synced Folders", a third root made the same way. The desktop app puts one
+// folder in it per folder it syncs (see routes/sync.ts).
+export async function assertUserSyncRootId(user: User): Promise<string> {
+  if (user.syncRootFolderId) return user.syncRootFolderId
+  const root = await prisma.folder.create({ data: { name: "Synced Folders", ownerId: user.id } })
+  await prisma.user.update({ where: { id: user.id }, data: { syncRootFolderId: root.id } })
+  return root.id
+}

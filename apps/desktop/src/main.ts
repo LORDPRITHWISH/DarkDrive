@@ -1,123 +1,34 @@
-// DarkDrive desktop: a window and tray icon around the apps/sync daemon.
+// DarkDrive desktop: the drive itself, plus what a browser can't do.
 //
-// The daemon does all the syncing. This only edits the config file it reads,
-// starts and stops it, and shows what it prints. It runs in a utility process
-// rather than in here so its process.exit()/top-level-await design stays as
-// is, and a crash on either side can't take the other down.
+// The drive window is the hosted web app, signed in with this computer's
+// device token (drive.ts). Syncing is the apps/sync daemon's job, one copy per
+// synced folder (folders.ts). This is the shell around both: the tray, the
+// sync settings window, sign-in, updates. It keeps the settings the daemons
+// read (settings.ts), starts and stops them, and shows what they print. They run in utility processes rather than in here so
+// the daemon's process.exit()/top-level-await design stays as is, and a crash
+// on either side can't take the other down.
 //
 // esbuild bundles this file to CommonJS (dist/main.cjs) and the daemon to
 // dist/sync.mjs, so the packaged app ships no node_modules at all. Hence
 // __dirname below despite the package being "type": "module".
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, Notification, shell, Tray, utilityProcess } from "electron"
-import type { UtilityProcess } from "electron"
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, Notification, shell, Tray } from "electron"
 import { autoUpdater } from "electron-updater"
 import crypto from "node:crypto"
 import fs from "node:fs"
 import http from "node:http"
 import os from "node:os"
 import path from "node:path"
-import readline from "node:readline"
+import * as drive from "./drive.js"
+import * as folders from "./folders.js"
+import { httpUrl, readSettings, writeSettings, type Account } from "./settings.js"
 
 const here = __dirname
-const DAEMON = path.join(here, "sync.mjs")
-// Same resolution as the daemon, so the two share one config and state file.
-const CONFIG_DIR = process.env.DD_HOME ?? path.join(os.homedir(), ".darkdrive")
-const CONFIG_FILE = path.join(CONFIG_DIR, "config.json")
-const STATE_FILE = path.join(CONFIG_DIR, "state.json")
-const DEFAULT_API = "https://api.darkdrive.zenux.live"
 const LOG_LINES = 300
 const UPDATE_CHECK_MS = 4 * 60 * 60 * 1000
 const SIGN_IN_TIMEOUT_MS = 10 * 60 * 1000
 
-// remoteFolderId is what the daemon syncs against ("" = the whole drive);
-// remotePath is only for showing it, and is what the form edits.
-export type Config = {
-  apiUrl: string; token: string; dir: string; device: string
-  remoteFolderId: string; remotePath: string
-}
-
-function readConfig(): Config {
-  let saved: Partial<Config> = {}
-  try {
-    saved = JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8"))
-  } catch {}
-  return {
-    apiUrl: saved.apiUrl ?? DEFAULT_API,
-    token: saved.token ?? "",
-    dir: saved.dir ?? path.join(os.homedir(), "DarkDrive"),
-    device: saved.device ?? os.hostname(),
-    remoteFolderId: saved.remoteFolderId ?? "",
-    remotePath: saved.remotePath ?? "",
-  }
-}
-
-function httpUrl(s: string): string {
-  const u = new URL(s)
-  if (u.protocol !== "https:" && u.protocol !== "http:") throw new Error("Server must be an http(s) URL")
-  return u.toString().replace(/\/+$/, "")
-}
-
-function writeConfig(input: Config) {
-  const next: Config = {
-    apiUrl: httpUrl(String(input.apiUrl).trim()),
-    token: String(input.token).trim(),
-    dir: String(input.dir).trim(),
-    device: String(input.device).trim() || os.hostname(),
-    remoteFolderId: String(input.remoteFolderId),
-    remotePath: String(input.remotePath),
-  }
-  if (!path.isAbsolute(next.dir)) throw new Error("Folder must be an absolute path")
-  const prev = readConfig()
-  // state.json is keyed by paths relative to the folder and ids on one server.
-  // Point it at a different folder or account and push() reads every tracked
-  // file as "deleted locally" and trashes it remotely. Dropping the state makes
-  // the next run a fresh reconcile instead, which only ever adds or moves aside.
-  // A different DarkDrive folder is the same hazard from the other side.
-  if (
-    next.dir !== prev.dir ||
-    next.apiUrl !== prev.apiUrl ||
-    next.token !== prev.token ||
-    next.remoteFolderId !== prev.remoteFolderId
-  )
-    fs.rmSync(STATE_FILE, { force: true })
-  fs.mkdirSync(CONFIG_DIR, { recursive: true })
-  fs.writeFileSync(CONFIG_FILE, JSON.stringify(next, null, 2), { mode: 0o600 })
-}
-
-// ----------------------------------------------------- DarkDrive folders
-
-async function apiCall<T>(cfg: Config, method: string, route: string, body?: unknown): Promise<T> {
-  const r = await fetch(httpUrl(cfg.apiUrl) + route, {
-    method,
-    headers: { Authorization: `Bearer ${cfg.token}`, "content-type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  })
-  if (!r.ok) throw new Error(`${method} ${route} -> ${r.status}`)
-  return r.json() as Promise<T>
-}
-
-/**
- * Turn the typed DarkDrive path into the folder id the daemon needs, creating
- * the folder if it doesn't exist yet: typing "Laptop" is how you make one.
- * Re-resolved on every save, so a folder renamed on the web still matches by
- * its new name as shown in the picker.
- */
-async function withRemoteFolder(cfg: Config): Promise<Config> {
-  const remotePath = String(cfg.remotePath).split("/").map((s) => s.trim()).filter(Boolean).join("/")
-  if (!remotePath) return { ...cfg, remotePath, remoteFolderId: "" }
-  if (!cfg.token) throw new Error("Sign in first, then pick a DarkDrive folder")
-  try {
-    const { id } = await apiCall<{ id: string }>(cfg, "POST", "/api/sync/folder", { path: remotePath })
-    return { ...cfg, remotePath, remoteFolderId: id }
-  } catch {
-    throw new Error(`Couldn't open "${remotePath}" on DarkDrive. Check your connection and try again.`)
-  }
-}
-
 // --------------------------------------------------------------- sign-in
 
-const donePage = (msg: string) =>
-  `<!doctype html><meta charset="utf-8"><title>DarkDrive</title><body style="margin:0;min-height:100vh;display:grid;place-items:center;background:#0a0a0a;color:#e5e5e5;font:16px system-ui,sans-serif">${msg}</body>`
 
 /**
  * Browser sign-in (RFC 8252): listen on a loopback port, send the browser to
@@ -143,10 +54,10 @@ function signIn(apiUrl: string, device: string): Promise<string> {
         })
         if (!r.ok) throw new Error(`Sign-in failed (${r.status}). Try again.`)
         const { token } = (await r.json()) as { token: string }
-        res.writeHead(200, { "content-type": "text/html" }).end(donePage("Signed in. You can close this tab and go back to DarkDrive."))
+        res.writeHead(200, { "content-type": "text/html" }).end(drive.plainPage("Signed in. You can close this tab and go back to DarkDrive."))
         resolve(token)
       } catch (e) {
-        res.writeHead(500, { "content-type": "text/html" }).end(donePage("Sign-in failed. Go back to DarkDrive and try again."))
+        res.writeHead(500, { "content-type": "text/html" }).end(drive.plainPage("Sign-in failed. Go back to DarkDrive and try again."))
         reject(e)
       }
       finish()
@@ -164,9 +75,8 @@ function signIn(apiUrl: string, device: string): Promise<string> {
   })
 }
 
-// ---------------------------------------------------------------- daemon
+// ------------------------------------------------------------------- log
 
-let daemon: UtilityProcess | null = null
 const log: string[] = []
 
 function emit(channel: string, value: unknown) {
@@ -179,34 +89,11 @@ function addLine(line: string) {
   emit("log", line)
 }
 
-function setRunning() {
-  emit("running", !!daemon)
+folders.events.on("line", addLine)
+folders.events.on("change", () => {
+  emit("running", folders.isRunning())
   refreshTray()
-}
-
-function start() {
-  if (daemon) return
-  const child = utilityProcess.fork(DAEMON, [], { stdio: "pipe", serviceName: "DarkDrive sync" })
-  daemon = child
-  for (const stream of [child.stdout, child.stderr])
-    if (stream) readline.createInterface({ input: stream }).on("line", addLine)
-  child.on("exit", (code) => {
-    daemon = null
-    addLine(`[desktop] sync stopped${code ? ` (exit ${code})` : ""}`)
-    setRunning()
-  })
-  setRunning()
-}
-
-function stop(): Promise<void> {
-  const child = daemon
-  if (!child) return Promise.resolve()
-  // SIGTERM on POSIX, which the daemon catches to save its state first.
-  return new Promise((resolve) => {
-    child.once("exit", () => resolve())
-    child.kill()
-  })
-}
+})
 
 // -------------------------------------------------------------------- ui
 
@@ -231,17 +118,30 @@ function show() {
 
 function refreshTray() {
   if (!tray) return
-  tray.setToolTip(`DarkDrive ${app.getVersion()} — ${daemon ? "syncing" : "paused"}`)
+  const running = folders.isRunning()
+  const synced = readSettings().folders
+  tray.setToolTip(`DarkDrive ${app.getVersion()} — ${running ? "syncing" : "paused"}`)
   // Linux tray icons often never deliver clicks, so everything lives in the menu.
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: `DarkDrive ${app.getVersion()} — ${daemon ? "Syncing" : "Paused"}`, enabled: false },
+      { label: `DarkDrive ${app.getVersion()} — ${running ? "Syncing" : "Paused"}`, enabled: false },
       ...(updateReady
         ? [{ label: `Restart to update to ${updateReady}`, click: () => autoUpdater.quitAndInstall() }]
         : []),
-      { label: daemon ? "Pause sync" : "Resume sync", click: () => (daemon ? stop() : start()) },
-      { label: "Open folder", click: () => shell.openPath(readConfig().dir) },
-      { label: "Show window", click: show },
+      ...(synced.length
+        ? [
+            {
+              label: running ? "Pause sync" : "Resume sync",
+              click: () => (running ? folders.pause() : folders.resume(readSettings())),
+            },
+            {
+              label: "Open folder",
+              submenu: synced.map((f) => ({ label: f.name, click: () => shell.openPath(f.dir) })),
+            },
+          ]
+        : []),
+      { label: "Open DarkDrive", click: drive.open },
+      { label: "Sync settings…", click: show },
       { type: "separator" },
       { label: "Quit", click: () => app.quit() },
     ])
@@ -286,59 +186,76 @@ function registerAutostart() {
   )
 }
 
-ipcMain.handle("config:get", () => readConfig())
+ipcMain.handle("settings:get", () => readSettings())
+
 /**
- * Stop the daemon, write the config, start it again. The order matters: the
- * daemon saves state.json on its way out, so stopping it after writeConfig
- * would write back the very state writeConfig just dropped, and the
- * folder-change guard in writeConfig would silently not happen.
+ * Daemons read the token and device name when they start, so an account
+ * change restarts them all. `fresh` is a new sign-in, which may be a
+ * different account: its folders are then checked against that account.
  */
-async function applyConfig(cfg: Config) {
-  await stop()
+async function saveAccount(a: Account, fresh = false) {
+  await folders.pause()
   try {
-    writeConfig(cfg)
+    const s = { ...readSettings(), apiUrl: a.apiUrl, webUrl: a.webUrl, token: a.token, device: a.device }
+    // Offline right after signing in: keep the list, the daemons will say.
+    if (fresh) s.folders = await folders.forAccount(s).catch(() => s.folders)
+    writeSettings(s)
   } finally {
-    start()
+    folders.resume(readSettings())
+    drive.authorize(readSettings())
   }
 }
 
-ipcMain.handle("config:save", async (_e, cfg: Config) => {
-  await applyConfig(await withRemoteFolder(cfg))
+ipcMain.handle("settings:save", (_e, a: Account) => saveAccount(a))
+ipcMain.handle("sign-in", async (_e, a: Account) => {
+  const token = await signIn(a.apiUrl, a.device)
+  await saveAccount({ ...a, token }, true)
+  drive.open() // the browser has focus now; bring the user back
 })
-ipcMain.handle("sign-in", async (_e, cfg: Config) => {
-  const token = await signIn(cfg.apiUrl, cfg.device)
-  await applyConfig(await withRemoteFolder({ ...cfg, token }))
-  show() // the browser has focus now; bring the user back
-})
-// Suggestions for the picker. Empty when signed out or offline; the field
-// still takes a typed path either way.
-ipcMain.handle("remote:folders", async () => {
-  const cfg = readConfig()
-  if (!cfg.token) return []
-  return apiCall<{ id: string; path: string }[]>(cfg, "GET", "/api/sync/folders").catch(() => [])
-})
-ipcMain.handle("state:get", () => ({ running: !!daemon, log, version: app.getVersion(), updateReady }))
-ipcMain.handle("update:install", () => autoUpdater.quitAndInstall())
-ipcMain.handle("sync:start", () => start())
-ipcMain.handle("sync:stop", () => stop())
-ipcMain.handle("dir:pick", async () => {
-  const r = await dialog.showOpenDialog({ properties: ["openDirectory", "createDirectory"] })
-  return r.canceled ? null : r.filePaths[0]
-})
-ipcMain.handle("open:folder", () => shell.openPath(readConfig().dir))
 
-// Two copies would run two daemons over one state file.
+async function pickDir(title: string): Promise<string | null> {
+  const r = await dialog.showOpenDialog({ title, buttonLabel: "Choose", properties: ["openDirectory", "createDirectory"] })
+  return r.canceled ? null : r.filePaths[0]
+}
+
+ipcMain.handle("drive:open", () => drive.open())
+ipcMain.handle("folders:available", () => folders.available(readSettings()))
+ipcMain.handle("folders:add-local", async () => {
+  const dir = await pickDir("Choose a folder to sync with DarkDrive")
+  return dir ? folders.addLocal(readSettings(), dir) : readSettings().folders
+})
+// Takes only the id from the page; the name, which becomes a path on disk,
+// comes fresh from the server.
+ipcMain.handle("folders:add-remote", async (_e, id: string) => {
+  const remote = (await folders.available(readSettings())).find((r) => r.id === id)
+  if (!remote) throw new Error("That folder isn't in DarkDrive's Synced Folders any more.")
+  const parent = await pickDir(`Choose where to keep "${remote.name}"`)
+  return parent ? folders.addRemote(readSettings(), remote, parent) : readSettings().folders
+})
+ipcMain.handle("folders:remove", (_e, id: string) => folders.remove(readSettings(), id))
+ipcMain.handle("folders:open", (_e, id: string) => {
+  const f = readSettings().folders.find((f) => f.id === id)
+  if (f) shell.openPath(f.dir)
+})
+ipcMain.handle("state:get", () => ({ running: folders.isRunning(), log, version: app.getVersion(), updateReady }))
+ipcMain.handle("update:install", () => autoUpdater.quitAndInstall())
+ipcMain.handle("sync:start", () => folders.resume(readSettings()))
+ipcMain.handle("sync:stop", () => folders.pause())
+
+// Two copies would run two daemons over each state file.
 if (!app.requestSingleInstanceLock()) app.quit()
 else {
-  app.on("second-instance", show)
+  app.on("second-instance", drive.open)
   // Closing the window leaves sync running in the tray; Quit is in its menu.
   app.on("window-all-closed", () => {})
-  app.on("before-quit", () => void stop())
+  app.on("before-quit", () => void folders.pause())
   app.whenReady().then(() => {
     tray = new Tray(icon.resize({ width: 22, height: 22 }))
-    tray.on("click", show)
+    tray.on("click", drive.open)
     refreshTray()
-    if (readConfig().token) start()
+    drive.setup(show)
+    drive.authorize(readSettings())
+    folders.resume(readSettings())
     // Dev runs would register the bare electron binary, and have nothing to update.
     if (app.isPackaged) {
       registerAutostart()
@@ -346,6 +263,7 @@ else {
       setInterval(checkForUpdates, UPDATE_CHECK_MS)
     }
     // --hidden is for launching at login: straight to the tray.
-    if (!readConfig().token || !process.argv.includes("--hidden")) show()
+    if (!readSettings().token) show()
+    else if (!process.argv.includes("--hidden")) drive.open()
   })
 }

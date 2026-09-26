@@ -7,6 +7,9 @@ export type User = {
   // Root of the gallery tree ("My Photos") — a second root alongside My
   // Drive, where Telegram imports and DarkGallery uploads land.
   photosRootFolderId: string
+  // Root of "Synced Folders", a third root: one child per folder the desktop
+  // app keeps in sync with a folder on a computer.
+  syncRootFolderId: string
   role: "USER" | "ADMIN"
   storageQuotaBytes: number
   // Set when this browser signed in with a temporary code (see

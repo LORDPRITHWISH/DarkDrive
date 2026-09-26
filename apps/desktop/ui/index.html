@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'">
-<title>DarkDrive</title>
+<title>Sync settings — DarkDrive</title>
 <!-- Same palette as the /api/devices/pair page, so pairing feels like one flow. -->
 <style>
   :root{color-scheme:dark}
@@ -35,7 +35,18 @@
   details[open]{padding-bottom:4px}
   summary{cursor:pointer;font-size:12px;color:#a3a3a3;margin-bottom:8px}
   details label{margin-bottom:12px}
-  #error{color:#fbbf24;font-size:12px;min-height:1em}
+  #error{color:#fbbf24;font-size:12px}
+  #error:empty{display:none}
+  h2{margin:0;font-size:14px;font-weight:600}
+  button:disabled{opacity:.5;cursor:default}
+  .actions{display:flex;flex-wrap:wrap;gap:8px}
+  #folders{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+  #folders li{display:flex;align-items:center;gap:8px}
+  #folders li div{flex:1;min-width:0;display:grid}
+  #folders .note{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #available{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+  #available:empty{display:none}
+  #available .note{flex-basis:100%}
   #log{flex:1;min-height:120px;margin:0;overflow:auto;padding:12px;background:#111;border:1px solid #262626;
     border-radius:12px;font:12px/1.6 ui-monospace,monospace;color:#a3a3a3;white-space:pre-wrap;word-break:break-all}
 </style>
@@ -46,11 +57,12 @@
   <h1>DarkDrive</h1>
   <span id="version"></span>
   <span id="status" role="status">Paused</span>
-  <button id="toggle" type="button">Resume</button>
-  <button id="open" type="button">Open folder</button>
+  <button id="toggle" type="button" hidden>Resume</button>
+  <button id="drive" type="button" hidden>Open DarkDrive</button>
 </header>
 
 <button id="update" class="primary" type="button" hidden></button>
+<div id="error" role="alert"></div>
 
 <form id="form" class="card">
   <div class="account">
@@ -58,33 +70,35 @@
     <button id="signin" type="button">Sign in with Google</button>
   </div>
   <div id="hint"></div>
-  <label>Folder on this computer
-    <div class="row">
-      <input name="dir" required>
-      <button id="pick" type="button">Choose…</button>
-    </div>
-  </label>
-  <label>DarkDrive folder
-    <input name="remotePath" list="remote-folders" placeholder="My Drive (everything)" autocomplete="off">
-    <datalist id="remote-folders"></datalist>
-    <span class="note">Pick a folder, or type a new name to create it. Leave empty to sync your whole drive.</span>
-  </label>
   <label>Device name
     <input name="device">
   </label>
-  <input type="hidden" name="remoteFolderId">
   <details>
     <summary>Advanced</summary>
     <label>Server
       <input name="apiUrl" type="url" required>
     </label>
+    <label>Web app
+      <input name="webUrl" type="url" required>
+    </label>
     <label>Device token
       <input name="token" type="password" placeholder="dd_…" autocomplete="off">
     </label>
   </details>
-  <div id="error" role="alert"></div>
-  <button id="save" class="primary" type="submit">Save &amp; sync</button>
+  <button id="save" type="submit">Save</button>
 </form>
+
+<section class="card">
+  <h2>Synced folders</h2>
+  <ul id="folders"></ul>
+  <p id="no-folders" class="note">Nothing syncs yet. Only the folders you add here are kept on this
+    computer, never the rest of your drive.</p>
+  <div class="actions">
+    <button id="add-local" type="button">Sync a folder from this computer…</button>
+    <button id="add-remote" type="button">Keep a synced folder here…</button>
+  </div>
+  <div id="available"></div>
+</section>
 
 <pre id="log" aria-label="Sync log"></pre>
 <script type="module" src="../dist/renderer.js"></script>

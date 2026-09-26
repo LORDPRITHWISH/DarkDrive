@@ -20,7 +20,9 @@ export function newToken(): { raw: string; hash: string } {
 // there's no secret-dependent branch to time.
 export async function bearerAuth(req: Request, _res: Response, next: NextFunction) {
   if (req.user) return next()
-  const header = req.get("authorization")
+  // req.headers, not req.get(): Socket.IO runs this on its raw handshake
+  // request (realtime/socket.ts), which isn't an Express request.
+  const header = req.headers.authorization
   if (!header?.startsWith("Bearer ")) return next()
 
   const row = await prisma.deviceToken.findUnique({

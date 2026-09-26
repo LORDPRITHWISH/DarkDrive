@@ -1,5 +1,5 @@
 import type { Api } from "./preload.cjs"
-import type { Config } from "./main.js"
+import type { Account, SyncedFolder } from "./settings.js"
 
 const dd = (window as unknown as { dd: Api }).dd
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T
@@ -11,7 +11,21 @@ const toggle = $<HTMLButtonElement>("toggle")
 const error = $("error")
 const update = $<HTMLButtonElement>("update")
 const signin = $<HTMLButtonElement>("signin")
+const addLocal = $<HTMLButtonElement>("add-local")
+const addRemote = $<HTMLButtonElement>("add-remote")
+const available = $("available")
 let running = false
+
+/** createElement with properties and children, for the rows built below. */
+function el<K extends keyof HTMLElementTagNameMap>(
+  tag: K,
+  props: Partial<HTMLElementTagNameMap[K]>,
+  ...kids: (Node | string)[]
+) {
+  const e = Object.assign(document.createElement(tag), props)
+  e.append(...kids)
+  return e
+}
 
 function setRunning(r: boolean) {
   running = r
@@ -28,24 +42,49 @@ function showUpdate(version: string) {
 function setSignedIn(yes: boolean) {
   $("account").textContent = yes ? "Signed in" : "Not signed in"
   signin.textContent = yes ? "Switch account" : "Sign in with Google"
-  // One bright button at a time: signing in is the only step that matters first.
+  // One bright button at a time: sign in first, then add a folder.
   signin.className = yes ? "" : "primary"
-  $("save").className = yes ? "primary" : ""
+  addLocal.className = yes ? "primary" : ""
+  addLocal.disabled = addRemote.disabled = !yes
+  $("drive").hidden = !yes
 }
 
 // ipcRenderer.invoke wraps the message as "Error invoking remote method ...: Error: <msg>".
 const errMsg = (err: unknown) => String((err as Error).message).replace(/^.*Error: /, "")
-const formConfig = () => Object.fromEntries(new FormData(form)) as Config
 
-// Show the folder's current name (it may have been renamed on the web) and
-// offer every folder in the drive as a suggestion.
-async function loadRemoteFolders() {
-  const folders = await dd.remoteFolders()
-  $("remote-folders").replaceChildren(
-    ...folders.filter((f) => f.path).map((f) => Object.assign(document.createElement("option"), { value: f.path }))
+/** Run a button's action with the button off meanwhile, showing any failure. */
+async function act(button: HTMLButtonElement, fn: () => Promise<unknown>) {
+  error.textContent = ""
+  button.disabled = true
+  try {
+    await fn()
+  } catch (err) {
+    error.textContent = errMsg(err)
+  }
+  button.disabled = false
+}
+
+function renderFolders(folders: SyncedFolder[]) {
+  $("folders").replaceChildren(
+    ...folders.map((f) => {
+      const remove: HTMLButtonElement = el("button", {
+        type: "button",
+        textContent: "Stop syncing",
+        onclick: () =>
+          confirm(`Stop syncing "${f.name}"?\n\nIts files stay on this computer and on DarkDrive.`) &&
+          act(remove, async () => renderFolders(await dd.removeFolder(f.id))),
+      })
+      return el(
+        "li",
+        {},
+        el("div", {}, el("strong", { textContent: f.name }), el("span", { className: "note", textContent: f.dir, title: f.dir })),
+        el("button", { type: "button", textContent: "Open", onclick: () => dd.openFolder(f.id) }),
+        remove
+      )
+    })
   )
-  const current = folders.find((f) => f.id === field("remoteFolderId").value)
-  if (current) field("remotePath").value = current.path
+  $("no-folders").hidden = folders.length > 0
+  toggle.hidden = folders.length === 0
 }
 
 function append(line: string) {
@@ -54,12 +93,13 @@ function append(line: string) {
   if (stick) logEl.scrollTop = logEl.scrollHeight
 }
 
-const field = (name: keyof Config) => form.elements.namedItem(name) as HTMLInputElement
+const field = (name: keyof Account) => form.elements.namedItem(name) as HTMLInputElement
+const formAccount = () => Object.fromEntries(new FormData(form)) as Account
 
-const cfg = await dd.getConfig()
-for (const k of Object.keys(cfg) as (keyof Config)[]) field(k).value = cfg[k]
-setSignedIn(!!cfg.token)
-loadRemoteFolders()
+const settings = await dd.getSettings()
+for (const k of ["apiUrl", "webUrl", "token", "device"] as const) field(k).value = settings[k]
+setSignedIn(!!settings.token)
+renderFolders(settings.folders)
 
 const state = await dd.getState()
 setRunning(state.running)
@@ -70,15 +110,38 @@ dd.onLog(append)
 dd.onRunning(setRunning)
 dd.onUpdate(showUpdate)
 update.onclick = () => dd.installUpdate()
+$("drive").onclick = () => dd.openDrive()
+toggle.onclick = () => (running ? dd.stop() : dd.start())
+
+addLocal.onclick = () => act(addLocal, async () => renderFolders(await dd.addLocalFolder()))
+addRemote.onclick = () =>
+  act(addRemote, async () => {
+    const list = await dd.availableFolders()
+    if (!list.length)
+      throw new Error("Nothing to add: every folder in DarkDrive's Synced Folders is already on this computer.")
+    available.replaceChildren(
+      el("span", { className: "note", textContent: "Keep which one on this computer?" }),
+      ...list.map((r) => {
+        const pick: HTMLButtonElement = el("button", {
+          type: "button",
+          textContent: r.name,
+          onclick: () =>
+            act(pick, async () => {
+              renderFolders(await dd.addRemoteFolder(r.id))
+              available.replaceChildren()
+            }),
+        })
+        return pick
+      })
+    )
+  })
 
 form.onsubmit = async (e) => {
   e.preventDefault()
   error.textContent = ""
   try {
-    await dd.saveConfig(formConfig())
-    field("remoteFolderId").value = (await dd.getConfig()).remoteFolderId
+    await dd.saveAccount(formAccount())
     setSignedIn(!!field("token").value)
-    loadRemoteFolders()
   } catch (err) {
     error.textContent = errMsg(err)
   }
@@ -92,21 +155,14 @@ signin.onclick = async () => {
   error.textContent = ""
   $("hint").textContent = "Finish signing in in your browser…"
   try {
-    await dd.signIn(formConfig())
-    const saved = await dd.getConfig()
+    await dd.signIn(formAccount())
+    const saved = await dd.getSettings()
     field("token").value = saved.token
-    field("remoteFolderId").value = saved.remoteFolderId
     setSignedIn(true)
-    loadRemoteFolders()
+    renderFolders(saved.folders)
   } catch (err) {
     if (attempt !== attempts) return
     error.textContent = errMsg(err)
   }
   $("hint").textContent = ""
 }
-toggle.onclick = () => (running ? dd.stop() : dd.start())
-$("pick").onclick = async () => {
-  const dir = await dd.pickDir()
-  if (dir) field("dir").value = dir
-}
-$("open").onclick = () => dd.openFolder()

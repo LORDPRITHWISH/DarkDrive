@@ -122,6 +122,30 @@ export async function remove(s: Settings, id: string) {
 }
 
 /**
+ * Where a DarkDrive file or folder is on this computer, if a synced folder has
+ * it here. Read from the daemons' own state (what they last synced, by id),
+ * so it needs no server and only ever finds what really came down.
+ */
+export function localPath(s: Settings, type: "file" | "folder", id: string): string | null {
+  for (const f of s.folders) {
+    let rel: string | undefined = type === "folder" && f.id === id ? "" : undefined
+    if (rel === undefined) {
+      let state: { files: Record<string, { id: string }>; folders: Record<string, string> }
+      try {
+        state = JSON.parse(fs.readFileSync(path.join(homeOf(f.id), "state.json"), "utf8"))
+      } catch {
+        continue // not synced yet
+      }
+      rel = type === "folder" ? state.folders[id] : Object.keys(state.files).find((r) => state.files[r].id === id)
+    }
+    if (rel === undefined) continue
+    const abs = path.join(f.dir, ...rel.split("/"))
+    return fs.existsSync(abs) ? abs : null
+  }
+  return null
+}
+
+/**
  * After a sign-in, keep only the folders this account has (another account's
  * would 404 on every poll) and pick up names changed on the web.
  */

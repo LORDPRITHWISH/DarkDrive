@@ -216,7 +216,9 @@ export function Sidebar() {
             "Synced Folders",
             <ArrowsClockwiseIcon size={18} />
           )}
-        {desktop && navItem("/sync", "This computer", <DesktopIcon size={18} />)}
+        {/* A temporary login can't sync: the API gives it no device token. */}
+        {desktop && !user?.tempSessionExpiresAt &&
+          navItem("/sync", "This computer", <DesktopIcon size={18} />)}
         {navItem("/spaces", "Spaces", <UsersThreeIcon size={18} />)}
         {navItem("/search", "Search", <MagnifyingGlassIcon size={18} />)}
         {navItem("/recent", "Recent", <ClockCounterClockwiseIcon size={18} />)}

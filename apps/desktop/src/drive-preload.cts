@@ -20,6 +20,7 @@ if (location.href.startsWith("darkdrive://app/"))
     ...(ipcRenderer.sendSync("desktop:config") as { apiUrl: string; webUrl: string }),
     signIn: () => call("sign-in"),
     signOut: () => call("sign-out"),
+    tempSignIn: (code) => call("temp-sign-in", code),
     saveServer: (s) => call("save-server", s),
     getState: () => call("state"),
     onChange: (fn) => {
@@ -32,6 +33,7 @@ if (location.href.startsWith("darkdrive://app/"))
     addLocalFolder: () => call("folders:add-local"),
     addRemoteFolder: (id) => call("folders:add-remote", id),
     removeFolder: (id) => call("folders:remove", id),
-    openFolder: (id) => call("folders:open", id),
+    localPath: (type, id) => call("local-path", type, id),
+    show: (type, id) => call("show", type, id),
     installUpdate: () => call("update:install"),
   } satisfies Desktop)

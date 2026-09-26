@@ -5,7 +5,9 @@ const schema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   PORT: z.coerce.number().default(4000),
   APP_URL: z.string().url(),
-  WEB_URL: z.string().url(),
+  // Trailing slash dropped: it's joined as `${WEB_URL}/pair`, and the web
+  // app's router matches nothing for "//pair".
+  WEB_URL: z.string().url().transform((s) => s.replace(/\/+$/, "")),
   // Origin of the DarkGallery frontend, if it's deployed. Trusted for CORS and
   // as a post-login redirect target, same as WEB_URL.
   GALLERY_URL: z.string().url().optional(),

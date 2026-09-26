@@ -3,22 +3,31 @@ import { Link, useParams } from "react-router-dom"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
 import { apiJson } from "@/lib/api"
+import { desktop } from "@/lib/desktop"
 
 // Returns an error message, or null once it's navigating away signed in.
 async function claim(code: string): Promise<string | null> {
-  try {
-    await apiJson("/api/temp-sessions/claim", "POST", { code })
+  // The desktop app claims it itself and adds the session to its requests,
+  // like its device token, then reloads (see apps/desktop main.ts).
+  const status = desktop
+    ? await desktop.tempSignIn(code).catch(() => 0)
+    : await apiJson("/api/temp-sessions/claim", "POST", { code }).then(
+        () => 200,
+        (e) => (e as { status?: number }).status ?? 0
+      )
+  if (status === 200) {
     // Full reload, not navigate — same reason as dev login in Login.tsx.
-    window.location.assign("/home")
+    if (!desktop) window.location.assign("/home")
     return null
-  } catch (e) {
-    const status = (e as { status?: number }).status
-    if (status === 409) {
-      return "This browser is already signed in to DarkDrive. Login links are for another device; sign out first to use it here."
-    }
-    if (status === 429) return "Too many attempts. Wait a few minutes and try again."
-    return "That code is wrong, already used, or expired."
   }
+  if (status === 409) {
+    return desktop
+      ? "This computer is signed in to DarkDrive. Login codes are for another device; sign out first to use one here."
+      : "This browser is already signed in to DarkDrive. Login links are for another device; sign out first to use it here."
+  }
+  if (status === 429) return "Too many attempts. Wait a few minutes and try again."
+  if (status === 0) return "Can't reach DarkDrive. Check your connection and try again."
+  return "That code is wrong, already used, or expired."
 }
 
 // Where a temporary session is redeemed: a login link / scanned QR

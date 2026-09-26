@@ -23,6 +23,7 @@ import { PopConfirm } from "@workspace/ui/components/popconfirm"
 import { Sidebar } from "@/components/Sidebar"
 import { SidebarToggle } from "@/components/SidebarToggle"
 import { desktop, type DesktopState } from "@/lib/desktop"
+import { useAuth } from "@/store/auth"
 import { toast } from "@/store/toast"
 
 const run = (fn: () => Promise<unknown>) =>
@@ -34,6 +35,7 @@ const run = (fn: () => Promise<unknown>) =>
 export function SyncPage() {
   const [state, setState] = useState<DesktopState | null>(null)
   const [available, setAvailable] = useState<{ id: string; name: string }[] | null>(null)
+  const temp = useAuth((s) => !!s.user?.tempSessionExpiresAt)
 
   useEffect(() => {
     if (!desktop) return
@@ -42,7 +44,8 @@ export function SyncPage() {
     return desktop.onChange(load)
   }, [])
 
-  if (!desktop) return <Navigate to="/home" replace />
+  // A temporary login can't sync (the tray still links here).
+  if (!desktop || temp) return <Navigate to="/home" replace />
   const d = desktop
 
   async function pickRemote() {
@@ -119,7 +122,7 @@ export function SyncPage() {
                           size="icon-sm"
                           variant="ghost"
                           title="Open folder"
-                          onClick={() => run(() => d.openFolder(f.id))}
+                          onClick={() => run(() => d.show("folder", f.id))}
                         >
                           <FolderOpenIcon size={14} />
                         </Button>

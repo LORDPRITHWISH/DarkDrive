@@ -77,9 +77,18 @@ document.getElementById("go").onclick = async () => {
     body: JSON.stringify({ name }),
   })
   const j = await r.json()
-  out.innerHTML = r.ok
-    ? '<pre>' + j.token + '</pre><div class="warn">Shown once. Copy it now.</div>'
-    : '<div class="warn">' + (j.error || "failed") + '</div>'
+  if (!r.ok) {
+    out.innerHTML = '<div class="warn">' + (j.error || "failed") + '</div>'
+    return
+  }
+  out.innerHTML = '<pre id="tok"></pre><button id="copy">Copy token</button><div class="warn">Shown once. Copy it now.</div>'
+  document.getElementById("tok").textContent = j.token
+  document.getElementById("copy").onclick = async () => {
+    await navigator.clipboard.writeText(j.token)
+    const btn = document.getElementById("copy")
+    btn.textContent = "Copied"
+    setTimeout(() => { btn.textContent = "Copy token" }, 1500)
+  }
 }
 </script>
 </div></body></html>`)

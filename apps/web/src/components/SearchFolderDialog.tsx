@@ -1,14 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { CaretDownIcon, CaretRightIcon, FolderIcon } from "@phosphor-icons/react"
 import { Button } from "@workspace/ui/components/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@workspace/ui/components/dialog"
+import { Modal } from "@/components/Modal"
 import { apiGet } from "@/lib/api"
 
 type FolderNode = { id: string; name: string; parentId: string | null }
@@ -58,41 +51,18 @@ export function SearchFolderDialog({ open, initialFolderId, onClose, onSubmit }:
   }, [open, initialFolderId])
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="flex h-[520px] w-full max-w-md flex-col gap-0 overflow-hidden p-0">
-        <DialogHeader className="border-b p-4">
-          <DialogTitle>Search in folder</DialogTitle>
-          <DialogDescription>
-            Only this folder and its subfolders will be searched
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="flex-1 overflow-auto p-2 text-sm">
-          {err && <div className="text-destructive mb-2 px-2">{err}</div>}
-          {!tree ? (
-            <div className="text-muted-foreground p-4 text-sm">Loading…</div>
-          ) : (
-            <FolderTree
-              rootId={tree.rootId}
-              folders={tree.folders}
-              selected={selected}
-              expanded={expanded}
-              onSelect={setSelected}
-              onToggle={(id) =>
-                setExpanded((prev) => {
-                  const next = new Set(prev)
-                  if (next.has(id)) next.delete(id)
-                  else next.add(id)
-                  return next
-                })
-              }
-            />
-          )}
-        </div>
-
-        <DialogFooter className="flex-row items-center justify-between gap-2 border-t p-3 sm:justify-between">
+    <Modal
+      open={open}
+      onClose={onClose}
+      className="h-[520px]"
+      bodyClassName="p-2 text-sm"
+      title="Search in folder"
+      description="Only this folder and its subfolders will be searched"
+      footer={
+        <>
           <Button
             variant="ghost"
+            className="mr-auto"
             onClick={() => {
               onSubmit(null)
               onClose()
@@ -109,9 +79,30 @@ export function SearchFolderDialog({ open, initialFolderId, onClose, onSubmit }:
           >
             Search here
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </>
+      }
+    >
+      {err && <div className="text-destructive mb-2 px-2">{err}</div>}
+      {!tree ? (
+        <div className="text-muted-foreground p-4 text-sm">Loading…</div>
+      ) : (
+        <FolderTree
+          rootId={tree.rootId}
+          folders={tree.folders}
+          selected={selected}
+          expanded={expanded}
+          onSelect={setSelected}
+          onToggle={(id) =>
+            setExpanded((prev) => {
+              const next = new Set(prev)
+              if (next.has(id)) next.delete(id)
+              else next.add(id)
+              return next
+            })
+          }
+        />
+      )}
+    </Modal>
   )
 }
 

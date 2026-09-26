@@ -1,14 +1,7 @@
 import { useEffect, useState } from "react"
 import { CheckCircleIcon } from "@phosphor-icons/react"
 import { Button } from "@workspace/ui/components/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@workspace/ui/components/dialog"
+import { Modal } from "@/components/Modal"
 import { formatBytes } from "@/lib/format"
 
 // Slabs a user can request. Slabs at or below the current quota are filtered
@@ -69,64 +62,66 @@ export function UpgradeRequestDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Request an upgrade</DialogTitle>
-          <DialogDescription>
-            Currently using {formatBytes(usedBytes)} of{" "}
-            {formatBytes(currentQuotaBytes)}. Pick a new slab — an admin
-            reviews the request before it's applied.
-          </DialogDescription>
-        </DialogHeader>
-
-        <ul className="flex flex-col gap-1">
-          {options.length === 0 ? (
-            <li className="text-muted-foreground py-6 text-center text-sm">
-              You're already on the highest slab.
-            </li>
-          ) : (
-            options.map((s) => {
-              const chosen = selected === s.bytes
-              return (
-                <li key={s.label}>
-                  <button
-                    onClick={() => setSelected(s.bytes)}
-                    className={`flex w-full items-center justify-between rounded-md border px-3 py-2 text-left transition-colors ${
-                      chosen
-                        ? "border-primary bg-accent"
-                        : "hover:bg-accent/50 border-transparent"
-                    }`}
-                  >
-                    <span className="text-sm font-medium">{s.label}</span>
-                    <span className="text-muted-foreground text-xs tabular-nums">
-                      {formatBytes(s.bytes)}
-                    </span>
-                    {chosen && (
-                      <CheckCircleIcon
-                        size={16}
-                        weight="fill"
-                        className="text-primary ml-2"
-                      />
-                    )}
-                  </button>
-                </li>
-              )
-            })
-          )}
-        </ul>
-
-        {err && <div className="text-destructive mb-2 text-xs">{err}</div>}
-
-        <DialogFooter>
+    <Modal
+      open={open}
+      onClose={onClose}
+      bodyClassName="p-3"
+      title="Request an upgrade"
+      description={
+        <>
+          Currently using {formatBytes(usedBytes)} of{" "}
+          {formatBytes(currentQuotaBytes)}. Pick a new slab — an admin
+          reviews the request before it's applied.
+        </>
+      }
+      footer={
+        <>
           <Button variant="ghost" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
           <Button onClick={submit} disabled={!selected || busy}>
             {busy ? "Submitting…" : "Request upgrade"}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </>
+      }
+    >
+      <ul className="flex flex-col gap-1">
+        {options.length === 0 ? (
+          <li className="text-muted-foreground py-6 text-center text-sm">
+            You're already on the highest slab.
+          </li>
+        ) : (
+          options.map((s) => {
+            const chosen = selected === s.bytes
+            return (
+              <li key={s.label}>
+                <button
+                  onClick={() => setSelected(s.bytes)}
+                  className={`flex w-full items-center justify-between rounded-md border px-3 py-2 text-left transition-colors ${
+                    chosen
+                      ? "border-primary bg-accent"
+                      : "hover:bg-accent/50 border-transparent"
+                  }`}
+                >
+                  <span className="text-sm font-medium">{s.label}</span>
+                  <span className="text-muted-foreground text-xs tabular-nums">
+                    {formatBytes(s.bytes)}
+                  </span>
+                  {chosen && (
+                    <CheckCircleIcon
+                      size={16}
+                      weight="fill"
+                      className="text-primary ml-2"
+                    />
+                  )}
+                </button>
+              </li>
+            )
+          })
+        )}
+      </ul>
+
+      {err && <div className="text-destructive mt-2 text-xs">{err}</div>}
+    </Modal>
   )
 }

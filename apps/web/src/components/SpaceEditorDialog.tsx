@@ -8,14 +8,7 @@ import {
 } from "@phosphor-icons/react"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@workspace/ui/components/dialog"
+import { Modal } from "@/components/Modal"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@workspace/ui/components/tabs"
 import { apiUpload } from "@/lib/api"
 import { useDrive } from "@/store/drive"
@@ -150,205 +143,18 @@ export function SpaceEditorDialog({
   }
 
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-md gap-0 p-0">
-        <DialogHeader className="border-b p-4">
-          <DialogTitle>{isCreate ? "New space" : "Edit space"}</DialogTitle>
-          <DialogDescription>
-            {isCreate
-              ? "Give your space a name, a color, and an optional logo."
-              : "Update the name, color, or logo."}
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-5 p-5">
-          {/* Logo preview + picker */}
-          <div className="flex items-start gap-4">
-            <SpaceLogo
-              space={preview}
-              size={72}
-              className="ring-background shrink-0 ring-4"
-            />
-            <div className="min-w-0 flex-1">
-              <Tabs value={logoTab} onValueChange={(v) => setLogoTab(v as "icon" | "image")}>
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <div className="text-sm font-semibold">Logo</div>
-                  <TabsList className="bg-muted h-auto shrink-0 gap-0 rounded-lg border-none p-0.5">
-                    <TabsTrigger
-                      value="icon"
-                      className="gap-1 rounded-md border-none px-2 py-1 text-xs data-active:bg-background data-active:shadow-sm"
-                    >
-                      <ShapesIcon size={12} weight="bold" />
-                      Icon
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="image"
-                      className="gap-1 rounded-md border-none px-2 py-1 text-xs data-active:bg-background data-active:shadow-sm"
-                    >
-                      <ImageIcon size={12} weight="bold" />
-                      Image
-                    </TabsTrigger>
-                  </TabsList>
-                </div>
-
-                <TabsContent value="icon">
-                  <div className="text-muted-foreground mb-2 text-xs">
-                    Pick an icon from the set below. It's tinted with the
-                    space color.
-                  </div>
-                  <div className="grid max-h-44 grid-cols-9 gap-1 overflow-auto pr-1">
-                    {SPACE_ICONS.map(({ key, label, Icon }) => {
-                      const selected = icon === key
-                      return (
-                        <button
-                          key={key}
-                          type="button"
-                          title={label}
-                          onClick={() => pickIcon(key)}
-                          className={`grid aspect-square place-items-center rounded-lg border transition-all ${
-                            selected
-                              ? "border-primary bg-primary/10 text-primary"
-                              : "hover:bg-accent text-muted-foreground hover:text-foreground border-transparent"
-                          }`}
-                          aria-pressed={selected}
-                        >
-                          <Icon size={16} weight="fill" />
-                        </button>
-                      )
-                    })}
-                  </div>
-                  {icon && (
-                    <button
-                      type="button"
-                      onClick={() => setIcon(null)}
-                      className="text-muted-foreground hover:text-foreground mt-1.5 text-[11px] hover:underline"
-                    >
-                      Clear icon
-                    </button>
-                  )}
-                </TabsContent>
-
-                <TabsContent value="image">
-                  <div className="text-muted-foreground mb-2 text-xs">
-                    {logoKey
-                      ? "Click to replace."
-                      : "PNG or JPG, up to 2 MB."}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => fileInput.current?.click()}
-                      disabled={uploadingLogo}
-                    >
-                      <UploadIcon size={14} weight="bold" />
-                      {uploadingLogo
-                        ? "Uploading…"
-                        : logoKey
-                          ? "Replace image"
-                          : "Upload image"}
-                    </Button>
-                    {logoKey && (
-                      <button
-                        type="button"
-                        onClick={() => setLogoKey(null)}
-                        className="text-destructive hover:bg-destructive/10 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium"
-                      >
-                        <TrashIcon size={11} />
-                        Remove
-                      </button>
-                    )}
-                  </div>
-                </TabsContent>
-              </Tabs>
-            </div>
-            <input
-              ref={fileInput}
-              type="file"
-              accept="image/*"
-              hidden
-              onChange={(e) => {
-                const f = e.target.files?.[0]
-                if (f) void pickLogo(f)
-                e.target.value = ""
-              }}
-            />
-          </div>
-
-          <div>
-            <label className="text-muted-foreground mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider">
-              <PencilSimpleIcon size={12} />
-              Name
-            </label>
-            <Input
-              autoFocus
-              placeholder="Marketing, Engineering, Design…"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void save()
-              }}
-              maxLength={120}
-            />
-          </div>
-
-          <div>
-            <div className="text-muted-foreground mb-1.5 text-[11px] font-semibold uppercase tracking-wider">
-              Color
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {COLOR_PRESETS.map((c) => {
-                const selected = color === c.value
-                return (
-                  <button
-                    key={c.value}
-                    type="button"
-                    title={c.name}
-                    onClick={() => setColor(c.value)}
-                    className={`h-8 w-8 rounded-full transition-all ${
-                      selected
-                        ? "ring-foreground ring-2 ring-offset-2 ring-offset-background scale-110"
-                        : "hover:scale-105"
-                    }`}
-                    style={{ backgroundColor: c.value }}
-                    aria-label={c.name}
-                  />
-                )
-              })}
-              <label
-                className="bg-muted hover:bg-accent relative ml-1 inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors"
-                title="Custom color"
-              >
-                <span
-                  className="inline-block h-3 w-3 rounded-full"
-                  style={{ backgroundColor: color ?? "#888" }}
-                />
-                Custom
-                <input
-                  type="color"
-                  value={color ?? "#6366f1"}
-                  onChange={(e) => setColor(e.target.value)}
-                  className="absolute inset-0 cursor-pointer opacity-0"
-                />
-              </label>
-              {color && (
-                <button
-                  type="button"
-                  onClick={() => setColor(null)}
-                  className="text-muted-foreground hover:text-foreground ml-1 text-xs hover:underline"
-                >
-                  Reset
-                </button>
-              )}
-            </div>
-          </div>
-
-          {err && (
-            <div className="text-destructive text-xs font-medium">{err}</div>
-          )}
-        </div>
-
-        <DialogFooter className="bg-muted/30 border-t px-4 py-3">
+    <Modal
+      open
+      onClose={onClose}
+      bodyClassName="space-y-5 p-5"
+      title={isCreate ? "New space" : "Edit space"}
+      description={
+        isCreate
+          ? "Give your space a name, a color, and an optional logo."
+          : "Update the name, color, or logo."
+      }
+      footer={
+        <>
           <Button variant="ghost" size="sm" onClick={onClose}>
             Cancel
           </Button>
@@ -360,8 +166,193 @@ export function SpaceEditorDialog({
           >
             {busy ? "Saving…" : isCreate ? "Create space" : "Save changes"}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </>
+      }
+    >
+      {/* Logo preview + picker */}
+      <div className="flex items-start gap-4">
+        <SpaceLogo
+          space={preview}
+          size={72}
+          className="ring-background shrink-0 ring-4"
+        />
+        <div className="min-w-0 flex-1">
+          <Tabs value={logoTab} onValueChange={(v) => setLogoTab(v as "icon" | "image")}>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="text-sm font-semibold">Logo</div>
+              <TabsList className="bg-muted h-auto shrink-0 gap-0 rounded-lg border-none p-0.5">
+                <TabsTrigger
+                  value="icon"
+                  className="gap-1 rounded-md border-none px-2 py-1 text-xs data-active:bg-background data-active:shadow-sm"
+                >
+                  <ShapesIcon size={12} weight="bold" />
+                  Icon
+                </TabsTrigger>
+                <TabsTrigger
+                  value="image"
+                  className="gap-1 rounded-md border-none px-2 py-1 text-xs data-active:bg-background data-active:shadow-sm"
+                >
+                  <ImageIcon size={12} weight="bold" />
+                  Image
+                </TabsTrigger>
+              </TabsList>
+            </div>
+
+            <TabsContent value="icon">
+              <div className="text-muted-foreground mb-2 text-xs">
+                Pick an icon from the set below. It's tinted with the
+                space color.
+              </div>
+              <div className="grid max-h-44 grid-cols-9 gap-1 overflow-auto pr-1">
+                {SPACE_ICONS.map(({ key, label, Icon }) => {
+                  const selected = icon === key
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      title={label}
+                      onClick={() => pickIcon(key)}
+                      className={`grid aspect-square place-items-center rounded-lg border transition-all ${
+                        selected
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "hover:bg-accent text-muted-foreground hover:text-foreground border-transparent"
+                      }`}
+                      aria-pressed={selected}
+                    >
+                      <Icon size={16} weight="fill" />
+                    </button>
+                  )
+                })}
+              </div>
+              {icon && (
+                <button
+                  type="button"
+                  onClick={() => setIcon(null)}
+                  className="text-muted-foreground hover:text-foreground mt-1.5 text-[11px] hover:underline"
+                >
+                  Clear icon
+                </button>
+              )}
+            </TabsContent>
+
+            <TabsContent value="image">
+              <div className="text-muted-foreground mb-2 text-xs">
+                {logoKey
+                  ? "Click to replace."
+                  : "PNG or JPG, up to 2 MB."}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => fileInput.current?.click()}
+                  disabled={uploadingLogo}
+                >
+                  <UploadIcon size={14} weight="bold" />
+                  {uploadingLogo
+                    ? "Uploading…"
+                    : logoKey
+                      ? "Replace image"
+                      : "Upload image"}
+                </Button>
+                {logoKey && (
+                  <button
+                    type="button"
+                    onClick={() => setLogoKey(null)}
+                    className="text-destructive hover:bg-destructive/10 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium"
+                  >
+                    <TrashIcon size={11} />
+                    Remove
+                  </button>
+                )}
+              </div>
+            </TabsContent>
+          </Tabs>
+        </div>
+        <input
+          ref={fileInput}
+          type="file"
+          accept="image/*"
+          hidden
+          onChange={(e) => {
+            const f = e.target.files?.[0]
+            if (f) void pickLogo(f)
+            e.target.value = ""
+          }}
+        />
+      </div>
+
+      <div>
+        <label className="text-muted-foreground mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider">
+          <PencilSimpleIcon size={12} />
+          Name
+        </label>
+        <Input
+          autoFocus
+          placeholder="Marketing, Engineering, Design…"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void save()
+          }}
+          maxLength={120}
+        />
+      </div>
+
+      <div>
+        <div className="text-muted-foreground mb-1.5 text-[11px] font-semibold uppercase tracking-wider">
+          Color
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {COLOR_PRESETS.map((c) => {
+            const selected = color === c.value
+            return (
+              <button
+                key={c.value}
+                type="button"
+                title={c.name}
+                onClick={() => setColor(c.value)}
+                className={`h-8 w-8 rounded-full transition-all ${
+                  selected
+                    ? "ring-foreground ring-2 ring-offset-2 ring-offset-background scale-110"
+                    : "hover:scale-105"
+                }`}
+                style={{ backgroundColor: c.value }}
+                aria-label={c.name}
+              />
+            )
+          })}
+          <label
+            className="bg-muted hover:bg-accent relative ml-1 inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors"
+            title="Custom color"
+          >
+            <span
+              className="inline-block h-3 w-3 rounded-full"
+              style={{ backgroundColor: color ?? "#888" }}
+            />
+            Custom
+            <input
+              type="color"
+              value={color ?? "#6366f1"}
+              onChange={(e) => setColor(e.target.value)}
+              className="absolute inset-0 cursor-pointer opacity-0"
+            />
+          </label>
+          {color && (
+            <button
+              type="button"
+              onClick={() => setColor(null)}
+              className="text-muted-foreground hover:text-foreground ml-1 text-xs hover:underline"
+            >
+              Reset
+            </button>
+          )}
+        </div>
+      </div>
+
+      {err && (
+        <div className="text-destructive text-xs font-medium">{err}</div>
+      )}
+    </Modal>
   )
 }

@@ -19,6 +19,7 @@ import {
   DialogDescription,
 } from "@workspace/ui/components/dialog"
 import { Input } from "@workspace/ui/components/input"
+import { DateTimePicker } from "@/components/DateTimePicker"
 import { Switch } from "@workspace/ui/components/switch"
 import { Badge } from "@workspace/ui/components/badge"
 import { Avatar, AvatarImage, AvatarFallback } from "@workspace/ui/components/avatar"
@@ -378,11 +379,10 @@ export function SpaceManageDialog({
               they've joined.
             </div>
             <div className="flex items-stretch gap-2">
-              <Input
-                type="datetime-local"
+              <DateTimePicker
                 className="w-40 rounded-xl text-sm"
                 value={inviteExpires}
-                onChange={(e) => setInviteExpires(e.target.value)}
+                onChange={setInviteExpires}
                 title="Expires (blank = never)"
               />
               <Input

@@ -3,13 +3,7 @@ import { TelegramLogoIcon, CopyIcon } from "@phosphor-icons/react"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
 import { Progress } from "@workspace/ui/components/progress"
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@workspace/ui/components/dialog"
+import { Modal } from "@/components/Modal"
 import { apiGet, apiJson } from "@/lib/api"
 import { getSocket } from "@/lib/socket"
 import { formatBytes } from "@/lib/format"
@@ -172,163 +166,73 @@ export function TelegramDialog({ open, onClose }: { open: boolean; onClose: () =
       : null
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <TelegramLogoIcon size={20} weight="fill" className="text-sky-500" />
-            Telegram
-          </DialogTitle>
-        </DialogHeader>
-
-        {!status ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">Loading…</p>
-        ) : (
-          <div className="space-y-5">
-            {/* --- account link: bulk-import old media from Saved Messages --- */}
-            <section className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Your account
-                </h3>
-                {status.linked && (
-                  <span className="text-[11px] text-emerald-500">Linked {status.phone}</span>
-                )}
-              </div>
-
-              {status.linked ? (
-                <>
-                  <p className="text-[11px] text-muted-foreground">
-                    Pulls every photo and video from your Saved Messages into My Photos.
-                    Already-imported items are skipped, so it's safe to re-run.
-                  </p>
-                  {progress && (
-                    <div className="space-y-1 rounded-md border p-2">
-                      <div className="flex justify-between text-[11px] text-muted-foreground">
-                        <span className="truncate">{progress.current?.name ?? "Working…"}</span>
-                        <span>
-                          {progress.imported} in
-                          {progress.alreadyImported > 0 && ` · ${progress.alreadyImported} already`}
-                          {progress.failed > 0 && ` · ${progress.failed} failed`}
-                        </span>
-                      </div>
-                      {progress.current && (
-                        <>
-                          <Progress value={pct ?? 0} />
-                          <p className="text-[10px] text-muted-foreground">
-                            {formatBytes(progress.current.downloaded)} /{" "}
-                            {formatBytes(progress.current.total)}
-                          </p>
-                        </>
-                      )}
-                    </div>
-                  )}
-                  <div className="flex gap-2">
-                    <Button size="sm" onClick={startImport} disabled={busy || status.importing}>
-                      {status.importing ? "Importing…" : "Import Saved Messages"}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      disabled={busy}
-                      onClick={() =>
-                        run(
-                          () => apiJson("/api/telegram/session", "DELETE"),
-                          () => {
-                            toast.success("Telegram account unlinked.")
-                            void refresh()
-                          }
-                        )
-                      }
-                    >
-                      Unlink
-                    </Button>
-                  </div>
-                </>
-              ) : step === "phone" ? (
-                <>
-                  <Input
-                    placeholder="+15551234567"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && void sendCode()}
-                    autoFocus
-                  />
-                  <Button
-                    size="sm"
-                    onClick={sendCode}
-                    disabled={busy || !/^\+?[0-9]{5,15}$/.test(phone.trim())}
-                  >
-                    Send code
-                  </Button>
-                </>
-              ) : step === "code" ? (
-                <>
-                  <Input
-                    placeholder="Code from Telegram"
-                    value={code}
-                    onChange={(e) => setCode(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && void verify({ code: code.trim() })}
-                    autoFocus
-                  />
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      onClick={() => verify({ code: code.trim() })}
-                      disabled={busy || !code.trim()}
-                    >
-                      Verify
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => setStep("phone")} disabled={busy}>
-                      Back
-                    </Button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <Input
-                    type="password"
-                    placeholder="Telegram 2FA password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && void verify({ password })}
-                    autoFocus
-                  />
-                  <Button size="sm" onClick={() => verify({ password })} disabled={busy || !password}>
-                    Verify
-                  </Button>
-                </>
+    <Modal
+      open={open}
+      onClose={onClose}
+      bodyClassName="p-4"
+      icon={<TelegramLogoIcon size={20} weight="fill" className="text-sky-500" />}
+      title="Telegram"
+      footer={
+        <Button variant="ghost" size="sm" onClick={onClose}>
+          Close
+        </Button>
+      }
+    >
+      {!status ? (
+        <p className="py-6 text-center text-sm text-muted-foreground">Loading…</p>
+      ) : (
+        <div className="space-y-5">
+          {/* --- account link: bulk-import old media from Saved Messages --- */}
+          <section className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Your account
+              </h3>
+              {status.linked && (
+                <span className="text-[11px] text-emerald-500">Linked {status.phone}</span>
               )}
-            </section>
+            </div>
 
-            {/* --- bot link: forward anything to it, imported as it arrives --- */}
-            <section className="space-y-2 border-t pt-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Bot
-                </h3>
-                {status.bot.linked && <span className="text-[11px] text-emerald-500">Linked</span>}
-              </div>
-
-              {!status.bot.username ? (
+            {status.linked ? (
+              <>
                 <p className="text-[11px] text-muted-foreground">
-                  No bot configured on the server (TELEGRAM_BOT_TOKEN).
+                  Pulls every photo and video from your Saved Messages into My Photos.
+                  Already-imported items are skipped, so it's safe to re-run.
                 </p>
-              ) : status.bot.linked ? (
-                <div className="flex items-center gap-2">
-                  <p className="flex-1 text-[11px] text-muted-foreground">
-                    Forward photos or videos to @{status.bot.username} and they'll land in My
-                    Photos automatically.
-                  </p>
+                {progress && (
+                  <div className="space-y-1 rounded-md border p-2">
+                    <div className="flex justify-between text-[11px] text-muted-foreground">
+                      <span className="truncate">{progress.current?.name ?? "Working…"}</span>
+                      <span>
+                        {progress.imported} in
+                        {progress.alreadyImported > 0 && ` · ${progress.alreadyImported} already`}
+                        {progress.failed > 0 && ` · ${progress.failed} failed`}
+                      </span>
+                    </div>
+                    {progress.current && (
+                      <>
+                        <Progress value={pct ?? 0} />
+                        <p className="text-[10px] text-muted-foreground">
+                          {formatBytes(progress.current.downloaded)} /{" "}
+                          {formatBytes(progress.current.total)}
+                        </p>
+                      </>
+                    )}
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={startImport} disabled={busy || status.importing}>
+                    {status.importing ? "Importing…" : "Import Saved Messages"}
+                  </Button>
                   <Button
                     size="sm"
                     variant="ghost"
                     disabled={busy}
                     onClick={() =>
                       run(
-                        () => apiJson("/api/telegram/bot/link", "DELETE"),
+                        () => apiJson("/api/telegram/session", "DELETE"),
                         () => {
-                          toast.success("Bot unlinked.")
+                          toast.success("Telegram account unlinked.")
                           void refresh()
                         }
                       )
@@ -337,58 +241,144 @@ export function TelegramDialog({ open, onClose }: { open: boolean; onClose: () =
                     Unlink
                   </Button>
                 </div>
-              ) : deepLink ? (
-                <div className="space-y-2">
-                  <p className="text-[11px] text-muted-foreground">
-                    Open this link (or send the code to @{status.bot.username}) to finish. It
-                    expires in 10 minutes.
-                  </p>
-                  <div className="flex gap-2">
-                    <Input readOnly value={deepLink} className="text-[11px]" />
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        void navigator.clipboard?.writeText(deepLink)
-                        toast.success("Copied.")
-                      }}
-                    >
-                      <CopyIcon size={14} />
-                    </Button>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      render={<a href={deepLink} target="_blank" rel="noreferrer" />}
-                    >
-                      Open Telegram
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => void refresh()}>
-                      I've done it
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <p className="text-[11px] text-muted-foreground">
-                    Link @{status.bot.username} to forward media in as you go — no account login
-                    needed.
-                  </p>
-                  <Button size="sm" variant="outline" onClick={linkBot} disabled={busy}>
-                    Get link code
+              </>
+            ) : step === "phone" ? (
+              <>
+                <Input
+                  placeholder="+15551234567"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && void sendCode()}
+                  autoFocus
+                />
+                <Button
+                  size="sm"
+                  onClick={sendCode}
+                  disabled={busy || !/^\+?[0-9]{5,15}$/.test(phone.trim())}
+                >
+                  Send code
+                </Button>
+              </>
+            ) : step === "code" ? (
+              <>
+                <Input
+                  placeholder="Code from Telegram"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && void verify({ code: code.trim() })}
+                  autoFocus
+                />
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => verify({ code: code.trim() })}
+                    disabled={busy || !code.trim()}
+                  >
+                    Verify
                   </Button>
-                </>
-              )}
-            </section>
-          </div>
-        )}
+                  <Button size="sm" variant="ghost" onClick={() => setStep("phone")} disabled={busy}>
+                    Back
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <Input
+                  type="password"
+                  placeholder="Telegram 2FA password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && void verify({ password })}
+                  autoFocus
+                />
+                <Button size="sm" onClick={() => verify({ password })} disabled={busy || !password}>
+                  Verify
+                </Button>
+              </>
+            )}
+          </section>
 
-        <DialogFooter>
-          <Button variant="ghost" size="sm" onClick={onClose}>
-            Close
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          {/* --- bot link: forward anything to it, imported as it arrives --- */}
+          <section className="space-y-2 border-t pt-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Bot
+              </h3>
+              {status.bot.linked && <span className="text-[11px] text-emerald-500">Linked</span>}
+            </div>
+
+            {!status.bot.username ? (
+              <p className="text-[11px] text-muted-foreground">
+                No bot configured on the server (TELEGRAM_BOT_TOKEN).
+              </p>
+            ) : status.bot.linked ? (
+              <div className="flex items-center gap-2">
+                <p className="flex-1 text-[11px] text-muted-foreground">
+                  Forward photos or videos to @{status.bot.username} and they'll land in My
+                  Photos automatically.
+                </p>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={() =>
+                    run(
+                      () => apiJson("/api/telegram/bot/link", "DELETE"),
+                      () => {
+                        toast.success("Bot unlinked.")
+                        void refresh()
+                      }
+                    )
+                  }
+                >
+                  Unlink
+                </Button>
+              </div>
+            ) : deepLink ? (
+              <div className="space-y-2">
+                <p className="text-[11px] text-muted-foreground">
+                  Open this link (or send the code to @{status.bot.username}) to finish. It
+                  expires in 10 minutes.
+                </p>
+                <div className="flex gap-2">
+                  <Input readOnly value={deepLink} className="text-[11px]" />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      void navigator.clipboard?.writeText(deepLink)
+                      toast.success("Copied.")
+                    }}
+                  >
+                    <CopyIcon size={14} />
+                  </Button>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    render={<a href={deepLink} target="_blank" rel="noreferrer" />}
+                  >
+                    Open Telegram
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => void refresh()}>
+                    I've done it
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <p className="text-[11px] text-muted-foreground">
+                  Link @{status.bot.username} to forward media in as you go — no account login
+                  needed.
+                </p>
+                <Button size="sm" variant="outline" onClick={linkBot} disabled={busy}>
+                  Get link code
+                </Button>
+              </>
+            )}
+          </section>
+        </div>
+      )}
+    </Modal>
   )
 }

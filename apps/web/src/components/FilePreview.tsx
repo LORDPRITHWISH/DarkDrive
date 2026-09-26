@@ -1,4 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useEffectEvent, useRef, useState } from "react"
+import { ScrollArea } from "@workspace/ui/components/scroll-area"
 import { XIcon, DownloadIcon, InfoIcon, CaretLeftIcon, CaretRightIcon } from "@phosphor-icons/react"
 import type { FileItem, SubtitleTrack, AudioTrack } from "@/lib/types"
 import { apiUrl } from "@/lib/config"
@@ -460,22 +461,24 @@ export function FilePreview({
               className="fixed inset-0 z-60 bg-black/40"
               onClick={() => setShowInfo(false)}
             />
-            <div className="fixed inset-x-0 bottom-0 z-70 max-h-[75vh] animate-in overflow-auto rounded-t-2xl border-t bg-card px-5 pt-3 pb-8 duration-200 slide-in-from-bottom">
-              <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted-foreground/30" />
-              <div className="mb-3 flex items-start justify-between gap-2">
-                <h3 className="min-w-0 truncate font-semibold">
-                  <HoverName as="span" name={file.name} className="truncate" />
-                </h3>
-                <button
-                  onClick={() => setShowInfo(false)}
-                  className="shrink-0 rounded-lg p-1.5 text-muted-foreground hover:bg-accent"
-                  aria-label="Close details"
-                >
-                  <XIcon size={18} />
-                </button>
+            <ScrollArea className="fixed inset-x-0 bottom-0 z-70 max-h-[75vh] animate-in rounded-t-2xl border-t bg-card duration-200 slide-in-from-bottom">
+              <div className="px-5 pt-3 pb-8">
+                <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted-foreground/30" />
+                <div className="mb-3 flex items-start justify-between gap-2">
+                  <h3 className="min-w-0 truncate font-semibold">
+                    <HoverName as="span" name={file.name} className="truncate" />
+                  </h3>
+                  <button
+                    onClick={() => setShowInfo(false)}
+                    className="shrink-0 rounded-lg p-1.5 text-muted-foreground hover:bg-accent"
+                    aria-label="Close details"
+                  >
+                    <XIcon size={18} />
+                  </button>
+                </div>
+                {propertiesContent}
               </div>
-              {propertiesContent}
-            </div>
+            </ScrollArea>
           </>
         )}
       </div>
@@ -520,21 +523,23 @@ export function FilePreview({
         </div>
 
         {!pdfFocusMode && (
-          <aside className="flex w-80 shrink-0 flex-col gap-3 overflow-auto border-l p-4">
-            <div className="flex items-start justify-between gap-2">
-              <h3 className="min-w-0 flex-1 truncate font-semibold">
-                <HoverName as="span" name={file.name} className="truncate" />
-              </h3>
-              <button
-                className="shrink-0 rounded p-1 hover:bg-accent"
-                onClick={onClose}
-                aria-label="Close"
-              >
-                <XIcon size={18} />
-              </button>
-            </div>
-            {propertiesContent}
-          </aside>
+          <ScrollArea className="w-80 shrink-0 border-l">
+            <aside className="flex flex-col gap-3 p-4">
+              <div className="flex items-start justify-between gap-2">
+                <h3 className="min-w-0 flex-1 truncate font-semibold">
+                  <HoverName as="span" name={file.name} className="truncate" />
+                </h3>
+                <button
+                  className="shrink-0 rounded p-1 hover:bg-accent"
+                  onClick={onClose}
+                  aria-label="Close"
+                >
+                  <XIcon size={18} />
+                </button>
+              </div>
+              {propertiesContent}
+            </aside>
+          </ScrollArea>
         )}
       </div>
 
@@ -617,12 +622,12 @@ function isPdfFile(m: string, name: string) {
 const MODAL_MEDIA = {
   w: "max-w-[calc(95vw-20rem-2px)]",
   h: "max-h-[calc(90vh-2px)]",
-  doc: "w-[calc(95vw-20rem-2px)] h-[calc(90vh-2px)] overflow-auto",
+  doc: "w-[calc(95vw-20rem-2px)] h-[calc(90vh-2px)] overflow-hidden",
 }
 const FILL_MEDIA = {
   w: "max-w-full",
   h: "max-h-full",
-  doc: "h-full w-full overflow-auto",
+  doc: "h-full w-full overflow-hidden",
 }
 
 export type FileViewerLayout = "modal" | "fill"
@@ -720,19 +725,19 @@ export function FileViewer({
   }
   if (isCsvFile(mime, file.name)) {
     return (
-      <div className={sizing.doc}>
+      <ScrollArea className={sizing.doc}>
         <CsvPreview
           src={src}
           delimiter={/\.tsv$/i.test(file.name) ? "\t" : ","}
         />
-      </div>
+      </ScrollArea>
     )
   }
   if (isTextFile(mime, file.name)) {
     return (
-      <div className={sizing.doc}>
+      <ScrollArea className={sizing.doc}>
         <TextPreview src={src} />
-      </div>
+      </ScrollArea>
     )
   }
   if (isOfficeFile(mime, file.name)) {
@@ -952,7 +957,7 @@ function CsvPreview({ src, delimiter }: { src: string; delimiter: string }) {
 
   const [head, ...body] = rows
   return (
-    <div className="overflow-auto p-2">
+    <div className="p-2">
       <Table>
         <TableHeader className="bg-accent sticky top-0">
           <TableRow>

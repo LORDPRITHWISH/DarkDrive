@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { ScrollArea } from "@workspace/ui/components/scroll-area"
 import { useNavigate } from "react-router-dom"
 import { UploadIcon, XIcon } from "@phosphor-icons/react"
 import { Button } from "@workspace/ui/components/button"
@@ -60,32 +61,34 @@ export function ShareTargetPage() {
         <header className="flex items-center gap-2 border-b p-3">
           <h1 className="font-semibold">Save to DarkDrive</h1>
         </header>
-        <div className="flex-1 overflow-auto px-4 py-5 md:px-6">
-          {files === null ? (
-            <div className="text-muted-foreground text-sm">Reading shared files…</div>
-          ) : files.length === 0 ? (
-            <div className="text-muted-foreground text-sm">
-              Nothing was shared. Files may have already been saved.
-            </div>
-          ) : (
-            <ul className="flex flex-col gap-1">
-              {files.map((f, i) => (
-                <li
-                  key={`${f.name}-${i}`}
-                  className="flex items-center gap-3 rounded-md border p-2.5"
-                >
-                  {iconFor(f.type, 28, f.name)}
-                  <div className="min-w-0 flex-1">
-                    <div className="selectable truncate text-sm">{f.name}</div>
-                    <div className="text-muted-foreground text-xs">
-                      {formatBytes(f.size)}
+        <ScrollArea className="min-h-0 flex-1">
+          <div className="px-4 py-5 md:px-6">
+            {files === null ? (
+              <div className="text-muted-foreground text-sm">Reading shared files…</div>
+            ) : files.length === 0 ? (
+              <div className="text-muted-foreground text-sm">
+                Nothing was shared. Files may have already been saved.
+              </div>
+            ) : (
+              <ul className="flex flex-col gap-1">
+                {files.map((f, i) => (
+                  <li
+                    key={`${f.name}-${i}`}
+                    className="flex items-center gap-3 rounded-md border p-2.5"
+                  >
+                    {iconFor(f.type, 28, f.name)}
+                    <div className="min-w-0 flex-1">
+                      <div className="selectable truncate text-sm">{f.name}</div>
+                      <div className="text-muted-foreground text-xs">
+                        {formatBytes(f.size)}
+                      </div>
                     </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </ScrollArea>
         {!!files?.length && (
           <div className="flex gap-2 border-t p-3 pb-safe">
             <Button variant="outline" onClick={discard} disabled={busy} className="flex-1">

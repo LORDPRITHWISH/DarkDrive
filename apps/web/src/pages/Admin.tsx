@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { ScrollArea } from "@workspace/ui/components/scroll-area"
 import {
   Tabs,
   TabsList,
@@ -94,21 +95,23 @@ export function AdminPage() {
           </div>
         </header>
 
-        <div className="flex-1 overflow-auto p-4">
-          {loading ? (
-            <div className="text-muted-foreground text-sm">Loading…</div>
-          ) : err ? (
-            <div className="text-destructive text-sm">{err}</div>
-          ) : stats ? (
-            <Dashboard
-              stats={stats}
-              users={users}
-              spaces={spaces}
-              meId={me?.id}
-              onUpdate={updateUser}
-            />
-          ) : null}
-        </div>
+        <ScrollArea className="min-h-0 flex-1">
+          <div className="p-4">
+            {loading ? (
+              <div className="text-muted-foreground text-sm">Loading…</div>
+            ) : err ? (
+              <div className="text-destructive text-sm">{err}</div>
+            ) : stats ? (
+              <Dashboard
+                stats={stats}
+                users={users}
+                spaces={spaces}
+                meId={me?.id}
+                onUpdate={updateUser}
+              />
+            ) : null}
+          </div>
+        </ScrollArea>
       </main>
     </div>
   )

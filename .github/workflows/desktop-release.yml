@@ -1,0 +1,40 @@
+# Push a tag like v0.2.0 (matching apps/desktop/package.json "version") and
+# this builds the .deb and .exe and publishes them as a GitHub release. The
+# installed apps poll that release for their updates, so tagging IS shipping.
+name: Desktop release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    strategy:
+      # One at a time: both jobs upload to the same release, and two creating
+      # it at once race.
+      max-parallel: 1
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: --linux deb
+          - os: windows-latest
+            target: --win nsis
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Tag matches package version
+        shell: bash
+        run: test "$GITHUB_REF_NAME" = "v$(node -p "require('./apps/desktop/package.json').version")"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter "desktop..." build
+      - run: pnpm --filter desktop exec electron-builder ${{ matrix.target }} --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

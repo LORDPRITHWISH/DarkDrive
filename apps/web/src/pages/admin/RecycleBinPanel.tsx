@@ -202,7 +202,7 @@ export function RecycleBinPanel({ users }: { users: AdminUser[] }) {
             The recycle bin is empty. Nothing has been permanently deleted yet.
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
             <Table className="min-w-[640px]">
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
@@ -242,7 +242,7 @@ export function RecycleBinPanel({ users }: { users: AdminUser[] }) {
                 ))}
               </TableBody>
             </Table>
-          </div>
+          </>
         )}
       </CardContent>
       <FilePreview file={preview} onClose={close} />

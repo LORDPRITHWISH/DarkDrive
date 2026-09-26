@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
+import { ScrollArea } from "@workspace/ui/components/scroll-area"
 import {
   TrashIcon,
   UserPlusIcon,
@@ -512,10 +513,8 @@ export function SpaceManageDialog({
                   }}
                 />
                 {showSuggestions && suggestions.length > 0 && (
-                  <ul
-                    className="bg-popover animate-in fade-in slide-in-from-top-1 absolute top-full left-0 z-10 mt-1 max-h-60 w-full overflow-auto rounded-xl border p-1 text-sm shadow-xl duration-150"
-                    role="listbox"
-                  >
+                  <ScrollArea className="bg-popover animate-in fade-in slide-in-from-top-1 absolute top-full left-0 z-10 mt-1 max-h-60 w-full rounded-xl border text-sm shadow-xl duration-150">
+                  <ul className="p-1" role="listbox">
                     {suggestions.map((c, i) => (
                       <li
                         key={c.id}
@@ -547,6 +546,7 @@ export function SpaceManageDialog({
                       </li>
                     ))}
                   </ul>
+                  </ScrollArea>
                 )}
               </div>
               <Select
@@ -579,117 +579,119 @@ export function SpaceManageDialog({
           </div>
         )}
 
-        <div className="flex-1 overflow-auto p-2">
-          <div className="text-muted-foreground mb-1 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider">
-            Members
-          </div>
-          <ul className="flex flex-col gap-0.5">
-            {space.members.map((m) => {
-              const isOwner = m.userId === space.ownerId
-              const isSelf = m.userId === me?.id
-              return (
-                <li
-                  key={m.userId}
-                  className="group/member hover:bg-accent/60 flex items-center gap-3 rounded-xl p-2 transition-colors"
-                >
-                  <Avatar className="ring-background h-9 w-9 ring-2">
-                    {m.avatarUrl && <AvatarImage src={m.avatarUrl} alt="" />}
-                    <AvatarFallback className="text-sm font-semibold">
-                      {initials(m.name)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <span
-                        className="truncate text-sm font-semibold"
-                        title={m.name}
-                      >
-                        {m.name}
+        <ScrollArea className="min-h-0 flex-1">
+          <div className="p-2">
+            <div className="text-muted-foreground mb-1 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider">
+              Members
+            </div>
+            <ul className="flex flex-col gap-0.5">
+              {space.members.map((m) => {
+                const isOwner = m.userId === space.ownerId
+                const isSelf = m.userId === me?.id
+                return (
+                  <li
+                    key={m.userId}
+                    className="group/member hover:bg-accent/60 flex items-center gap-3 rounded-xl p-2 transition-colors"
+                  >
+                    <Avatar className="ring-background h-9 w-9 ring-2">
+                      {m.avatarUrl && <AvatarImage src={m.avatarUrl} alt="" />}
+                      <AvatarFallback className="text-sm font-semibold">
+                        {initials(m.name)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className="truncate text-sm font-semibold"
+                          title={m.name}
+                        >
+                          {m.name}
+                        </span>
+                        {isOwner && (
+                          <Badge className="bg-primary/15 text-primary shrink-0 gap-1 border-transparent text-[10px] font-bold uppercase tracking-wider">
+                            <ShieldCheckIcon size={10} weight="fill" />
+                            Owner
+                          </Badge>
+                        )}
+                        {isSelf && !isOwner && (
+                          <Badge variant="muted" className="shrink-0 text-[10px] font-medium">
+                            you
+                          </Badge>
+                        )}
+                        {m.editorRequestedAt && (
+                          <Badge className="bg-amber-500/15 text-amber-600 shrink-0 border-transparent text-[10px] font-bold uppercase tracking-wider dark:text-amber-400">
+                            Wants to upload
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="text-muted-foreground truncate text-xs">
+                        {m.email}
+                      </div>
+                    </div>
+                    {iAmOwner && m.editorRequestedAt && (
+                      <div className="flex shrink-0 items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => void updateMemberRole(space.id, m.userId, "EDITOR")}
+                          className="text-emerald-600 hover:bg-emerald-500/15 dark:text-emerald-400"
+                          title="Approve upload access"
+                          aria-label={`Approve ${m.name}`}
+                        >
+                          <CheckIcon size={14} weight="bold" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => void denyEditorRequest(space.id, m.userId)}
+                          className="text-muted-foreground hover:text-destructive"
+                          title="Deny upload access"
+                          aria-label={`Deny ${m.name}`}
+                        >
+                          <XIcon size={14} weight="bold" />
+                        </Button>
+                      </div>
+                    )}
+                    {isOwner ? (
+                      <span className="text-muted-foreground mr-1 text-xs font-medium">
+                        Admin
                       </span>
-                      {isOwner && (
-                        <Badge className="bg-primary/15 text-primary shrink-0 gap-1 border-transparent text-[10px] font-bold uppercase tracking-wider">
-                          <ShieldCheckIcon size={10} weight="fill" />
-                          Owner
-                        </Badge>
-                      )}
-                      {isSelf && !isOwner && (
-                        <Badge variant="muted" className="shrink-0 text-[10px] font-medium">
-                          you
-                        </Badge>
-                      )}
-                      {m.editorRequestedAt && (
-                        <Badge className="bg-amber-500/15 text-amber-600 shrink-0 border-transparent text-[10px] font-bold uppercase tracking-wider dark:text-amber-400">
-                          Wants to upload
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="text-muted-foreground truncate text-xs">
-                      {m.email}
-                    </div>
-                  </div>
-                  {iAmOwner && m.editorRequestedAt && (
-                    <div className="flex shrink-0 items-center gap-1">
+                    ) : (
+                      <Select
+                        items={ROLE_LABELS}
+                        value={m.role}
+                        disabled={!iAmOwner}
+                        onValueChange={(v) =>
+                          void updateMemberRole(space.id, m.userId, v as Role)
+                        }
+                      >
+                        <SelectTrigger size="sm" className="text-xs font-medium">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="VIEWER">Viewer</SelectItem>
+                          <SelectItem value="EDITOR">Editor</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    )}
+                    {iAmOwner && !isOwner && (
                       <Button
                         variant="ghost"
                         size="icon-sm"
-                        onClick={() => void updateMemberRole(space.id, m.userId, "EDITOR")}
-                        className="text-emerald-600 hover:bg-emerald-500/15 dark:text-emerald-400"
-                        title="Approve upload access"
-                        aria-label={`Approve ${m.name}`}
+                        className="text-muted-foreground hover:text-destructive opacity-0 transition-all group-hover/member:opacity-100 focus-visible:opacity-100"
+                        onClick={() => void removeMember(space.id, m.userId)}
+                        title="Remove"
+                        aria-label={`Remove ${m.name}`}
                       >
-                        <CheckIcon size={14} weight="bold" />
+                        <TrashIcon size={14} />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() => void denyEditorRequest(space.id, m.userId)}
-                        className="text-muted-foreground hover:text-destructive"
-                        title="Deny upload access"
-                        aria-label={`Deny ${m.name}`}
-                      >
-                        <XIcon size={14} weight="bold" />
-                      </Button>
-                    </div>
-                  )}
-                  {isOwner ? (
-                    <span className="text-muted-foreground mr-1 text-xs font-medium">
-                      Admin
-                    </span>
-                  ) : (
-                    <Select
-                      items={ROLE_LABELS}
-                      value={m.role}
-                      disabled={!iAmOwner}
-                      onValueChange={(v) =>
-                        void updateMemberRole(space.id, m.userId, v as Role)
-                      }
-                    >
-                      <SelectTrigger size="sm" className="text-xs font-medium">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="VIEWER">Viewer</SelectItem>
-                        <SelectItem value="EDITOR">Editor</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  )}
-                  {iAmOwner && !isOwner && (
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      className="text-muted-foreground hover:text-destructive opacity-0 transition-all group-hover/member:opacity-100 focus-visible:opacity-100"
-                      onClick={() => void removeMember(space.id, m.userId)}
-                      title="Remove"
-                      aria-label={`Remove ${m.name}`}
-                    >
-                      <TrashIcon size={14} />
-                    </Button>
-                  )}
-                </li>
-              )
-            })}
-          </ul>
-        </div>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        </ScrollArea>
 
         {iAmOwner && (
           <div className="bg-muted/30 flex items-center justify-between gap-2 border-t px-4 py-3">

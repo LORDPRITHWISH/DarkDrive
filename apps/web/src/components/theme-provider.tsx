@@ -1,8 +1,8 @@
 /* eslint-disable react-refresh/only-export-components */
 import * as React from "react"
+import { flushSync } from "react-dom"
 
-type Theme = "dark" | "light" | "system"
-type ResolvedTheme = "dark" | "light"
+type Theme = "dark" | "light"
 
 type ThemeProviderProps = {
   children: React.ReactNode
@@ -14,10 +14,12 @@ type ThemeProviderProps = {
 type ThemeProviderState = {
   theme: Theme
   setTheme: (theme: Theme) => void
+  /** Flips dark/light with Magic UI's circular reveal, expanding from `origin` (viewport center if omitted). */
+  toggleTheme: (origin?: { x: number; y: number }) => void
 }
 
-const COLOR_SCHEME_QUERY = "(prefers-color-scheme: dark)"
-const THEME_VALUES: Theme[] = ["dark", "light", "system"]
+const THEME_VALUES: Theme[] = ["dark", "light"]
+const REVEAL_MS = 400
 
 const ThemeProviderContext = React.createContext<
   ThemeProviderState | undefined
@@ -29,14 +31,6 @@ function isTheme(value: string | null): value is Theme {
   }
 
   return THEME_VALUES.includes(value as Theme)
-}
-
-function getSystemTheme(): ResolvedTheme {
-  if (window.matchMedia(COLOR_SCHEME_QUERY).matches) {
-    return "dark"
-  }
-
-  return "light"
 }
 
 function disableTransitionsTemporarily() {
@@ -79,7 +73,7 @@ function isEditableTarget(target: EventTarget | null) {
 
 export function ThemeProvider({
   children,
-  defaultTheme = "system",
+  defaultTheme = "dark",
   storageKey = "theme",
   disableTransitionOnChange = true,
   ...props
@@ -101,43 +95,63 @@ export function ThemeProvider({
     [storageKey]
   )
 
-  const applyTheme = React.useCallback(
-    (nextTheme: Theme) => {
-      const root = document.documentElement
-      const resolvedTheme =
-        nextTheme === "system" ? getSystemTheme() : nextTheme
-      const restoreTransitions = disableTransitionOnChange
-        ? disableTransitionsTemporarily()
-        : null
+  // Layout effect, not a passive one: toggleTheme's flushSync must leave the
+  // class on <html> before the view transition snapshots the new state.
+  React.useLayoutEffect(() => {
+    const root = document.documentElement
+    const restoreTransitions = disableTransitionOnChange
+      ? disableTransitionsTemporarily()
+      : null
 
-      root.classList.remove("light", "dark")
-      root.classList.add(resolvedTheme)
+    root.classList.remove("light", "dark")
+    root.classList.add(theme)
 
-      if (restoreTransitions) {
-        restoreTransitions()
+    if (restoreTransitions) {
+      restoreTransitions()
+    }
+  }, [theme, disableTransitionOnChange])
+
+  // Magic UI's AnimatedThemeToggler reveal: snapshot old/new theme with the
+  // View Transitions API, then grow a circle clip on the new snapshot from the
+  // origin until it covers the farthest viewport corner.
+  const toggleTheme = React.useCallback(
+    (origin?: { x: number; y: number }) => {
+      const next: Theme = document.documentElement.classList.contains("dark")
+        ? "light"
+        : "dark"
+      const apply = () => flushSync(() => setTheme(next))
+
+      if (
+        typeof document.startViewTransition !== "function" ||
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      ) {
+        apply()
+        return
       }
+
+      const w = window.innerWidth
+      const h = window.innerHeight
+      const { x, y } = origin ?? { x: w / 2, y: h / 2 }
+      const r = Math.hypot(Math.max(x, w - x), Math.max(y, h - y))
+
+      document.startViewTransition(apply).ready.then(() => {
+        document.documentElement.animate(
+          {
+            clipPath: [
+              `circle(0px at ${x}px ${y}px)`,
+              `circle(${r}px at ${x}px ${y}px)`,
+            ],
+          },
+          {
+            duration: REVEAL_MS,
+            easing: "ease-in-out",
+            pseudoElement: "::view-transition-new(root)",
+          }
+        )
+      }, () => {})
     },
-    [disableTransitionOnChange]
+    [setTheme]
   )
-
-  React.useEffect(() => {
-    applyTheme(theme)
-
-    if (theme !== "system") {
-      return undefined
-    }
-
-    const mediaQuery = window.matchMedia(COLOR_SCHEME_QUERY)
-    const handleChange = () => {
-      applyTheme("system")
-    }
-
-    mediaQuery.addEventListener("change", handleChange)
-
-    return () => {
-      mediaQuery.removeEventListener("change", handleChange)
-    }
-  }, [theme, applyTheme])
 
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -157,19 +171,7 @@ export function ThemeProvider({
         return
       }
 
-      setThemeState((currentTheme) => {
-        const nextTheme =
-          currentTheme === "dark"
-            ? "light"
-            : currentTheme === "light"
-              ? "dark"
-              : getSystemTheme() === "dark"
-                ? "light"
-                : "dark"
-
-        localStorage.setItem(storageKey, nextTheme)
-        return nextTheme
-      })
+      toggleTheme()
     }
 
     window.addEventListener("keydown", handleKeyDown)
@@ -177,7 +179,7 @@ export function ThemeProvider({
     return () => {
       window.removeEventListener("keydown", handleKeyDown)
     }
-  }, [storageKey])
+  }, [toggleTheme])
 
   React.useEffect(() => {
     const handleStorageChange = (event: StorageEvent) => {
@@ -208,8 +210,9 @@ export function ThemeProvider({
     () => ({
       theme,
       setTheme,
+      toggleTheme,
     }),
-    [theme, setTheme]
+    [theme, setTheme, toggleTheme]
   )
 
   return (

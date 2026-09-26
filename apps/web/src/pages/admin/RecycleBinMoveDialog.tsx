@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
+import { ScrollArea } from "@workspace/ui/components/scroll-area"
 import {
   CaretDownIcon,
   CaretRightIcon,
@@ -90,7 +91,8 @@ export function RecycleBinMoveDialog({ open, item, users, onClose, onSubmit }: P
       onClose={onClose}
       size="2xl"
       className="h-[560px]"
-      bodyClassName="flex overflow-hidden"
+      bodyClassName="flex"
+      scrollBody={false}
       title="Move to…"
       description={<HoverName as="span" name={item.name} className="block truncate" />}
       footer={
@@ -119,61 +121,65 @@ export function RecycleBinMoveDialog({ open, item, users, onClose, onSubmit }: P
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
-        <div className="flex-1 overflow-auto p-1">
-          {filteredUsers.length === 0 ? (
-            <div className="text-muted-foreground p-3 text-center text-xs">
-              No users match.
-            </div>
-          ) : (
-            filteredUsers.map((u) => (
-              <button
-                key={u.id}
-                type="button"
-                onClick={() => setUserId(u.id)}
-                className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm ${
-                  userId === u.id ? "bg-accent text-accent-foreground" : "hover:bg-accent/60"
-                }`}
-              >
-                <Avatar className="h-6 w-6 shrink-0">
-                  {u.avatarUrl && <AvatarImage src={u.avatarUrl} alt="" />}
-                  <AvatarFallback className="text-[10px]">
-                    {u.name[0]?.toUpperCase() ?? "?"}
-                  </AvatarFallback>
-                </Avatar>
-                <span className="min-w-0 flex-1 truncate">{u.name}</span>
-              </button>
-            ))
-          )}
-        </div>
+        <ScrollArea className="min-h-0 flex-1">
+          <div className="p-1">
+            {filteredUsers.length === 0 ? (
+              <div className="text-muted-foreground p-3 text-center text-xs">
+                No users match.
+              </div>
+            ) : (
+              filteredUsers.map((u) => (
+                <button
+                  key={u.id}
+                  type="button"
+                  onClick={() => setUserId(u.id)}
+                  className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm ${
+                    userId === u.id ? "bg-accent text-accent-foreground" : "hover:bg-accent/60"
+                  }`}
+                >
+                  <Avatar className="h-6 w-6 shrink-0">
+                    {u.avatarUrl && <AvatarImage src={u.avatarUrl} alt="" />}
+                    <AvatarFallback className="text-[10px]">
+                      {u.name[0]?.toUpperCase() ?? "?"}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="min-w-0 flex-1 truncate">{u.name}</span>
+                </button>
+              ))
+            )}
+          </div>
+        </ScrollArea>
       </div>
 
       {/* Folder tree */}
-      <div className="flex-1 overflow-auto p-2 text-sm">
-        {err && <div className="text-destructive mb-2 px-2">{err}</div>}
-        {!userId ? (
-          <div className="text-muted-foreground p-4 text-center text-sm">
-            Pick a user to browse their drive.
-          </div>
-        ) : !tree ? (
-          <div className="text-muted-foreground p-4 text-sm">Loading…</div>
-        ) : (
-          <FolderTree
-            rootId={tree.rootId}
-            folders={tree.folders}
-            selected={selected}
-            expanded={expanded}
-            onSelect={setSelected}
-            onToggle={(id) =>
-              setExpanded((prev) => {
-                const next = new Set(prev)
-                if (next.has(id)) next.delete(id)
-                else next.add(id)
-                return next
-              })
-            }
-          />
-        )}
-      </div>
+      <ScrollArea className="min-w-0 flex-1">
+        <div className="p-2 text-sm">
+          {err && <div className="text-destructive mb-2 px-2">{err}</div>}
+          {!userId ? (
+            <div className="text-muted-foreground p-4 text-center text-sm">
+              Pick a user to browse their drive.
+            </div>
+          ) : !tree ? (
+            <div className="text-muted-foreground p-4 text-sm">Loading…</div>
+          ) : (
+            <FolderTree
+              rootId={tree.rootId}
+              folders={tree.folders}
+              selected={selected}
+              expanded={expanded}
+              onSelect={setSelected}
+              onToggle={(id) =>
+                setExpanded((prev) => {
+                  const next = new Set(prev)
+                  if (next.has(id)) next.delete(id)
+                  else next.add(id)
+                  return next
+                })
+              }
+            />
+          )}
+        </div>
+      </ScrollArea>
     </Modal>
   )
 }

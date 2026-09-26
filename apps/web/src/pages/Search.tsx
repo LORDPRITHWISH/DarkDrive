@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react"
+import { ScrollArea } from "@workspace/ui/components/scroll-area"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import {
   DownloadIcon,
@@ -261,181 +262,185 @@ export function SearchPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 overflow-x-auto border-b px-4 py-3 md:px-6">
-          {TYPE_ORDER.map((t) => (
-            <FilterChip key={t} active={type === t} onClick={() => setType(t)}>
-              {TYPE_ICONS[t]}
-              {SEARCH_TYPE_LABELS[t]}
-            </FilterChip>
-          ))}
-          <div className="bg-border mx-1 h-5 w-px shrink-0" />
-          {folderId ? (
-            <FilterChip active onClick={() => setPickerOpen(true)}>
-              <MapPinIcon size={14} />
-              In: {result?.scope?.name ?? "…"}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setFolderScope(null)
-                }}
-                className="ml-1 rounded-full hover:bg-black/10"
-                aria-label="Search everywhere"
-              >
-                <XIcon size={12} />
-              </button>
-            </FilterChip>
-          ) : (
-            <FilterChip active={false} onClick={() => setPickerOpen(true)}>
-              <MapPinIcon size={14} />
-              All of Drive
-            </FilterChip>
-          )}
-        </div>
+        <ScrollArea className="border-b">
+          <div className="flex items-center gap-2 px-4 py-3 md:px-6">
+            {TYPE_ORDER.map((t) => (
+              <FilterChip key={t} active={type === t} onClick={() => setType(t)}>
+                {TYPE_ICONS[t]}
+                {SEARCH_TYPE_LABELS[t]}
+              </FilterChip>
+            ))}
+            <div className="bg-border mx-1 h-5 w-px shrink-0" />
+            {folderId ? (
+              <FilterChip active onClick={() => setPickerOpen(true)}>
+                <MapPinIcon size={14} />
+                In: {result?.scope?.name ?? "…"}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setFolderScope(null)
+                  }}
+                  className="ml-1 rounded-full hover:bg-black/10"
+                  aria-label="Search everywhere"
+                >
+                  <XIcon size={12} />
+                </button>
+              </FilterChip>
+            ) : (
+              <FilterChip active={false} onClick={() => setPickerOpen(true)}>
+                <MapPinIcon size={14} />
+                All of Drive
+              </FilterChip>
+            )}
+          </div>
+        </ScrollArea>
 
-        <div ref={contentRef} className="flex-1 overflow-auto px-4 py-5 md:px-6">
-          {!active ? (
-            <div className="text-muted-foreground py-20 text-center text-sm">
-              Start typing, or pick a type/folder filter to browse your files.
-            </div>
-          ) : loading && !result ? (
-            <div className="text-muted-foreground py-20 text-center text-sm">Searching…</div>
-          ) : error ? (
-            <div className="text-destructive py-20 text-center text-sm">{error}</div>
-          ) : isEmpty ? (
-            <div className="text-muted-foreground py-20 text-center text-sm">
-              No matches{urlQ.trim() ? ` for "${urlQ.trim()}"` : ""}.
-            </div>
-          ) : view === "grid" ? (
-            <div className="flex flex-col gap-8">
-              {folders.length > 0 && (
-                <section>
-                  <h2 className="text-muted-foreground mb-3 text-sm font-medium">Folders</h2>
-                  <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-3">
+        <ScrollArea ref={contentRef} className="min-h-0 flex-1">
+          <div className="px-4 py-5 md:px-6">
+            {!active ? (
+              <div className="text-muted-foreground py-20 text-center text-sm">
+                Start typing, or pick a type/folder filter to browse your files.
+              </div>
+            ) : loading && !result ? (
+              <div className="text-muted-foreground py-20 text-center text-sm">Searching…</div>
+            ) : error ? (
+              <div className="text-destructive py-20 text-center text-sm">{error}</div>
+            ) : isEmpty ? (
+              <div className="text-muted-foreground py-20 text-center text-sm">
+                No matches{urlQ.trim() ? ` for "${urlQ.trim()}"` : ""}.
+              </div>
+            ) : view === "grid" ? (
+              <div className="flex flex-col gap-8">
+                {folders.length > 0 && (
+                  <section>
+                    <h2 className="text-muted-foreground mb-3 text-sm font-medium">Folders</h2>
+                    <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-3">
+                      {folders.map((f) => (
+                        <FolderTile
+                          key={f.id}
+                          folder={f}
+                          onOpen={() => nav(`/drive/${f.id}`)}
+                          onOpenLocation={f.parentId ? () => nav(`/drive/${f.parentId}`) : undefined}
+                          onToggleStar={() => toggleStar("folder", f.id, f.isStarred)}
+                          onMenu={(e) => openMenu(e, "folder", f)}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                )}
+                {files.length > 0 && (
+                  <section>
+                    <h2 className="text-muted-foreground mb-3 text-sm font-medium">Files</h2>
+                    <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
+                      {files.map((f) => (
+                        <FileTile
+                          key={f.id}
+                          file={f}
+                          onOpen={() => setPreview(f)}
+                          onOpenLocation={() => nav(`/drive/${f.folderId}`)}
+                          onToggleStar={() => toggleStar("file", f.id, f.isStarred)}
+                          onMenu={(e) => openMenu(e, "file", f)}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                )}
+              </div>
+            ) : (
+              <div className="overflow-hidden rounded-lg border">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="p-0 py-2 pl-3">Name</TableHead>
+                      <TableHead className="p-0 py-2">Location</TableHead>
+                      <TableHead className="p-0 py-2">Modified</TableHead>
+                      <TableHead className="p-0 py-2 pr-3">Size</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     {folders.map((f) => (
-                      <FolderTile
+                      <TableRow
                         key={f.id}
-                        folder={f}
-                        onOpen={() => nav(`/drive/${f.id}`)}
-                        onOpenLocation={f.parentId ? () => nav(`/drive/${f.parentId}`) : undefined}
-                        onToggleStar={() => toggleStar("folder", f.id, f.isStarred)}
-                        onMenu={(e) => openMenu(e, "folder", f)}
-                      />
+                        tabIndex={0}
+                        className="focus-visible:bg-accent/40 cursor-pointer outline-none last:border-b-0"
+                        onClick={() => nav(`/drive/${f.id}`)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") nav(`/drive/${f.id}`)
+                        }}
+                        onContextMenu={(e) => openMenu(e, "folder", f)}
+                      >
+                        <TableCell className="p-0 py-2 pl-3">
+                          <div className="flex items-center gap-2">
+                            <FolderIcon
+                              size={18}
+                              weight="fill"
+                              style={{ color: f.color || undefined }}
+                              className={f.color ? "" : "text-primary"}
+                            />
+                            <HoverName as="span" name={f.name} className="min-w-0 truncate" />
+                            {f.isStarred && (
+                              <StarIcon size={14} weight="fill" className="text-yellow-500" />
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell
+                          className="text-muted-foreground p-0 py-2 hover:underline"
+                          onClick={(e) => {
+                            if (!f.parentId) return
+                            e.stopPropagation()
+                            nav(`/drive/${f.parentId}`)
+                          }}
+                        >
+                          {f.parentName ?? "My Drive"}
+                        </TableCell>
+                        <TableCell className="p-0 py-2">{formatDate(f.updatedAt)}</TableCell>
+                        <TableCell className="p-0 py-2 pr-3">—</TableCell>
+                      </TableRow>
                     ))}
-                  </div>
-                </section>
-              )}
-              {files.length > 0 && (
-                <section>
-                  <h2 className="text-muted-foreground mb-3 text-sm font-medium">Files</h2>
-                  <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
                     {files.map((f) => (
-                      <FileTile
+                      <TableRow
                         key={f.id}
-                        file={f}
-                        onOpen={() => setPreview(f)}
-                        onOpenLocation={() => nav(`/drive/${f.folderId}`)}
-                        onToggleStar={() => toggleStar("file", f.id, f.isStarred)}
-                        onMenu={(e) => openMenu(e, "file", f)}
-                      />
+                        tabIndex={0}
+                        className="focus-visible:bg-accent/40 cursor-pointer outline-none last:border-b-0"
+                        onClick={() => setPreview(f)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") setPreview(f)
+                        }}
+                        onContextMenu={(e) => openMenu(e, "file", f)}
+                      >
+                        <TableCell className="p-0 py-2 pl-3">
+                          <div className="flex items-center gap-2">
+                            {iconForRow(f)}
+                            <HoverName as="span" name={f.name} className="min-w-0 truncate" />
+                            {f.isStarred && (
+                              <StarIcon size={14} weight="fill" className="text-yellow-500" />
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell
+                          className="text-muted-foreground p-0 py-2 hover:underline"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            nav(`/drive/${f.folderId}`)
+                          }}
+                        >
+                          {f.folderName ?? "—"}
+                        </TableCell>
+                        <TableCell className="p-0 py-2">{formatDate(f.updatedAt)}</TableCell>
+                        <TableCell className="p-0 py-2 pr-3">{formatBytes(f.size)}</TableCell>
+                      </TableRow>
                     ))}
-                  </div>
-                </section>
-              )}
-            </div>
-          ) : (
-            <div className="overflow-hidden rounded-lg border">
-              <Table>
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead className="p-0 py-2 pl-3">Name</TableHead>
-                    <TableHead className="p-0 py-2">Location</TableHead>
-                    <TableHead className="p-0 py-2">Modified</TableHead>
-                    <TableHead className="p-0 py-2 pr-3">Size</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {folders.map((f) => (
-                    <TableRow
-                      key={f.id}
-                      tabIndex={0}
-                      className="focus-visible:bg-accent/40 cursor-pointer outline-none last:border-b-0"
-                      onClick={() => nav(`/drive/${f.id}`)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") nav(`/drive/${f.id}`)
-                      }}
-                      onContextMenu={(e) => openMenu(e, "folder", f)}
-                    >
-                      <TableCell className="p-0 py-2 pl-3">
-                        <div className="flex items-center gap-2">
-                          <FolderIcon
-                            size={18}
-                            weight="fill"
-                            style={{ color: f.color || undefined }}
-                            className={f.color ? "" : "text-primary"}
-                          />
-                          <HoverName as="span" name={f.name} className="min-w-0 truncate" />
-                          {f.isStarred && (
-                            <StarIcon size={14} weight="fill" className="text-yellow-500" />
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell
-                        className="text-muted-foreground p-0 py-2 hover:underline"
-                        onClick={(e) => {
-                          if (!f.parentId) return
-                          e.stopPropagation()
-                          nav(`/drive/${f.parentId}`)
-                        }}
-                      >
-                        {f.parentName ?? "My Drive"}
-                      </TableCell>
-                      <TableCell className="p-0 py-2">{formatDate(f.updatedAt)}</TableCell>
-                      <TableCell className="p-0 py-2 pr-3">—</TableCell>
-                    </TableRow>
-                  ))}
-                  {files.map((f) => (
-                    <TableRow
-                      key={f.id}
-                      tabIndex={0}
-                      className="focus-visible:bg-accent/40 cursor-pointer outline-none last:border-b-0"
-                      onClick={() => setPreview(f)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") setPreview(f)
-                      }}
-                      onContextMenu={(e) => openMenu(e, "file", f)}
-                    >
-                      <TableCell className="p-0 py-2 pl-3">
-                        <div className="flex items-center gap-2">
-                          {iconForRow(f)}
-                          <HoverName as="span" name={f.name} className="min-w-0 truncate" />
-                          {f.isStarred && (
-                            <StarIcon size={14} weight="fill" className="text-yellow-500" />
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell
-                        className="text-muted-foreground p-0 py-2 hover:underline"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          nav(`/drive/${f.folderId}`)
-                        }}
-                      >
-                        {f.folderName ?? "—"}
-                      </TableCell>
-                      <TableCell className="p-0 py-2">{formatDate(f.updatedAt)}</TableCell>
-                      <TableCell className="p-0 py-2 pr-3">{formatBytes(f.size)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-          {result?.truncated && !isEmpty && (
-            <div className="text-muted-foreground mt-4 text-center text-xs">
-              Showing the first matches only — narrow your search to see more precise results.
-            </div>
-          )}
-        </div>
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+            {result?.truncated && !isEmpty && (
+              <div className="text-muted-foreground mt-4 text-center text-xs">
+                Showing the first matches only — narrow your search to see more precise results.
+              </div>
+            )}
+          </div>
+        </ScrollArea>
 
         {itemMenu}
         <FilePreview file={preview} onClose={() => setPreview(null)} items={files} onNavigate={setPreview} />

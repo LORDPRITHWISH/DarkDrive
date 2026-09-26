@@ -1,4 +1,5 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react"
+import { ScrollArea } from "@workspace/ui/components/scroll-area"
 import type { CSSProperties } from "react"
 import { GlobalWorkerOptions, getDocument } from "pdfjs-dist"
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist"
@@ -626,14 +627,19 @@ export function PdfViewer({
         </div>
       )}
 
-      <div
-        ref={scrollRef}
-        className="min-h-0 flex-1 overflow-auto scroll-smooth"
-        style={{
-          paddingTop: focusMode ? 28 : 92,
-          paddingBottom: layout === "fill" ? 28 : 36,
-          paddingLeft: layout === "fill" ? 20 : 24,
-          paddingRight: layout === "fill" ? 20 : 24,
+      <ScrollArea
+        className="min-h-0 flex-1"
+        // Padding stays on the viewport: the ResizeObserver above reads its
+        // contentRect width to size pages, and it's the IntersectionObserver root.
+        viewportProps={{
+          ref: scrollRef,
+          className: "scroll-smooth",
+          style: {
+            paddingTop: focusMode ? 28 : 92,
+            paddingBottom: layout === "fill" ? 28 : 36,
+            paddingLeft: layout === "fill" ? 20 : 24,
+            paddingRight: layout === "fill" ? 20 : 24,
+          },
         }}
       >
         <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-7">
@@ -678,7 +684,7 @@ export function PdfViewer({
             </div>
           ))}
         </div>
-      </div>
+      </ScrollArea>
 
       {sourceExpiresAt && !focusMode && (
         <div className="pointer-events-none absolute right-4 bottom-3 z-20">

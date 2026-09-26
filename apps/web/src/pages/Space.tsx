@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import { ScrollArea } from "@workspace/ui/components/scroll-area"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import {
   FilesIcon,
@@ -169,308 +170,310 @@ export function SpacePage() {
           </div>
         </header>
 
-        <div className="flex-1 overflow-auto px-4 py-5 md:px-6">
-          {loading && (
-            <div className="text-muted-foreground grid place-items-center py-20 text-sm">
-              Loading…
-            </div>
-          )}
-
-          {!loading && error && (
-            <div className="text-muted-foreground mx-auto mt-16 max-w-md rounded-xl border border-dashed p-10 text-center text-sm">
-              {error === "not_found"
-                ? "This space doesn't exist."
-                : error === "forbidden"
-                  ? "You don't have access to this space."
-                  : "Couldn't load this space."}
-              <div className="mt-4">
-                <Link to="/home" className="text-primary hover:underline">
-                  Back to Home
-                </Link>
+        <ScrollArea className="min-h-0 flex-1">
+          <div className="px-4 py-5 md:px-6">
+            {loading && (
+              <div className="text-muted-foreground grid place-items-center py-20 text-sm">
+                Loading…
               </div>
-            </div>
-          )}
+            )}
 
-          {!loading && !error && data && (
-            <div className="mx-auto max-w-5xl">
-              {/* Hero */}
-              <section
-                className="relative overflow-hidden rounded-2xl border p-5 md:p-6"
-                style={
-                  data.space.color
-                    ? {
-                        background: `linear-gradient(135deg, ${data.space.color}22, ${data.space.color}0a 45%, transparent)`,
-                      }
-                    : undefined
-                }
-              >
-                <div className="flex flex-col gap-4 md:flex-row md:items-center">
-                  <SpaceLogo
-                    space={data.space}
-                    size={72}
-                    className="ring-background shrink-0 shadow-lg ring-2"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h1
-                        className="truncate text-2xl font-bold tracking-tight"
-                        title={data.space.name}
-                      >
-                        {data.space.name}
-                      </h1>
-                      {data.space.isPublic && (
-                        <span className="bg-primary/15 text-primary inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">
-                          <GlobeIcon size={10} weight="fill" />
-                          Public
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-                      {owner && (
-                        <span className="inline-flex items-center gap-1">
-                          <ShieldCheckIcon size={12} weight="fill" />
-                          {isOwner ? "Owned by you" : `Owned by ${owner.name}`}
-                        </span>
-                      )}
-                      <span className="opacity-40">·</span>
-                      <span>Created {formatDate(data.space.createdAt)}</span>
-                      <span className="opacity-40">·</span>
-                      <span className="inline-flex items-center gap-1">
-                        <ClockCounterClockwiseIcon size={12} />
-                        Active {relativeTime(data.stats.lastActivityAt)}
-                      </span>
-                    </div>
-                    <MemberStack members={data.space.members} ownerId={data.space.ownerId} />
-                  </div>
-
-                  <div className="flex shrink-0 flex-wrap items-center gap-2">
-                    {!isOwner && !isMember && data.space.isPublic && (
-                      <Button
-                        size="sm"
-                        className="rounded-lg"
-                        disabled={busy}
-                        onClick={() => void handleJoin()}
-                      >
-                        <DoorOpenIcon size={15} weight="bold" />
-                        {busy ? "Joining…" : "Join"}
-                      </Button>
-                    )}
-                    <Link to={`/drive/${data.space.rootFolderId}`}>
-                      <Button size="sm" className="rounded-lg">
-                        <FolderOpenIcon size={15} weight="bold" />
-                        Browse files
-                      </Button>
-                    </Link>
-                    {canUpload && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="rounded-lg"
-                        onClick={() => setLinkFilesOpen(true)}
-                        title="Link files from your drive into this space"
-                      >
-                        <LinkSimpleIcon size={15} weight="bold" />
-                        Link files
-                      </Button>
-                    )}
-                    {space && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="rounded-lg"
-                        onClick={() => setManageOpen(true)}
-                      >
-                        <GearSixIcon size={15} />
-                        Members
-                      </Button>
-                    )}
-                    {isJoinedNonOwner && myMembership?.role === "VIEWER" && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="rounded-lg"
-                        disabled={busy || !!myMembership.editorRequestedAt}
-                        onClick={() => void handleRequestEditor()}
-                        title="Ask the owner for upload access"
-                      >
-                        {myMembership.editorRequestedAt ? (
-                          <>
-                            <ClockIcon size={15} />
-                            Request pending
-                          </>
-                        ) : (
-                          <>
-                            <UploadSimpleIcon size={15} weight="bold" />
-                            Request upload access
-                          </>
-                        )}
-                      </Button>
-                    )}
-                    {isMember && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="rounded-lg"
-                        disabled={busy}
-                        onClick={() => void handleTogglePin()}
-                        title={data.space.pinned ? "Unpin from sidebar" : "Pin to sidebar"}
-                      >
-                        {data.space.pinned ? (
-                          <PushPinIcon size={15} weight="fill" />
-                        ) : (
-                          <PushPinSlashIcon size={15} />
-                        )}
-                        {data.space.pinned ? "Pinned" : "Pin"}
-                      </Button>
-                    )}
-                    {isJoinedNonOwner && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="rounded-lg"
-                        disabled={busy}
-                        onClick={() => void handleLeave()}
-                        title="Leave space"
-                      >
-                        <SignOutIcon size={15} />
-                        Leave
-                      </Button>
-                    )}
-                    {canManage && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="rounded-lg"
-                        onClick={() => setEditOpen(true)}
-                        title="Edit name, color, and logo"
-                      >
-                        <PencilSimpleIcon size={15} />
-                        Edit
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </section>
-
-              {/* Stats */}
-              <section className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-                <StatTile
-                  icon={<FilesIcon size={18} weight="fill" />}
-                  label="Files"
-                  value={data.stats.fileCount.toLocaleString()}
-                />
-                <StatTile
-                  icon={<FolderIcon size={18} weight="fill" />}
-                  label="Folders"
-                  value={data.stats.folderCount.toLocaleString()}
-                />
-                <StatTile
-                  icon={<HardDrivesIcon size={18} weight="fill" />}
-                  label="Storage"
-                  value={formatBytes(data.stats.totalBytes)}
-                />
-                <StatTile
-                  icon={<UsersThreeIcon size={18} weight="fill" />}
-                  label={data.stats.memberCount === 1 ? "Member" : "Members"}
-                  value={data.stats.memberCount.toLocaleString()}
-                />
-              </section>
-
-              {/* Recent files */}
-              <section className="mt-8">
-                <div className="mb-3 flex items-center justify-between">
-                  <div className="text-muted-foreground text-xs font-medium uppercase tracking-wider">
-                    Recently added
-                  </div>
-                  <Link
-                    to={`/drive/${data.space.rootFolderId}`}
-                    className="text-primary text-xs hover:underline"
-                  >
-                    Open space
+            {!loading && error && (
+              <div className="text-muted-foreground mx-auto mt-16 max-w-md rounded-xl border border-dashed p-10 text-center text-sm">
+                {error === "not_found"
+                  ? "This space doesn't exist."
+                  : error === "forbidden"
+                    ? "You don't have access to this space."
+                    : "Couldn't load this space."}
+                <div className="mt-4">
+                  <Link to="/home" className="text-primary hover:underline">
+                    Back to Home
                   </Link>
                 </div>
+              </div>
+            )}
 
-                {data.recentFiles.length === 0 ? (
-                  <div className="text-muted-foreground rounded-xl border border-dashed p-10 text-center text-sm">
-                    Nothing here yet.{" "}
-                    <Link
-                      to={`/drive/${data.space.rootFolderId}`}
-                      className="text-primary hover:underline"
-                    >
-                      Open the space
-                    </Link>{" "}
-                    to add files.
-                  </div>
-                ) : (
-                  <div
-                    ref={recentFilesRef}
-                    className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-3"
-                  >
-                    {data.recentFiles.map((f) => (
-                      <RecentFileCard
-                        key={f.id}
-                        file={f}
-                        me={me}
-                        members={data.space.members}
-                        spaceId={data.space.id}
-                        onPreview={() => setPreview(f)}
-                        onAddShortcut={() => setShortcutFile(f)}
-                        onChanged={() => void load()}
-                      />
-                    ))}
-                  </div>
-                )}
-              </section>
-
-              {/* Members */}
-              <section className="mt-8">
-                <div className="text-muted-foreground mb-3 text-xs font-medium uppercase tracking-wider">
-                  Members
-                </div>
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-2">
-                  {data.space.members.map((m) => {
-                    const isSpaceOwner = m.userId === data.space.ownerId
-                    return (
-                      <div
-                        key={m.userId}
-                        className="bg-card flex items-center gap-3 rounded-lg border px-3 py-2"
-                      >
-                        {m.avatarUrl ? (
-                          <img
-                            src={m.avatarUrl}
-                            alt=""
-                            className="ring-background h-9 w-9 rounded-full ring-2"
-                          />
-                        ) : (
-                          <div className="bg-muted text-muted-foreground grid h-9 w-9 place-items-center rounded-full text-sm font-semibold">
-                            {m.name?.[0]?.toUpperCase() ?? "?"}
-                          </div>
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-medium" title={m.name}>
-                            {m.name}
-                          </div>
-                          <div className="text-muted-foreground truncate text-xs">
-                            {m.email}
-                          </div>
-                        </div>
-                        <span
-                          className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
-                            isSpaceOwner
-                              ? "bg-primary/15 text-primary"
-                              : "bg-muted text-muted-foreground"
-                          }`}
+            {!loading && !error && data && (
+              <div className="mx-auto max-w-5xl">
+                {/* Hero */}
+                <section
+                  className="relative overflow-hidden rounded-2xl border p-5 md:p-6"
+                  style={
+                    data.space.color
+                      ? {
+                          background: `linear-gradient(135deg, ${data.space.color}22, ${data.space.color}0a 45%, transparent)`,
+                        }
+                      : undefined
+                  }
+                >
+                  <div className="flex flex-col gap-4 md:flex-row md:items-center">
+                    <SpaceLogo
+                      space={data.space}
+                      size={72}
+                      className="ring-background shrink-0 shadow-lg ring-2"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h1
+                          className="truncate text-2xl font-bold tracking-tight"
+                          title={data.space.name}
                         >
-                          {isSpaceOwner ? "Owner" : m.role.toLowerCase()}
+                          {data.space.name}
+                        </h1>
+                        {data.space.isPublic && (
+                          <span className="bg-primary/15 text-primary inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">
+                            <GlobeIcon size={10} weight="fill" />
+                            Public
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                        {owner && (
+                          <span className="inline-flex items-center gap-1">
+                            <ShieldCheckIcon size={12} weight="fill" />
+                            {isOwner ? "Owned by you" : `Owned by ${owner.name}`}
+                          </span>
+                        )}
+                        <span className="opacity-40">·</span>
+                        <span>Created {formatDate(data.space.createdAt)}</span>
+                        <span className="opacity-40">·</span>
+                        <span className="inline-flex items-center gap-1">
+                          <ClockCounterClockwiseIcon size={12} />
+                          Active {relativeTime(data.stats.lastActivityAt)}
                         </span>
                       </div>
-                    )
-                  })}
-                </div>
-              </section>
-            </div>
-          )}
-        </div>
+                      <MemberStack members={data.space.members} ownerId={data.space.ownerId} />
+                    </div>
+
+                    <div className="flex shrink-0 flex-wrap items-center gap-2">
+                      {!isOwner && !isMember && data.space.isPublic && (
+                        <Button
+                          size="sm"
+                          className="rounded-lg"
+                          disabled={busy}
+                          onClick={() => void handleJoin()}
+                        >
+                          <DoorOpenIcon size={15} weight="bold" />
+                          {busy ? "Joining…" : "Join"}
+                        </Button>
+                      )}
+                      <Link to={`/drive/${data.space.rootFolderId}`}>
+                        <Button size="sm" className="rounded-lg">
+                          <FolderOpenIcon size={15} weight="bold" />
+                          Browse files
+                        </Button>
+                      </Link>
+                      {canUpload && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="rounded-lg"
+                          onClick={() => setLinkFilesOpen(true)}
+                          title="Link files from your drive into this space"
+                        >
+                          <LinkSimpleIcon size={15} weight="bold" />
+                          Link files
+                        </Button>
+                      )}
+                      {space && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="rounded-lg"
+                          onClick={() => setManageOpen(true)}
+                        >
+                          <GearSixIcon size={15} />
+                          Members
+                        </Button>
+                      )}
+                      {isJoinedNonOwner && myMembership?.role === "VIEWER" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="rounded-lg"
+                          disabled={busy || !!myMembership.editorRequestedAt}
+                          onClick={() => void handleRequestEditor()}
+                          title="Ask the owner for upload access"
+                        >
+                          {myMembership.editorRequestedAt ? (
+                            <>
+                              <ClockIcon size={15} />
+                              Request pending
+                            </>
+                          ) : (
+                            <>
+                              <UploadSimpleIcon size={15} weight="bold" />
+                              Request upload access
+                            </>
+                          )}
+                        </Button>
+                      )}
+                      {isMember && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="rounded-lg"
+                          disabled={busy}
+                          onClick={() => void handleTogglePin()}
+                          title={data.space.pinned ? "Unpin from sidebar" : "Pin to sidebar"}
+                        >
+                          {data.space.pinned ? (
+                            <PushPinIcon size={15} weight="fill" />
+                          ) : (
+                            <PushPinSlashIcon size={15} />
+                          )}
+                          {data.space.pinned ? "Pinned" : "Pin"}
+                        </Button>
+                      )}
+                      {isJoinedNonOwner && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="rounded-lg"
+                          disabled={busy}
+                          onClick={() => void handleLeave()}
+                          title="Leave space"
+                        >
+                          <SignOutIcon size={15} />
+                          Leave
+                        </Button>
+                      )}
+                      {canManage && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="rounded-lg"
+                          onClick={() => setEditOpen(true)}
+                          title="Edit name, color, and logo"
+                        >
+                          <PencilSimpleIcon size={15} />
+                          Edit
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </section>
+
+                {/* Stats */}
+                <section className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+                  <StatTile
+                    icon={<FilesIcon size={18} weight="fill" />}
+                    label="Files"
+                    value={data.stats.fileCount.toLocaleString()}
+                  />
+                  <StatTile
+                    icon={<FolderIcon size={18} weight="fill" />}
+                    label="Folders"
+                    value={data.stats.folderCount.toLocaleString()}
+                  />
+                  <StatTile
+                    icon={<HardDrivesIcon size={18} weight="fill" />}
+                    label="Storage"
+                    value={formatBytes(data.stats.totalBytes)}
+                  />
+                  <StatTile
+                    icon={<UsersThreeIcon size={18} weight="fill" />}
+                    label={data.stats.memberCount === 1 ? "Member" : "Members"}
+                    value={data.stats.memberCount.toLocaleString()}
+                  />
+                </section>
+
+                {/* Recent files */}
+                <section className="mt-8">
+                  <div className="mb-3 flex items-center justify-between">
+                    <div className="text-muted-foreground text-xs font-medium uppercase tracking-wider">
+                      Recently added
+                    </div>
+                    <Link
+                      to={`/drive/${data.space.rootFolderId}`}
+                      className="text-primary text-xs hover:underline"
+                    >
+                      Open space
+                    </Link>
+                  </div>
+
+                  {data.recentFiles.length === 0 ? (
+                    <div className="text-muted-foreground rounded-xl border border-dashed p-10 text-center text-sm">
+                      Nothing here yet.{" "}
+                      <Link
+                        to={`/drive/${data.space.rootFolderId}`}
+                        className="text-primary hover:underline"
+                      >
+                        Open the space
+                      </Link>{" "}
+                      to add files.
+                    </div>
+                  ) : (
+                    <div
+                      ref={recentFilesRef}
+                      className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-3"
+                    >
+                      {data.recentFiles.map((f) => (
+                        <RecentFileCard
+                          key={f.id}
+                          file={f}
+                          me={me}
+                          members={data.space.members}
+                          spaceId={data.space.id}
+                          onPreview={() => setPreview(f)}
+                          onAddShortcut={() => setShortcutFile(f)}
+                          onChanged={() => void load()}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </section>
+
+                {/* Members */}
+                <section className="mt-8">
+                  <div className="text-muted-foreground mb-3 text-xs font-medium uppercase tracking-wider">
+                    Members
+                  </div>
+                  <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-2">
+                    {data.space.members.map((m) => {
+                      const isSpaceOwner = m.userId === data.space.ownerId
+                      return (
+                        <div
+                          key={m.userId}
+                          className="bg-card flex items-center gap-3 rounded-lg border px-3 py-2"
+                        >
+                          {m.avatarUrl ? (
+                            <img
+                              src={m.avatarUrl}
+                              alt=""
+                              className="ring-background h-9 w-9 rounded-full ring-2"
+                            />
+                          ) : (
+                            <div className="bg-muted text-muted-foreground grid h-9 w-9 place-items-center rounded-full text-sm font-semibold">
+                              {m.name?.[0]?.toUpperCase() ?? "?"}
+                            </div>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-sm font-medium" title={m.name}>
+                              {m.name}
+                            </div>
+                            <div className="text-muted-foreground truncate text-xs">
+                              {m.email}
+                            </div>
+                          </div>
+                          <span
+                            className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                              isSpaceOwner
+                                ? "bg-primary/15 text-primary"
+                                : "bg-muted text-muted-foreground"
+                            }`}
+                          >
+                            {isSpaceOwner ? "Owner" : m.role.toLowerCase()}
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </section>
+              </div>
+            )}
+          </div>
+        </ScrollArea>
 
         <FilePreview
           file={preview}

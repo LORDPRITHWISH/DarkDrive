@@ -13,38 +13,41 @@ import {
 } from "@workspace/ui/components/card"
 import { Progress } from "@workspace/ui/components/progress"
 import { formatBytes } from "@/lib/format"
+import NumberTicker from "@/components/magicui/NumberTicker"
 import type { AdminStats } from "@/lib/types"
 
 export function StatCards({ stats }: { stats: AdminStats }) {
+  const { usedBytes, trashedBytes, recycleBinBytes, totalQuotaBytes } = stats.storage
+  // Everything still on disk: live + user bins + admin recycle bin (which is
+  // retained until an admin purges it, so it must be counted too).
+  const onDiskBytes = usedBytes + trashedBytes + recycleBinBytes
   const storagePct =
-    stats.storage.totalQuotaBytes > 0
-      ? Math.min(100, (stats.storage.usedBytes / stats.storage.totalQuotaBytes) * 100)
-      : 0
+    totalQuotaBytes > 0 ? Math.min(100, (onDiskBytes / totalQuotaBytes) * 100) : 0
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <StatCard
         icon={<UsersThreeIcon size={16} />}
         label="Total users"
-        value={stats.users.total.toLocaleString()}
+        value={<NumberTicker value={stats.users.total} />}
         hint={`${stats.users.active} active · ${stats.users.disabled} disabled · ${stats.users.admins} admins`}
       />
       <StatCard
         icon={<CloudIcon size={16} />}
         label="Storage used"
-        value={formatBytes(stats.storage.usedBytes)}
-        hint={`of ${formatBytes(stats.storage.totalQuotaBytes)} (${storagePct.toFixed(0)}%)`}
+        value={formatBytes(onDiskBytes)}
+        hint={`of ${formatBytes(totalQuotaBytes)} (${storagePct.toFixed(0)}%) · ${formatBytes(usedBytes)} live · ${formatBytes(trashedBytes)} trash · ${formatBytes(recycleBinBytes)} recycle bin`}
         progress={storagePct}
       />
       <StatCard
         icon={<FilesIcon size={16} />}
         label="Total files"
-        value={stats.files.total.toLocaleString()}
+        value={<NumberTicker value={stats.files.total} />}
         hint={`${stats.storage.trashedCount} in trash · ${formatBytes(stats.storage.trashedBytes)}`}
       />
       <StatCard
         icon={<LightningIcon size={16} />}
         label="Activity (7d)"
-        value={stats.activity.accesses7d.toLocaleString()}
+        value={<NumberTicker value={stats.activity.accesses7d} />}
         hint={`${stats.activity.accesses30d.toLocaleString()} in 30d · peak ${String(stats.activity.peakHour).padStart(2, "0")}:00`}
       />
     </div>
@@ -60,7 +63,7 @@ export function StatCard({
 }: {
   icon: React.ReactNode
   label: string
-  value: string
+  value: React.ReactNode
   hint: string
   progress?: number
 }) {

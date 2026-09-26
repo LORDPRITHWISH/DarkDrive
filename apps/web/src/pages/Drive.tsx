@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
+import BorderBeam from "@/components/magicui/BorderBeam"
+import { ScrollArea } from "@workspace/ui/components/scroll-area"
 import { ArrowCounterClockwiseIcon, MagnifyingGlassMinusIcon, MagnifyingGlassPlusIcon, UploadSimpleIcon } from "@phosphor-icons/react"
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { useDrive, zoomToGrid, ZOOM_MIN, ZOOM_MAX, ZOOM_DEFAULT } from "@/store/drive"
@@ -235,7 +237,8 @@ export function DrivePage() {
         // z-40, not z-50 — isModalOpen() keys off ".fixed.inset-0.z-50" to
         // detect real dialogs, and this overlay isn't one.
         <div className="bg-primary/10 border-primary pointer-events-none fixed inset-0 z-40 flex items-center justify-center border-4 border-dashed backdrop-blur-[1px]">
-          <div className="bg-background flex flex-col items-center gap-2 rounded-xl border px-8 py-6 text-center shadow-lg">
+          <div className="bg-background relative flex flex-col items-center gap-2 rounded-xl border px-8 py-6 text-center shadow-lg">
+            <BorderBeam duration={6} size={120} />
             <UploadSimpleIcon size={28} className="text-primary" />
             <div className="text-lg font-semibold">Drop to upload</div>
             <div className="text-muted-foreground text-sm">
@@ -314,9 +317,9 @@ export function DrivePage() {
           <div className="bg-border hidden h-6 w-px md:block" />
           <Toolbar />
         </div>
-        <div ref={gridWrapRef} className="flex-1 overflow-auto">
+        <ScrollArea ref={gridWrapRef} className="min-h-0 flex-1">
           <FileGrid />
-        </div>
+        </ScrollArea>
       </main>
       <ShortcutsDialog
         open={shortcutsOpen}

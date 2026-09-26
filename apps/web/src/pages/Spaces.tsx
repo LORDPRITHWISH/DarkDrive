@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
+import { ScrollArea } from "@workspace/ui/components/scroll-area"
 import { Link } from "react-router-dom"
 import {
   GlobeIcon,
@@ -66,64 +67,66 @@ export function SpacesPage() {
           </div>
         </header>
 
-        <div ref={contentRef} className="flex-1 overflow-auto px-4 py-5 md:px-6">
-          <div className="mx-auto max-w-5xl">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div>
-                <h1 className="text-2xl font-semibold tracking-tight">Your spaces</h1>
-                <p className="text-muted-foreground mt-1 text-sm">
-                  Everything you own or have joined.
-                </p>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <div className="relative">
-                  <MagnifyingGlassIcon
-                    size={14}
-                    className="text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2"
-                  />
-                  <Input
-                    className="w-44 rounded-xl pl-8 pr-3 text-sm"
-                    placeholder="Search…"
-                    value={q}
-                    onChange={(e) => setQ(e.target.value)}
-                  />
+        <ScrollArea ref={contentRef} className="min-h-0 flex-1">
+          <div className="px-4 py-5 md:px-6">
+            <div className="mx-auto max-w-5xl">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <h1 className="text-2xl font-semibold tracking-tight">Your spaces</h1>
+                  <p className="text-muted-foreground mt-1 text-sm">
+                    Everything you own or have joined.
+                  </p>
                 </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="rounded-xl"
-                  onClick={() => setJoining(true)}
-                >
-                  <GlobeIcon size={15} weight="fill" />
-                  Join
-                </Button>
-                <Button size="sm" className="rounded-xl" onClick={() => setCreating(true)}>
-                  <PlusIcon size={15} weight="bold" />
-                  Create
-                </Button>
+                <div className="flex shrink-0 items-center gap-2">
+                  <div className="relative">
+                    <MagnifyingGlassIcon
+                      size={14}
+                      className="text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2"
+                    />
+                    <Input
+                      className="w-44 rounded-xl pl-8 pr-3 text-sm"
+                      placeholder="Search…"
+                      value={q}
+                      onChange={(e) => setQ(e.target.value)}
+                    />
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="rounded-xl"
+                    onClick={() => setJoining(true)}
+                  >
+                    <GlobeIcon size={15} weight="fill" />
+                    Join
+                  </Button>
+                  <Button size="sm" className="rounded-xl" onClick={() => setCreating(true)}>
+                    <PlusIcon size={15} weight="bold" />
+                    Create
+                  </Button>
+                </div>
               </div>
-            </div>
 
-            {filtered.length === 0 ? (
-              <div className="text-muted-foreground mx-auto mt-10 max-w-md rounded-xl border border-dashed p-10 text-center text-sm">
-                {spaces.length === 0
-                  ? "You don't have any spaces yet. Create one, or join a public space to get started."
-                  : "No spaces match your search."}
-              </div>
-            ) : (
-              <div className="mt-6 grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-3">
-                {filtered.map((s) => (
-                  <SpaceCard
-                    key={s.id}
-                    space={s}
-                    isOwner={s.ownerId === me?.id}
-                    onTogglePin={(pinned) => void togglePinSpace(s.id, pinned)}
-                  />
-                ))}
-              </div>
-            )}
+              {filtered.length === 0 ? (
+                <div className="text-muted-foreground mx-auto mt-10 max-w-md rounded-xl border border-dashed p-10 text-center text-sm">
+                  {spaces.length === 0
+                    ? "You don't have any spaces yet. Create one, or join a public space to get started."
+                    : "No spaces match your search."}
+                </div>
+              ) : (
+                <div className="mt-6 grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-3">
+                  {filtered.map((s) => (
+                    <SpaceCard
+                      key={s.id}
+                      space={s}
+                      isOwner={s.ownerId === me?.id}
+                      onTogglePin={(pinned) => void togglePinSpace(s.id, pinned)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        </ScrollArea>
       </main>
 
       <SpaceEditorDialog mode={creating ? { kind: "create" } : null} onClose={() => setCreating(false)} />

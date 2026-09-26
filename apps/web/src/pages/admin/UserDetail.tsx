@@ -349,17 +349,19 @@ export function UserDetail({
         )}
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto p-4">
-          {err ? (
-            <div className="text-destructive py-10 text-center text-sm">{err}</div>
-          ) : !data ? (
-            <div className="text-muted-foreground py-10 text-center text-sm">
-              Loading…
-            </div>
-          ) : (
-            <Body data={data} loadingFileId={loadingId} onOpenFile={open} />
-          )}
-        </div>
+        <ScrollArea className="min-h-0 flex-1">
+          <div className="p-4">
+            {err ? (
+              <div className="text-destructive py-10 text-center text-sm">{err}</div>
+            ) : !data ? (
+              <div className="text-muted-foreground py-10 text-center text-sm">
+                Loading…
+              </div>
+            ) : (
+              <Body data={data} loadingFileId={loadingId} onOpenFile={open} />
+            )}
+          </div>
+        </ScrollArea>
         </SheetContent>
       </Sheet>
 
@@ -1010,7 +1012,8 @@ export function TimelineSection({
         onClose={() => setShowAll(false)}
         size="2xl"
         className="h-[70vh]"
-        bodyClassName="flex flex-col overflow-hidden"
+        bodyClassName="flex flex-col"
+        scrollBody={false}
         title="Lifecycle timeline"
       >
         <ScrollArea className="min-h-0 flex-1">
@@ -1096,7 +1099,7 @@ export function LoginSection({ data }: { data: UserDetailData }) {
       }>
         Login history
       </SectionTitle>
-      <div className="bg-card overflow-x-auto rounded-lg border">
+      <div className="bg-card overflow-hidden rounded-lg border">
         {l.recent.length === 0 ? (
           <div className="text-muted-foreground py-6 text-center text-xs">
             No logins recorded.

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
+import { ScrollArea } from "@workspace/ui/components/scroll-area"
 import { Link, useNavigate } from "react-router-dom"
 import { FolderIcon, StarIcon } from "@phosphor-icons/react"
 import { useAuth } from "@/store/auth"
@@ -98,179 +99,181 @@ export function HomePage() {
             <HeaderActions onReload={reload} />
           </div>
         </header>
-        <div ref={contentRef} className="flex-1 overflow-auto px-4 py-5 md:px-6">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">
-              {greeting()}
-              {firstName && `, ${firstName}`}
-            </h1>
-            <p className="text-muted-foreground mt-1 text-sm">
-              Welcome back to DarkDrive.
-            </p>
+        <ScrollArea ref={contentRef} className="min-h-0 flex-1">
+          <div className="px-4 py-5 md:px-6">
+            <div>
+              <h1 className="text-2xl font-semibold tracking-tight">
+                {greeting()}
+                {firstName && `, ${firstName}`}
+              </h1>
+              <p className="text-muted-foreground mt-1 text-sm">
+                Welcome back to DarkDrive.
+              </p>
 
-            {recentlyAdded.length > 0 && (
-              <section className="mt-8">
-                <div className="text-muted-foreground mb-3 text-xs font-medium uppercase tracking-wider">
-                  Recently added
-                </div>
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3">
-                  {recentlyAdded.map((f) => (
-                    <button
-                      key={f.id}
-                      onClick={() => openFile(f)}
-                      onContextMenu={(e) => openMenu(e, "file", f)}
-                      className="bg-card hover:border-primary/60 focus-visible:border-primary group relative overflow-hidden rounded-lg border text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary"
-                    >
-                      <span className="bg-primary text-primary-foreground absolute top-2 left-2 z-10 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider">
-                        New
-                      </span>
-                      <div className="bg-muted grid aspect-4/3 place-items-center overflow-hidden">
-                        <FileThumb file={f} iconSize={56} />
-                      </div>
-                      <div className="p-2">
-                        <div className="truncate text-sm font-medium" title={f.name}>
-                          {f.name}
-                        </div>
-                        <div className="text-muted-foreground flex items-center justify-between text-xs">
-                          <span>{formatBytes(f.size)}</span>
-                          <span>{formatDate(f.createdAt)}</span>
-                        </div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {folderSuggestions.length > 0 && (
-              <section className="mt-8">
-                <div className="text-muted-foreground mb-3 text-xs font-medium uppercase tracking-wider">
-                  Suggested folders
-                </div>
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3">
-                  {folderSuggestions.map((f) => (
-                    <button
-                      key={f.id}
-                      onClick={() => void openFolder(f.id)}
-                      onContextMenu={(e) => openMenu(e, "folder", f)}
-                      className="bg-card hover:border-primary/60 focus-visible:border-primary flex items-center gap-3 rounded-lg border px-3 py-3 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary"
-                    >
-                      <FolderIcon
-                        size={28}
-                        weight="fill"
-                        style={{ color: f.color || undefined }}
-                        className={f.color ? "" : "text-primary"}
-                      />
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-medium" title={f.name}>
-                          {f.name}
-                        </div>
-                        <div className="text-muted-foreground text-xs">
-                          {formatDate(f.updatedAt)}
-                        </div>
-                      </div>
-                      {f.isStarred && (
-                        <StarIcon size={14} weight="fill" className="text-yellow-500" />
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {suggestions.length > 0 && (
-              <section className="mt-8">
-                <div className="text-muted-foreground mb-3 text-xs font-medium uppercase tracking-wider">
-                  Suggested files
-                </div>
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3">
-                  {suggestions.map((f) => (
-                    <button
-                      key={f.id}
-                      onClick={() => setPreview(f)}
-                      onContextMenu={(e) => openMenu(e, "file", f)}
-                      className="bg-card hover:border-primary/60 focus-visible:border-primary overflow-hidden rounded-lg border text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary"
-                    >
-                      <div className="bg-muted grid aspect-4/3 place-items-center overflow-hidden">
-                        <FileThumb file={f} iconSize={56} />
-                      </div>
-                      <div className="p-2">
-                        <div className="truncate text-sm font-medium" title={f.name}>
-                          {f.name}
-                        </div>
-                        <div className="text-muted-foreground text-xs">
-                          {formatBytes(f.size)}
-                        </div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {recent.length > 0 && (
-              <section className="mt-8">
-                <div className="mb-3 flex items-center justify-between">
-                  <div className="text-muted-foreground text-xs font-medium uppercase tracking-wider">
-                    Frequently visited
+              {recentlyAdded.length > 0 && (
+                <section className="mt-8">
+                  <div className="text-muted-foreground mb-3 text-xs font-medium uppercase tracking-wider">
+                    Recently added
                   </div>
-                  <Link
-                    to="/recent"
-                    className="text-primary text-xs hover:underline"
-                  >
-                    View all
-                  </Link>
-                </div>
-                <div className="overflow-hidden rounded-lg border">
-                  <Table>
-                    <TableBody>
-                      {recent.map((f) => (
-                        <TableRow
-                          key={f.id}
-                          tabIndex={0}
-                          className="focus-visible:bg-accent/40 cursor-pointer outline-none last:border-b-0"
-                          onClick={() => setPreview(f)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") setPreview(f)
-                          }}
-                          onContextMenu={(e) => openMenu(e, "file", f)}
-                        >
-                          <TableCell className="p-0 py-2 pl-3">
-                            <div className="flex items-center gap-2">
-                              {iconFor(f.mimeType, 18, f.name)}
-                              <HoverName as="span" name={f.name} className="min-w-0 truncate" />
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-muted-foreground p-0 py-2 pr-3 text-right text-xs">
-                            {formatDate(f.accessedAt)}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </section>
-            )}
-
-            {folderSuggestions.length === 0 &&
-              suggestions.length === 0 &&
-              recent.length === 0 &&
-              recentlyAdded.length === 0 && (
-                <div className="text-muted-foreground mt-10 rounded-lg border border-dashed p-10 text-center text-sm">
-                  Your home is empty. Head to{" "}
-                  {user && (
-                    <Link
-                      to={`/drive/${user.rootFolderId}`}
-                      className="text-primary hover:underline"
-                    >
-                      My Drive
-                    </Link>
-                  )}{" "}
-                  to upload files and they'll start showing up here.
-                </div>
+                  <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3">
+                    {recentlyAdded.map((f) => (
+                      <button
+                        key={f.id}
+                        onClick={() => openFile(f)}
+                        onContextMenu={(e) => openMenu(e, "file", f)}
+                        className="bg-card hover:border-primary/60 focus-visible:border-primary group relative overflow-hidden rounded-lg border text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary"
+                      >
+                        <span className="bg-primary text-primary-foreground absolute top-2 left-2 z-10 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider">
+                          New
+                        </span>
+                        <div className="bg-muted grid aspect-4/3 place-items-center overflow-hidden">
+                          <FileThumb file={f} iconSize={56} />
+                        </div>
+                        <div className="p-2">
+                          <div className="truncate text-sm font-medium" title={f.name}>
+                            {f.name}
+                          </div>
+                          <div className="text-muted-foreground flex items-center justify-between text-xs">
+                            <span>{formatBytes(f.size)}</span>
+                            <span>{formatDate(f.createdAt)}</span>
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </section>
               )}
+
+              {folderSuggestions.length > 0 && (
+                <section className="mt-8">
+                  <div className="text-muted-foreground mb-3 text-xs font-medium uppercase tracking-wider">
+                    Suggested folders
+                  </div>
+                  <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3">
+                    {folderSuggestions.map((f) => (
+                      <button
+                        key={f.id}
+                        onClick={() => void openFolder(f.id)}
+                        onContextMenu={(e) => openMenu(e, "folder", f)}
+                        className="bg-card hover:border-primary/60 focus-visible:border-primary flex items-center gap-3 rounded-lg border px-3 py-3 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary"
+                      >
+                        <FolderIcon
+                          size={28}
+                          weight="fill"
+                          style={{ color: f.color || undefined }}
+                          className={f.color ? "" : "text-primary"}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-medium" title={f.name}>
+                            {f.name}
+                          </div>
+                          <div className="text-muted-foreground text-xs">
+                            {formatDate(f.updatedAt)}
+                          </div>
+                        </div>
+                        {f.isStarred && (
+                          <StarIcon size={14} weight="fill" className="text-yellow-500" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {suggestions.length > 0 && (
+                <section className="mt-8">
+                  <div className="text-muted-foreground mb-3 text-xs font-medium uppercase tracking-wider">
+                    Suggested files
+                  </div>
+                  <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3">
+                    {suggestions.map((f) => (
+                      <button
+                        key={f.id}
+                        onClick={() => setPreview(f)}
+                        onContextMenu={(e) => openMenu(e, "file", f)}
+                        className="bg-card hover:border-primary/60 focus-visible:border-primary overflow-hidden rounded-lg border text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary"
+                      >
+                        <div className="bg-muted grid aspect-4/3 place-items-center overflow-hidden">
+                          <FileThumb file={f} iconSize={56} />
+                        </div>
+                        <div className="p-2">
+                          <div className="truncate text-sm font-medium" title={f.name}>
+                            {f.name}
+                          </div>
+                          <div className="text-muted-foreground text-xs">
+                            {formatBytes(f.size)}
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {recent.length > 0 && (
+                <section className="mt-8">
+                  <div className="mb-3 flex items-center justify-between">
+                    <div className="text-muted-foreground text-xs font-medium uppercase tracking-wider">
+                      Frequently visited
+                    </div>
+                    <Link
+                      to="/recent"
+                      className="text-primary text-xs hover:underline"
+                    >
+                      View all
+                    </Link>
+                  </div>
+                  <div className="overflow-hidden rounded-lg border">
+                    <Table>
+                      <TableBody>
+                        {recent.map((f) => (
+                          <TableRow
+                            key={f.id}
+                            tabIndex={0}
+                            className="focus-visible:bg-accent/40 cursor-pointer outline-none last:border-b-0"
+                            onClick={() => setPreview(f)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") setPreview(f)
+                            }}
+                            onContextMenu={(e) => openMenu(e, "file", f)}
+                          >
+                            <TableCell className="p-0 py-2 pl-3">
+                              <div className="flex items-center gap-2">
+                                {iconFor(f.mimeType, 18, f.name)}
+                                <HoverName as="span" name={f.name} className="min-w-0 truncate" />
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-muted-foreground p-0 py-2 pr-3 text-right text-xs">
+                              {formatDate(f.accessedAt)}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </section>
+              )}
+
+              {folderSuggestions.length === 0 &&
+                suggestions.length === 0 &&
+                recent.length === 0 &&
+                recentlyAdded.length === 0 && (
+                  <div className="text-muted-foreground mt-10 rounded-lg border border-dashed p-10 text-center text-sm">
+                    Your home is empty. Head to{" "}
+                    {user && (
+                      <Link
+                        to={`/drive/${user.rootFolderId}`}
+                        className="text-primary hover:underline"
+                      >
+                        My Drive
+                      </Link>
+                    )}{" "}
+                    to upload files and they'll start showing up here.
+                  </div>
+                )}
+            </div>
           </div>
-        </div>
+        </ScrollArea>
         {itemMenu}
         <FilePreview
           file={preview}

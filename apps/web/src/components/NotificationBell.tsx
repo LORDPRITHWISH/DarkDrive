@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { ScrollArea } from "@workspace/ui/components/scroll-area"
 import { useNavigate } from "react-router-dom"
 import {
   BellIcon,
@@ -83,7 +84,7 @@ export function NotificationBell() {
               </button>
             )}
           </div>
-          <div className="max-h-96 overflow-y-auto">
+          <ScrollArea className="max-h-96">
             {items.length === 0 ? (
               <div className="text-muted-foreground px-3 py-8 text-center text-sm">
                 No notifications yet.
@@ -127,7 +128,7 @@ export function NotificationBell() {
                 </div>
               ))
             )}
-          </div>
+          </ScrollArea>
       </PopoverContent>
     </Popover>
   )

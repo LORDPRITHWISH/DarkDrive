@@ -1,6 +1,8 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <!-- Theme before first paint: dark unless the user picked light. -->
+    <script>try{document.documentElement.classList.add(localStorage.getItem("theme")==="light"?"light":"dark")}catch{document.documentElement.classList.add("dark")}</script>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/DarkDrive.png" />
     <!-- viewport-fit=cover is what makes env(safe-area-inset-*) non-zero, so

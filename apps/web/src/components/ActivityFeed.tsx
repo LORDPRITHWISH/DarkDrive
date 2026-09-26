@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import NumberTicker from "@/components/magicui/NumberTicker"
 import type { ReactNode } from "react"
 import {
   ArrowsOutCardinalIcon,
@@ -159,7 +160,7 @@ function StatCard({ icon, label, value }: { icon: ReactNode; label: string; valu
   return (
     <div className="bg-muted/50 flex flex-col items-center gap-1 rounded-xl border py-3 text-center">
       <div className="text-muted-foreground">{icon}</div>
-      <div className="text-xl font-bold tabular-nums">{value}</div>
+      <NumberTicker value={value} className="text-xl font-bold" />
       <div className="text-muted-foreground text-[11px] font-medium uppercase tracking-wider">{label}</div>
     </div>
   )

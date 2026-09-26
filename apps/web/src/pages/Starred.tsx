@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
+import { ScrollArea } from "@workspace/ui/components/scroll-area"
 import {
   FileIcon,
   FileTextIcon,
@@ -122,135 +123,139 @@ export function StarredPage() {
           </div>
         </header>
 
-        <div className="flex items-center gap-2 overflow-x-auto border-b px-4 py-3 md:px-6">
-          <FilterChip active={filter === "all"} onClick={() => setFilter("all")}>
-            All
-          </FilterChip>
-          <FilterChip active={filter === "image"} onClick={() => setFilter("image")}>
-            <ImageIcon size={14} /> Images
-          </FilterChip>
-          <FilterChip active={filter === "video"} onClick={() => setFilter("video")}>
-            <FileVideoIcon size={14} /> Videos
-          </FilterChip>
-          <FilterChip active={filter === "doc"} onClick={() => setFilter("doc")}>
-            <FileTextIcon size={14} /> Docs
-          </FilterChip>
-          <FilterChip active={filter === "other"} onClick={() => setFilter("other")}>
-            <FileIcon size={14} /> Other
-          </FilterChip>
-        </div>
+        <ScrollArea className="border-b">
+          <div className="flex items-center gap-2 px-4 py-3 md:px-6">
+            <FilterChip active={filter === "all"} onClick={() => setFilter("all")}>
+              All
+            </FilterChip>
+            <FilterChip active={filter === "image"} onClick={() => setFilter("image")}>
+              <ImageIcon size={14} /> Images
+            </FilterChip>
+            <FilterChip active={filter === "video"} onClick={() => setFilter("video")}>
+              <FileVideoIcon size={14} /> Videos
+            </FilterChip>
+            <FilterChip active={filter === "doc"} onClick={() => setFilter("doc")}>
+              <FileTextIcon size={14} /> Docs
+            </FilterChip>
+            <FilterChip active={filter === "other"} onClick={() => setFilter("other")}>
+              <FileIcon size={14} /> Other
+            </FilterChip>
+          </div>
+        </ScrollArea>
 
-        <div ref={contentRef} className="flex-1 overflow-auto px-4 py-5 md:px-6">
-          {loading ? (
-            <div className="text-muted-foreground py-20 text-center text-sm">
-              Loading…
-            </div>
-          ) : isEmpty ? (
-            <div className="text-muted-foreground py-20 text-center text-sm">
-              Nothing starred yet. Hover over a file or folder in Drive and
-              click the star to pin it here.
-            </div>
-          ) : view === "grid" ? (
-            <div className="flex flex-col gap-8">
-              {showFolders && folders.length > 0 && (
-                <section>
-                  <h2 className="text-muted-foreground mb-3 text-sm font-medium">
-                    Folders
-                  </h2>
-                  <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-3">
-                    {folders.map((f) => (
-                      <FolderTile
-                        key={f.id}
-                        folder={f}
-                        onOpen={() => nav(`/drive/${f.id}`)}
-                        onMenu={(e) => openMenu(e, "folder", f)}
-                      />
-                    ))}
-                  </div>
-                </section>
-              )}
-              {filteredFiles.length > 0 && (
-                <section>
-                  <h2 className="text-muted-foreground mb-3 text-sm font-medium">
-                    Files
-                  </h2>
-                  <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
+        <ScrollArea ref={contentRef} className="min-h-0 flex-1">
+          <div className="px-4 py-5 md:px-6">
+            {loading ? (
+              <div className="text-muted-foreground py-20 text-center text-sm">
+                Loading…
+              </div>
+            ) : isEmpty ? (
+              <div className="text-muted-foreground py-20 text-center text-sm">
+                Nothing starred yet. Hover over a file or folder in Drive and
+                click the star to pin it here.
+              </div>
+            ) : view === "grid" ? (
+              <div className="flex flex-col gap-8">
+                {showFolders && folders.length > 0 && (
+                  <section>
+                    <h2 className="text-muted-foreground mb-3 text-sm font-medium">
+                      Folders
+                    </h2>
+                    <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-3">
+                      {folders.map((f) => (
+                        <FolderTile
+                          key={f.id}
+                          folder={f}
+                          onOpen={() => nav(`/drive/${f.id}`)}
+                          onMenu={(e) => openMenu(e, "folder", f)}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                )}
+                {filteredFiles.length > 0 && (
+                  <section>
+                    <h2 className="text-muted-foreground mb-3 text-sm font-medium">
+                      Files
+                    </h2>
+                    <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
+                      {filteredFiles.map((f) => (
+                        <FileTile
+                          key={f.id}
+                          file={f}
+                          onOpen={() => setPreview(f)}
+                          onMenu={(e) => openMenu(e, "file", f)}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                )}
+              </div>
+            ) : (
+              <div className="overflow-hidden rounded-lg border">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="p-0 py-2 pl-3">Name</TableHead>
+                      <TableHead className="p-0 py-2">Modified</TableHead>
+                      <TableHead className="p-0 py-2 pr-3">Size</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {showFolders &&
+                      folders.map((f) => (
+                        <TableRow
+                          key={f.id}
+                          tabIndex={0}
+                          className="focus-visible:bg-accent/40 cursor-pointer outline-none last:border-b-0"
+                          onClick={() => nav(`/drive/${f.id}`)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") nav(`/drive/${f.id}`)
+                          }}
+                          onContextMenu={(e) => openMenu(e, "folder", f)}
+                        >
+                          <TableCell className="p-0 py-2 pl-3">
+                            <div className="flex items-center gap-2">
+                              <FolderIcon
+                                size={18}
+                                weight="fill"
+                                style={{ color: f.color || undefined }}
+                                className={f.color ? "" : "text-primary"}
+                              />
+                              <HoverName as="span" name={f.name} className="min-w-0 truncate" />
+                            </div>
+                          </TableCell>
+                          <TableCell className="p-0 py-2">{formatDate(f.updatedAt)}</TableCell>
+                          <TableCell className="p-0 py-2 pr-3">—</TableCell>
+                        </TableRow>
+                      ))}
                     {filteredFiles.map((f) => (
-                      <FileTile
-                        key={f.id}
-                        file={f}
-                        onOpen={() => setPreview(f)}
-                        onMenu={(e) => openMenu(e, "file", f)}
-                      />
-                    ))}
-                  </div>
-                </section>
-              )}
-            </div>
-          ) : (
-            <div className="overflow-hidden rounded-lg border">
-              <Table>
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead className="p-0 py-2 pl-3">Name</TableHead>
-                    <TableHead className="p-0 py-2">Modified</TableHead>
-                    <TableHead className="p-0 py-2 pr-3">Size</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {showFolders &&
-                    folders.map((f) => (
                       <TableRow
                         key={f.id}
                         tabIndex={0}
                         className="focus-visible:bg-accent/40 cursor-pointer outline-none last:border-b-0"
-                        onClick={() => nav(`/drive/${f.id}`)}
+                        onClick={() => setPreview(f)}
                         onKeyDown={(e) => {
-                          if (e.key === "Enter") nav(`/drive/${f.id}`)
+                          if (e.key === "Enter") setPreview(f)
                         }}
-                        onContextMenu={(e) => openMenu(e, "folder", f)}
+                        onContextMenu={(e) => openMenu(e, "file", f)}
                       >
                         <TableCell className="p-0 py-2 pl-3">
                           <div className="flex items-center gap-2">
-                            <FolderIcon
-                              size={18}
-                              weight="fill"
-                              style={{ color: f.color || undefined }}
-                              className={f.color ? "" : "text-primary"}
-                            />
+                            {iconFor(f.mimeType, 18, f.name)}
                             <HoverName as="span" name={f.name} className="min-w-0 truncate" />
                           </div>
                         </TableCell>
                         <TableCell className="p-0 py-2">{formatDate(f.updatedAt)}</TableCell>
-                        <TableCell className="p-0 py-2 pr-3">—</TableCell>
+                        <TableCell className="p-0 py-2 pr-3">{formatBytes(f.size)}</TableCell>
                       </TableRow>
                     ))}
-                  {filteredFiles.map((f) => (
-                    <TableRow
-                      key={f.id}
-                      tabIndex={0}
-                      className="focus-visible:bg-accent/40 cursor-pointer outline-none last:border-b-0"
-                      onClick={() => setPreview(f)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") setPreview(f)
-                      }}
-                      onContextMenu={(e) => openMenu(e, "file", f)}
-                    >
-                      <TableCell className="p-0 py-2 pl-3">
-                        <div className="flex items-center gap-2">
-                          {iconFor(f.mimeType, 18, f.name)}
-                          <HoverName as="span" name={f.name} className="min-w-0 truncate" />
-                        </div>
-                      </TableCell>
-                      <TableCell className="p-0 py-2">{formatDate(f.updatedAt)}</TableCell>
-                      <TableCell className="p-0 py-2 pr-3">{formatBytes(f.size)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </div>
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
+        </ScrollArea>
         {itemMenu}
         <FilePreview
           file={preview}

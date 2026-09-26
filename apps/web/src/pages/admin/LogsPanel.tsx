@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import { ScrollArea } from "@workspace/ui/components/scroll-area"
 import { ArrowClockwiseIcon, TerminalWindowIcon } from "@phosphor-icons/react"
 import {
   Card,
@@ -58,14 +59,17 @@ export function LogList({ entries }: { entries: LogEntry[] }) {
   }, [entries])
 
   return (
-    <div
-      ref={ref}
-      onScroll={(e) => {
-        const el = e.currentTarget
-        pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40
+    <ScrollArea
+      viewportProps={{
+        ref,
+        onScroll: (e) => {
+          const el = e.currentTarget
+          pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40
+        },
       }}
-      className="bg-muted/40 h-72 overflow-auto rounded-md border p-2 font-mono text-[11px] leading-relaxed"
+      className="bg-muted/40 h-72 rounded-md border font-mono text-[11px] leading-relaxed"
     >
+      <div className="p-2">
       {entries.length === 0 ? (
         <div className="text-muted-foreground p-2">No log lines yet.</div>
       ) : (
@@ -79,6 +83,7 @@ export function LogList({ entries }: { entries: LogEntry[] }) {
         ))
       )}
     </div>
+    </ScrollArea>
   )
 }
 

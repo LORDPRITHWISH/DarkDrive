@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react"
+import { ScrollArea } from "@workspace/ui/components/scroll-area"
 import {
   ArrowCounterClockwiseIcon,
   FolderIcon,
@@ -171,13 +172,13 @@ export function BinPage() {
           </div>
         </header>
 
-        <div ref={contentRef} className="flex-1 overflow-auto">
+        <ScrollArea ref={contentRef} className="min-h-0 flex-1">
           {loading ? (
-            <div className="text-muted-foreground grid h-full place-items-center text-sm">
+            <div className="text-muted-foreground grid min-h-[50vh] place-items-center text-sm">
               Loading…
             </div>
           ) : isEmpty ? (
-            <div className="text-muted-foreground grid h-full place-items-center text-sm">
+            <div className="text-muted-foreground grid min-h-[50vh] place-items-center text-sm">
               The bin is empty. Items you trash will show up here.
             </div>
           ) : view === "grid" ? (
@@ -277,7 +278,7 @@ export function BinPage() {
               </TableBody>
             </Table>
           )}
-        </div>
+        </ScrollArea>
 
         {menu && (
           <ul

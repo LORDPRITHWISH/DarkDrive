@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
+import { ScrollArea } from "@workspace/ui/components/scroll-area"
 import {
   CloudIcon,
   CopyIcon,
@@ -96,15 +97,17 @@ export function ProfilePage() {
           </div>
         </header>
 
-        <div className="flex-1 overflow-auto p-4">
-          {loading ? (
-            <div className="text-muted-foreground text-sm">Loading…</div>
-          ) : err ? (
-            <div className="text-destructive text-sm">{err}</div>
-          ) : data ? (
-            <Overview data={data} />
-          ) : null}
-        </div>
+        <ScrollArea className="min-h-0 flex-1">
+          <div className="p-4">
+            {loading ? (
+              <div className="text-muted-foreground text-sm">Loading…</div>
+            ) : err ? (
+              <div className="text-destructive text-sm">{err}</div>
+            ) : data ? (
+              <Overview data={data} />
+            ) : null}
+          </div>
+        </ScrollArea>
       </main>
     </div>
   )

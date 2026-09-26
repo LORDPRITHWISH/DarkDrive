@@ -1,13 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { CaretDownIcon, CaretRightIcon, FolderIcon } from "@phosphor-icons/react"
 import { Button } from "@workspace/ui/components/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@workspace/ui/components/dialog"
+import { Modal } from "@/components/Modal"
 import { apiGet } from "@/lib/api"
 
 type FolderNode = { id: string; name: string; parentId: string | null }
@@ -98,40 +92,19 @@ export function MoveDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="flex h-[520px] w-full max-w-md flex-col gap-0 overflow-hidden p-0">
-        <DialogHeader className="border-b p-4">
-          <DialogTitle>Move</DialogTitle>
-          <div className="text-muted-foreground truncate text-xs" title={displayName}>
-            {displayName}
-          </div>
-        </DialogHeader>
-
-        <div className="flex-1 overflow-auto p-2 text-sm">
-          {err && <div className="text-destructive mb-2 px-2">{err}</div>}
-          {!tree ? (
-            <div className="text-muted-foreground p-4 text-sm">Loading…</div>
-          ) : (
-            <FolderTree
-              rootId={tree.rootId}
-              folders={tree.folders}
-              selected={selected}
-              expanded={expanded}
-              forbidden={forbidden}
-              currentParentId={currentParentId}
-              onSelect={setSelected}
-              onToggle={(id) =>
-                setExpanded((prev) => {
-                  const next = new Set(prev)
-                  next.has(id) ? next.delete(id) : next.add(id)
-                  return next
-                })
-              }
-            />
-          )}
-        </div>
-
-        <DialogFooter className="border-t p-3">
+    <Modal
+      open={open}
+      onClose={onClose}
+      className="h-[520px]"
+      bodyClassName="p-2 text-sm"
+      title="Move"
+      description={
+        <span className="block truncate" title={displayName}>
+          {displayName}
+        </span>
+      }
+      footer={
+        <>
           <Button variant="ghost" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
@@ -141,9 +114,31 @@ export function MoveDialog({
           >
             {busy ? "Moving…" : "Move"}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </>
+      }
+    >
+      {err && <div className="text-destructive mb-2 px-2">{err}</div>}
+      {!tree ? (
+        <div className="text-muted-foreground p-4 text-sm">Loading…</div>
+      ) : (
+        <FolderTree
+          rootId={tree.rootId}
+          folders={tree.folders}
+          selected={selected}
+          expanded={expanded}
+          forbidden={forbidden}
+          currentParentId={currentParentId}
+          onSelect={setSelected}
+          onToggle={(id) =>
+            setExpanded((prev) => {
+              const next = new Set(prev)
+              next.has(id) ? next.delete(id) : next.add(id)
+              return next
+            })
+          }
+        />
+      )}
+    </Modal>
   )
 }
 

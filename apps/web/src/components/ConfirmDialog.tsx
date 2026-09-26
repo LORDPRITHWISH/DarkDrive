@@ -1,12 +1,5 @@
 import { Button } from "@workspace/ui/components/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@workspace/ui/components/dialog"
+import { Modal } from "@/components/Modal"
 import { useConfirm } from "@/store/confirm"
 
 export function ConfirmDialog() {
@@ -14,15 +7,15 @@ export function ConfirmDialog() {
   const close = useConfirm((s) => s.close)
 
   return (
-    <Dialog open={!!pending} onOpenChange={(o) => !o && close(false)}>
-      <DialogContent className="max-w-sm" showCloseButton={false}>
-        <DialogHeader>
-          <DialogTitle>{pending?.title}</DialogTitle>
-          {pending?.description && (
-            <DialogDescription>{pending.description}</DialogDescription>
-          )}
-        </DialogHeader>
-        <DialogFooter>
+    <Modal
+      open={!!pending}
+      onClose={() => close(false)}
+      size="sm"
+      showCloseButton={false}
+      title={pending?.title}
+      description={pending?.description}
+      footer={
+        <>
           <Button variant="ghost" size="sm" onClick={() => close(false)}>
             {pending?.cancelLabel ?? "Cancel"}
           </Button>
@@ -34,8 +27,8 @@ export function ConfirmDialog() {
           >
             {pending?.confirmLabel ?? "Confirm"}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </>
+      }
+    />
   )
 }

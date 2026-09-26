@@ -2,13 +2,7 @@ import { useEffect, useRef, useState } from "react"
 import { FolderIcon, TrashIcon, UploadIcon } from "@phosphor-icons/react"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@workspace/ui/components/dialog"
+import { Modal } from "@/components/Modal"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@workspace/ui/components/tabs"
 import { apiJson, apiUpload } from "@/lib/api"
 import { apiUrl } from "@/lib/config"
@@ -117,147 +111,148 @@ export function FolderPropertiesDialog({
         : null
 
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="flex max-h-[85vh] w-full max-w-sm flex-col gap-0 overflow-hidden p-0">
-        <DialogHeader className="border-b px-5 py-4">
-          <DialogTitle>Folder properties</DialogTitle>
-        </DialogHeader>
-
-        <Tabs
-          value={tab}
-          onValueChange={(v) => setTab(v as Tab)}
-          className="min-h-0 flex-1 gap-0"
-        >
-          <TabsList className="px-5">
-            <TabsTrigger value="info" className="capitalize">
-              Info
-            </TabsTrigger>
-            <TabsTrigger value="activity" className="capitalize">
-              Activity
-            </TabsTrigger>
-          </TabsList>
-
-          <div className="flex-1 overflow-y-auto">
-            <TabsContent value="info" className="p-5">
-              <div className="space-y-5">
-                {/* Thumbnail */}
-                <div className="flex items-start gap-4">
-                  {/* Preview */}
-                  <div className="relative grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-xl border bg-muted">
-                    {thumbSrc ? (
-                      <>
-                        <img src={thumbSrc} alt="" className="h-full w-full object-cover" />
-                        <div className="absolute right-1.5 bottom-1.5 rounded-md bg-background/80 p-1 backdrop-blur-sm">
-                          <FolderIcon
-                            size={12}
-                            weight="fill"
-                            style={{ color: activeColor || undefined }}
-                            className={activeColor ? "" : "text-primary"}
-                          />
-                        </div>
-                      </>
-                    ) : (
-                      <FolderIcon
-                        size={40}
-                        weight="fill"
-                        style={{ color: activeColor || undefined }}
-                        className={activeColor ? "" : "text-primary"}
-                      />
-                    )}
-                  </div>
-
-                  {/* Controls */}
-                  <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-                    <div className="text-xs font-medium text-muted-foreground">Thumbnail</div>
-                    <Button size="sm" variant="outline" onClick={() => fileInput.current?.click()}>
-                      <UploadIcon size={13} />
-                      {thumbSrc ? "Replace image" : "Upload image"}
-                    </Button>
-                    {(thumbSrc || thumbState === "replace") && (
-                      <button
-                        type="button"
-                        onClick={removeThumb}
-                        className="inline-flex w-fit items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium text-destructive hover:bg-destructive/10"
-                      >
-                        <TrashIcon size={11} />
-                        Remove thumbnail
-                      </button>
-                    )}
-                    <div className="text-[11px] text-muted-foreground">PNG or JPG, up to 10 MB</div>
-                  </div>
-
-                  <input
-                    ref={fileInput}
-                    type="file"
-                    accept="image/*"
-                    hidden
-                    onChange={(e) => {
-                      const f = e.target.files?.[0]
-                      if (f) pickFile(f)
-                      e.target.value = ""
-                    }}
-                  />
-                </div>
-
-                {/* Name */}
-                <label className="block">
-                  <span className="mb-1.5 block text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Name
-                  </span>
-                  <Input
-                    autoFocus
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") void save()
-                    }}
-                    maxLength={255}
-                  />
-                </label>
-
-                {/* Color */}
-                <div>
-                  <div className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Color
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {FOLDER_COLORS.map((c) => {
-                      const selected = color === c.value
-                      return (
-                        <button
-                          key={c.label}
-                          onClick={() => setColor(c.value)}
-                          title={c.label}
-                          aria-label={c.label}
-                          className={`h-7 w-7 rounded-full border-2 transition-all ${
-                            selected ? "scale-110 border-foreground" : "border-transparent"
-                          }`}
-                          style={{ background: c.value || "var(--primary)" }}
-                        />
-                      )
-                    })}
-                  </div>
-                </div>
-
-                {err && <div className="text-xs font-medium text-destructive">{err}</div>}
-              </div>
-            </TabsContent>
-
-            <TabsContent value="activity" className="p-5">
-              <ActivityFeed endpoint={`/api/folders/${folder.id}/activity`} />
-            </TabsContent>
-          </div>
-        </Tabs>
-
-        <DialogFooter className="border-t px-5 py-4">
+    <Modal
+      open
+      onClose={onClose}
+      size="sm"
+      bodyClassName="flex flex-col overflow-hidden"
+      title="Folder properties"
+      footer={
+        <>
           <Button variant="ghost" size="sm" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
           <Button size="sm" onClick={save} disabled={!name.trim() || busy}>
             {busy ? "Saving…" : "Save changes"}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </>
+      }
+    >
+      <Tabs
+        value={tab}
+        onValueChange={(v) => setTab(v as Tab)}
+        className="min-h-0 flex-1 gap-0"
+      >
+        <TabsList className="px-5">
+          <TabsTrigger value="info" className="capitalize">
+            Info
+          </TabsTrigger>
+          <TabsTrigger value="activity" className="capitalize">
+            Activity
+          </TabsTrigger>
+        </TabsList>
+
+        <div className="flex-1 overflow-y-auto">
+          <TabsContent value="info" className="p-5">
+            <div className="space-y-5">
+              {/* Thumbnail */}
+              <div className="flex items-start gap-4">
+                {/* Preview */}
+                <div className="relative grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-xl border bg-muted">
+                  {thumbSrc ? (
+                    <>
+                      <img src={thumbSrc} alt="" className="h-full w-full object-cover" />
+                      <div className="absolute right-1.5 bottom-1.5 rounded-md bg-background/80 p-1 backdrop-blur-sm">
+                        <FolderIcon
+                          size={12}
+                          weight="fill"
+                          style={{ color: activeColor || undefined }}
+                          className={activeColor ? "" : "text-primary"}
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <FolderIcon
+                      size={40}
+                      weight="fill"
+                      style={{ color: activeColor || undefined }}
+                      className={activeColor ? "" : "text-primary"}
+                    />
+                  )}
+                </div>
+
+                {/* Controls */}
+                <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                  <div className="text-xs font-medium text-muted-foreground">Thumbnail</div>
+                  <Button size="sm" variant="outline" onClick={() => fileInput.current?.click()}>
+                    <UploadIcon size={13} />
+                    {thumbSrc ? "Replace image" : "Upload image"}
+                  </Button>
+                  {(thumbSrc || thumbState === "replace") && (
+                    <button
+                      type="button"
+                      onClick={removeThumb}
+                      className="inline-flex w-fit items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium text-destructive hover:bg-destructive/10"
+                    >
+                      <TrashIcon size={11} />
+                      Remove thumbnail
+                    </button>
+                  )}
+                  <div className="text-[11px] text-muted-foreground">PNG or JPG, up to 10 MB</div>
+                </div>
+
+                <input
+                  ref={fileInput}
+                  type="file"
+                  accept="image/*"
+                  hidden
+                  onChange={(e) => {
+                    const f = e.target.files?.[0]
+                    if (f) pickFile(f)
+                    e.target.value = ""
+                  }}
+                />
+              </div>
+
+              {/* Name */}
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Name
+                </span>
+                <Input
+                  autoFocus
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") void save()
+                  }}
+                  maxLength={255}
+                />
+              </label>
+
+              {/* Color */}
+              <div>
+                <div className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Color
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {FOLDER_COLORS.map((c) => {
+                    const selected = color === c.value
+                    return (
+                      <button
+                        key={c.label}
+                        onClick={() => setColor(c.value)}
+                        title={c.label}
+                        aria-label={c.label}
+                        className={`h-7 w-7 rounded-full border-2 transition-all ${
+                          selected ? "scale-110 border-foreground" : "border-transparent"
+                        }`}
+                        style={{ background: c.value || "var(--primary)" }}
+                      />
+                    )
+                  })}
+                </div>
+              </div>
+
+              {err && <div className="text-xs font-medium text-destructive">{err}</div>}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="activity" className="p-5">
+            <ActivityFeed endpoint={`/api/folders/${folder.id}/activity`} />
+          </TabsContent>
+        </div>
+      </Tabs>
+    </Modal>
   )
 }

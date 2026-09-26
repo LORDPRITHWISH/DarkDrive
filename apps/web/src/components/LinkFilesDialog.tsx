@@ -12,14 +12,7 @@ import {
   SquaresFourIcon,
 } from "@phosphor-icons/react"
 import { Button } from "@workspace/ui/components/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@workspace/ui/components/dialog"
+import { Modal } from "@/components/Modal"
 import { apiGet } from "@/lib/api"
 import { useDrive } from "@/store/drive"
 import { FileThumb } from "@/components/file-grid/FileThumb"
@@ -136,143 +129,139 @@ export function LinkFilesDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="flex h-160 w-full max-w-4xl flex-col gap-0 overflow-hidden p-0">
-        <DialogHeader className="border-b p-4">
-          <DialogTitle>Link files</DialogTitle>
-          <DialogDescription>
-            Pick files from your drive to link into {displayName}. Originals stay put.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="flex min-h-0 flex-1">
-          {/* Folder tree */}
-          <div className="bg-muted/30 flex w-56 shrink-0 flex-col overflow-y-auto border-r p-2">
-            <div className="text-muted-foreground flex items-center gap-1.5 px-1.5 pb-1.5 pt-1 text-[10px] font-semibold uppercase tracking-wider">
-              <HardDrivesIcon size={12} />
-              Your drive
-            </div>
-            {!tree ? (
-              <div className="text-muted-foreground p-2 text-xs">Loading…</div>
-            ) : (
-              <FolderTree
-                rootId={tree.rootId}
-                folders={tree.folders}
-                selectedId={contents?.folder.id ?? null}
-                expanded={expanded}
-                onSelect={goto}
-                onToggle={(id) =>
-                  setExpanded((prev) => {
-                    const next = new Set(prev)
-                    if (next.has(id)) next.delete(id)
-                    else next.add(id)
-                    return next
-                  })
-                }
-              />
-            )}
-          </div>
-
-          {/* Current folder */}
-          <div className="flex min-w-0 flex-1 flex-col">
-            {contents && (
-              <div className="flex items-center justify-between gap-3 border-b px-3 py-2">
-                <div className="text-muted-foreground flex min-w-0 items-center gap-1 text-xs">
-                  {contents.breadcrumbs.map((c, i) => (
-                    <div key={c.id} className="flex min-w-0 items-center gap-1">
-                      {i > 0 && <CaretRightIcon size={10} className="shrink-0" />}
-                      <button
-                        onClick={() => goto(c.id)}
-                        className="hover:text-foreground max-w-28 truncate hover:underline"
-                      >
-                        {c.name}
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  {contents.files.length > 0 && (
-                    <button
-                      onClick={toggleAllHere}
-                      className="text-primary text-xs font-medium hover:underline"
-                    >
-                      {allSelectedHere ? "Deselect all" : "Select all"}
-                    </button>
-                  )}
-                  <div className="bg-border h-4 w-px" />
-                  <div className="flex items-center gap-0.5">
-                    <Button
-                      size="sm"
-                      variant={view === "grid" ? "default" : "ghost"}
-                      className="h-6 w-6 p-0"
-                      onClick={() => setView("grid")}
-                      title="Grid view"
-                    >
-                      <SquaresFourIcon size={13} />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant={view === "list" ? "default" : "ghost"}
-                      className="h-6 w-6 p-0"
-                      onClick={() => setView("list")}
-                      title="List view"
-                    >
-                      <ListBulletsIcon size={13} />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div className="flex-1 overflow-y-auto">
-              {err && <div className="text-destructive p-3 text-sm">{err}</div>}
-              {!contents ? (
-                <div className="text-muted-foreground p-6 text-sm">Loading…</div>
-              ) : contents.folders.length === 0 && contents.files.length === 0 ? (
-                <div className="text-muted-foreground flex flex-col items-center gap-2 p-12 text-center text-sm">
-                  <FolderOpenIcon size={28} className="opacity-40" />
-                  Empty folder
-                </div>
-              ) : view === "grid" ? (
-                <GridView
-                  folders={contents.folders}
-                  files={contents.files}
-                  selected={selected}
-                  onOpenFolder={goto}
-                  onToggleFile={toggleFile}
-                />
-              ) : (
-                <ListView
-                  folders={contents.folders}
-                  files={contents.files}
-                  selected={selected}
-                  onOpenFolder={goto}
-                  onToggleFile={toggleFile}
-                />
-              )}
-            </div>
-          </div>
-        </div>
-
-        <DialogFooter className="flex-row items-center justify-between border-t p-3 sm:justify-between">
-          <span className="text-muted-foreground text-xs">
+    <Modal
+      open={open}
+      onClose={onClose}
+      size="6xl"
+      className="h-160"
+      bodyClassName="flex overflow-hidden"
+      title="Link files"
+      description={`Pick files from your drive to link into ${displayName}. Originals stay put.`}
+      footer={
+        <>
+          <span className="text-muted-foreground mr-auto text-xs">
             {selected.size > 0 ? `${selected.size} selected` : "No files selected"}
           </span>
-          <div className="flex gap-2">
-            <Button variant="ghost" onClick={onClose} disabled={busy}>
-              Cancel
-            </Button>
-            <Button onClick={() => void submit()} disabled={selected.size === 0 || busy}>
-              {busy
-                ? "Linking…"
-                : selected.size === 0
-                  ? "Link files"
-                  : `Link ${selected.size} file${selected.size === 1 ? "" : "s"}`}
-            </Button>
+          <Button variant="ghost" onClick={onClose} disabled={busy}>
+            Cancel
+          </Button>
+          <Button onClick={() => void submit()} disabled={selected.size === 0 || busy}>
+            {busy
+              ? "Linking…"
+              : selected.size === 0
+                ? "Link files"
+                : `Link ${selected.size} file${selected.size === 1 ? "" : "s"}`}
+          </Button>
+        </>
+      }
+    >
+      {/* Folder tree */}
+      <div className="bg-muted/30 flex w-56 shrink-0 flex-col overflow-y-auto border-r p-2">
+        <div className="text-muted-foreground flex items-center gap-1.5 px-1.5 pb-1.5 pt-1 text-[10px] font-semibold uppercase tracking-wider">
+          <HardDrivesIcon size={12} />
+          Your drive
+        </div>
+        {!tree ? (
+          <div className="text-muted-foreground p-2 text-xs">Loading…</div>
+        ) : (
+          <FolderTree
+            rootId={tree.rootId}
+            folders={tree.folders}
+            selectedId={contents?.folder.id ?? null}
+            expanded={expanded}
+            onSelect={goto}
+            onToggle={(id) =>
+              setExpanded((prev) => {
+                const next = new Set(prev)
+                if (next.has(id)) next.delete(id)
+                else next.add(id)
+                return next
+              })
+            }
+          />
+        )}
+      </div>
+
+      {/* Current folder */}
+      <div className="flex min-w-0 flex-1 flex-col">
+        {contents && (
+          <div className="flex items-center justify-between gap-3 border-b px-3 py-2">
+            <div className="text-muted-foreground flex min-w-0 items-center gap-1 text-xs">
+              {contents.breadcrumbs.map((c, i) => (
+                <div key={c.id} className="flex min-w-0 items-center gap-1">
+                  {i > 0 && <CaretRightIcon size={10} className="shrink-0" />}
+                  <button
+                    onClick={() => goto(c.id)}
+                    className="hover:text-foreground max-w-28 truncate hover:underline"
+                  >
+                    {c.name}
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              {contents.files.length > 0 && (
+                <button
+                  onClick={toggleAllHere}
+                  className="text-primary text-xs font-medium hover:underline"
+                >
+                  {allSelectedHere ? "Deselect all" : "Select all"}
+                </button>
+              )}
+              <div className="bg-border h-4 w-px" />
+              <div className="flex items-center gap-0.5">
+                <Button
+                  size="sm"
+                  variant={view === "grid" ? "default" : "ghost"}
+                  className="h-6 w-6 p-0"
+                  onClick={() => setView("grid")}
+                  title="Grid view"
+                >
+                  <SquaresFourIcon size={13} />
+                </Button>
+                <Button
+                  size="sm"
+                  variant={view === "list" ? "default" : "ghost"}
+                  className="h-6 w-6 p-0"
+                  onClick={() => setView("list")}
+                  title="List view"
+                >
+                  <ListBulletsIcon size={13} />
+                </Button>
+              </div>
+            </div>
           </div>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        )}
+
+        <div className="flex-1 overflow-y-auto">
+          {err && <div className="text-destructive p-3 text-sm">{err}</div>}
+          {!contents ? (
+            <div className="text-muted-foreground p-6 text-sm">Loading…</div>
+          ) : contents.folders.length === 0 && contents.files.length === 0 ? (
+            <div className="text-muted-foreground flex flex-col items-center gap-2 p-12 text-center text-sm">
+              <FolderOpenIcon size={28} className="opacity-40" />
+              Empty folder
+            </div>
+          ) : view === "grid" ? (
+            <GridView
+              folders={contents.folders}
+              files={contents.files}
+              selected={selected}
+              onOpenFolder={goto}
+              onToggleFile={toggleFile}
+            />
+          ) : (
+            <ListView
+              folders={contents.folders}
+              files={contents.files}
+              selected={selected}
+              onOpenFolder={goto}
+              onToggleFile={toggleFile}
+            />
+          )}
+        </div>
+      </div>
+    </Modal>
   )
 }
 

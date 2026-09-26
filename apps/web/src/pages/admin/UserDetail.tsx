@@ -35,12 +35,8 @@ import {
 } from "@workspace/ui/components/dropdown-menu"
 import { PopConfirm } from "@workspace/ui/components/popconfirm"
 import { Sheet, SheetContent } from "@workspace/ui/components/sheet"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@workspace/ui/components/dialog"
+import { DialogTitle } from "@workspace/ui/components/dialog"
+import { Modal } from "@/components/Modal"
 import {
   Table,
   TableBody,
@@ -807,22 +803,22 @@ function DriveBrowserDialog({
   const { contents, err, setFolderId } = useDriveBrowser(userId, open)
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="flex h-[70vh] w-full max-w-3xl flex-col gap-0 overflow-hidden p-0">
-        <DialogHeader className="border-b p-4">
-          <DialogTitle>{userName}&rsquo;s drive</DialogTitle>
-        </DialogHeader>
-        <div className="flex-1 overflow-y-auto p-3">
-          <DriveListing
-            contents={contents}
-            err={err}
-            onNavigate={setFolderId}
-            loadingFileId={loadingFileId}
-            onOpenFile={onOpenFile}
-          />
-        </div>
-      </DialogContent>
-    </Dialog>
+    <Modal
+      open={open}
+      onClose={onClose}
+      size="3xl"
+      className="h-[70vh]"
+      bodyClassName="p-3"
+      title={<>{userName}&rsquo;s drive</>}
+    >
+      <DriveListing
+        contents={contents}
+        err={err}
+        onNavigate={setFolderId}
+        loadingFileId={loadingFileId}
+        onOpenFile={onOpenFile}
+      />
+    </Modal>
   )
 }
 
@@ -1009,35 +1005,37 @@ export function TimelineSection({
         </ul>
       </div>
 
-      <Dialog open={showAll} onOpenChange={setShowAll}>
-        <DialogContent className="flex h-[70vh] w-full max-w-2xl flex-col gap-0 overflow-hidden p-0">
-          <DialogHeader className="border-b px-4 py-3">
-            <DialogTitle className="text-sm font-semibold">Lifecycle timeline</DialogTitle>
-          </DialogHeader>
-          <ScrollArea className="flex-1">
-            <div className="p-2">
-              {groupByBucket(events.slice(0, 50)).map((group) => (
-                <div key={group.label} className="mb-1">
-                  <div className="text-muted-foreground px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider">
-                    {group.label}
-                  </div>
-                  <ul className="flex flex-col">
-                    {group.items.map((e) => (
-                      <TimelineRow
-                        key={e.key}
-                        event={e}
-                        loadingFileId={loadingFileId}
-                        onOpenFile={onOpenFile}
-                        detailed
-                      />
-                    ))}
-                  </ul>
+      <Modal
+        open={showAll}
+        onClose={() => setShowAll(false)}
+        size="2xl"
+        className="h-[70vh]"
+        bodyClassName="flex flex-col overflow-hidden"
+        title="Lifecycle timeline"
+      >
+        <ScrollArea className="min-h-0 flex-1">
+          <div className="p-2">
+            {groupByBucket(events.slice(0, 50)).map((group) => (
+              <div key={group.label} className="mb-1">
+                <div className="text-muted-foreground px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider">
+                  {group.label}
                 </div>
-              ))}
-            </div>
-          </ScrollArea>
-        </DialogContent>
-      </Dialog>
+                <ul className="flex flex-col">
+                  {group.items.map((e) => (
+                    <TimelineRow
+                      key={e.key}
+                      event={e}
+                      loadingFileId={loadingFileId}
+                      onOpenFile={onOpenFile}
+                      detailed
+                    />
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </ScrollArea>
+      </Modal>
     </section>
   )
 }

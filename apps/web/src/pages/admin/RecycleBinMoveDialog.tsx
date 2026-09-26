@@ -8,13 +8,7 @@ import {
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
 import { Avatar, AvatarImage, AvatarFallback } from "@workspace/ui/components/avatar"
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@workspace/ui/components/dialog"
+import { Modal } from "@/components/Modal"
 import { apiGet } from "@/lib/api"
 import type { AdminFolderTree, AdminUser } from "@/lib/types"
 import { HoverName } from "@/components/HoverName"
@@ -91,96 +85,96 @@ export function RecycleBinMoveDialog({ open, item, users, onClose, onSubmit }: P
   }
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="flex h-[560px] w-full max-w-2xl flex-col gap-0 overflow-hidden p-0">
-        <DialogHeader className="border-b p-4">
-          <DialogTitle>Move to…</DialogTitle>
-          <HoverName as="div" name={item.name} className="text-muted-foreground truncate text-xs" />
-        </DialogHeader>
-
-        <div className="flex min-h-0 flex-1">
-          {/* User picker */}
-          <div className="flex w-56 shrink-0 flex-col border-r">
-            <div className="relative border-b p-2">
-              <MagnifyingGlassIcon
-                size={14}
-                className="text-muted-foreground pointer-events-none absolute top-1/2 left-4 -translate-y-1/2"
-              />
-              <Input
-                autoFocus
-                className="h-auto py-1.5 pr-2 pl-7 text-xs"
-                placeholder="Find a user…"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-              />
-            </div>
-            <div className="flex-1 overflow-auto p-1">
-              {filteredUsers.length === 0 ? (
-                <div className="text-muted-foreground p-3 text-center text-xs">
-                  No users match.
-                </div>
-              ) : (
-                filteredUsers.map((u) => (
-                  <button
-                    key={u.id}
-                    type="button"
-                    onClick={() => setUserId(u.id)}
-                    className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm ${
-                      userId === u.id ? "bg-accent text-accent-foreground" : "hover:bg-accent/60"
-                    }`}
-                  >
-                    <Avatar className="h-6 w-6 shrink-0">
-                      {u.avatarUrl && <AvatarImage src={u.avatarUrl} alt="" />}
-                      <AvatarFallback className="text-[10px]">
-                        {u.name[0]?.toUpperCase() ?? "?"}
-                      </AvatarFallback>
-                    </Avatar>
-                    <span className="min-w-0 flex-1 truncate">{u.name}</span>
-                  </button>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* Folder tree */}
-          <div className="flex-1 overflow-auto p-2 text-sm">
-            {err && <div className="text-destructive mb-2 px-2">{err}</div>}
-            {!userId ? (
-              <div className="text-muted-foreground p-4 text-center text-sm">
-                Pick a user to browse their drive.
-              </div>
-            ) : !tree ? (
-              <div className="text-muted-foreground p-4 text-sm">Loading…</div>
-            ) : (
-              <FolderTree
-                rootId={tree.rootId}
-                folders={tree.folders}
-                selected={selected}
-                expanded={expanded}
-                onSelect={setSelected}
-                onToggle={(id) =>
-                  setExpanded((prev) => {
-                    const next = new Set(prev)
-                    if (next.has(id)) next.delete(id)
-                    else next.add(id)
-                    return next
-                  })
-                }
-              />
-            )}
-          </div>
-        </div>
-
-        <DialogFooter className="border-t p-3">
+    <Modal
+      open={open}
+      onClose={onClose}
+      size="2xl"
+      className="h-[560px]"
+      bodyClassName="flex overflow-hidden"
+      title="Move to…"
+      description={<HoverName as="span" name={item.name} className="block truncate" />}
+      footer={
+        <>
           <Button variant="ghost" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
           <Button onClick={submit} disabled={!selected || busy}>
             {busy ? "Moving…" : "Move here"}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </>
+      }
+    >
+      {/* User picker */}
+      <div className="flex w-56 shrink-0 flex-col border-r">
+        <div className="relative border-b p-2">
+          <MagnifyingGlassIcon
+            size={14}
+            className="text-muted-foreground pointer-events-none absolute top-1/2 left-4 -translate-y-1/2"
+          />
+          <Input
+            autoFocus
+            className="h-auto py-1.5 pr-2 pl-7 text-xs"
+            placeholder="Find a user…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
+        <div className="flex-1 overflow-auto p-1">
+          {filteredUsers.length === 0 ? (
+            <div className="text-muted-foreground p-3 text-center text-xs">
+              No users match.
+            </div>
+          ) : (
+            filteredUsers.map((u) => (
+              <button
+                key={u.id}
+                type="button"
+                onClick={() => setUserId(u.id)}
+                className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm ${
+                  userId === u.id ? "bg-accent text-accent-foreground" : "hover:bg-accent/60"
+                }`}
+              >
+                <Avatar className="h-6 w-6 shrink-0">
+                  {u.avatarUrl && <AvatarImage src={u.avatarUrl} alt="" />}
+                  <AvatarFallback className="text-[10px]">
+                    {u.name[0]?.toUpperCase() ?? "?"}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="min-w-0 flex-1 truncate">{u.name}</span>
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* Folder tree */}
+      <div className="flex-1 overflow-auto p-2 text-sm">
+        {err && <div className="text-destructive mb-2 px-2">{err}</div>}
+        {!userId ? (
+          <div className="text-muted-foreground p-4 text-center text-sm">
+            Pick a user to browse their drive.
+          </div>
+        ) : !tree ? (
+          <div className="text-muted-foreground p-4 text-sm">Loading…</div>
+        ) : (
+          <FolderTree
+            rootId={tree.rootId}
+            folders={tree.folders}
+            selected={selected}
+            expanded={expanded}
+            onSelect={setSelected}
+            onToggle={(id) =>
+              setExpanded((prev) => {
+                const next = new Set(prev)
+                if (next.has(id)) next.delete(id)
+                else next.add(id)
+                return next
+              })
+            }
+          />
+        )}
+      </div>
+    </Modal>
   )
 }
 

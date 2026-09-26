@@ -12,12 +12,7 @@ import { formatBytes, formatDate, relativeTime } from "@/lib/format"
 import { iconFor } from "@/lib/fileIcon"
 import { thumbnailable } from "@/lib/thumb"
 import { useDrive } from "@/store/drive"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@workspace/ui/components/dialog"
+import { Modal } from "@/components/Modal"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@workspace/ui/components/tabs"
 import { Avatar, AvatarImage, AvatarFallback } from "@workspace/ui/components/avatar"
 import { Badge } from "@workspace/ui/components/badge"
@@ -133,188 +128,178 @@ export function FilePropertiesDialog({
   const dlHref = apiUrl(`/api/files/${file.id}/download`)
 
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="flex max-h-[85vh] w-full max-w-md flex-col gap-0 overflow-hidden p-0">
-        {/* Header */}
-        <DialogHeader className="flex-row items-start gap-3 border-b px-5 py-4">
-          <div className="mt-0.5 shrink-0">
-            {iconFor(file.mimeType, 28, file.name)}
-          </div>
-          <div className="min-w-0 flex-1 text-left">
-            <DialogTitle className="min-w-0 truncate">
-              <HoverName as="span" name={file.name} className="truncate" />
-            </DialogTitle>
-            <div className="text-muted-foreground mt-0.5 text-xs">
-              {formatBytes(file.size)} · {file.mimeType || "unknown type"}
-            </div>
-          </div>
-        </DialogHeader>
+    <Modal
+      open
+      onClose={onClose}
+      bodyClassName="flex flex-col overflow-hidden"
+      icon={iconFor(file.mimeType, 28, file.name)}
+      title={<HoverName as="span" name={file.name} className="block truncate" />}
+      description={`${formatBytes(file.size)} · ${file.mimeType || "unknown type"}`}
+    >
+      <Tabs
+        value={tab}
+        onValueChange={(v) => setTab(v as Tab)}
+        className="min-h-0 flex-1 gap-0"
+      >
+        <TabsList className="px-5">
+          <TabsTrigger value="info" className="capitalize">
+            Info
+          </TabsTrigger>
+          <TabsTrigger value="activity" className="capitalize">
+            Activity
+          </TabsTrigger>
+          <TabsTrigger value="versions" className="capitalize">
+            Versions
+          </TabsTrigger>
+        </TabsList>
 
-        <Tabs
-          value={tab}
-          onValueChange={(v) => setTab(v as Tab)}
-          className="min-h-0 flex-1 gap-0"
-        >
-          <TabsList className="px-5">
-            <TabsTrigger value="info" className="capitalize">
-              Info
-            </TabsTrigger>
-            <TabsTrigger value="activity" className="capitalize">
-              Activity
-            </TabsTrigger>
-            <TabsTrigger value="versions" className="capitalize">
-              Versions
-            </TabsTrigger>
-          </TabsList>
-
-          <div className="flex-1 overflow-y-auto">
-            <TabsContent value="info" className="space-y-4 p-5">
-              {/* Thumbnail preview */}
-              {showThumb && (
-                <div className="overflow-hidden rounded-xl border">
-                  <img
-                    src={apiUrl(`/api/files/${file.id}/thumbnail`)}
-                    alt=""
-                    className="max-h-48 w-full object-cover"
-                    onError={() => setThumbFailed(true)}
-                  />
-                </div>
-              )}
-
-              {/* Stats grid */}
-              <dl className="grid grid-cols-[7rem_1fr] gap-x-3 gap-y-2 text-sm">
-                <Row label="Type" value={file.mimeType || "—"} mono />
-                <Row label="Size" value={formatBytes(file.size)} />
-                <Row label="Created" value={formatDate(file.createdAt)} />
-                <Row label="Modified" value={formatDate(file.updatedAt)} />
-                <Row label="Starred" value={file.isStarred ? "Yes" : "No"} />
-                <Row label="Hidden" value={file.isHidden ? "Yes" : "No"} />
-                {file.isShortcut && <Row label="Shortcut" value="Yes" />}
-                <Row label="File ID" value={file.id} mono small />
-                <Row label="Folder ID" value={file.folderId} mono small />
-                {file.spaceId && (
-                  <Row label="Space ID" value={file.spaceId} mono small />
-                )}
-                <Row label="Storage key" value={file.storageKey} mono small />
-              </dl>
-
-              {/* Tags */}
-              <div className="border-t pt-3">
-                <div className="text-muted-foreground mb-2 text-xs font-medium uppercase tracking-wider">
-                  Tags
-                </div>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {tags.map((t) => (
-                    <Badge key={t} variant="secondary" className="pr-1">
-                      {t}
-                      <button
-                        onClick={() => commitTags(tags.filter((x) => x !== t))}
-                        title={`Remove "${t}"`}
-                        className="hover:bg-foreground/10 rounded-full p-0.5"
-                      >
-                        <XIcon size={10} weight="bold" />
-                      </button>
-                    </Badge>
-                  ))}
-                  <Input
-                    value={tagInput}
-                    onChange={(e) => setTagInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === ",") {
-                        e.preventDefault()
-                        addTag()
-                      }
-                    }}
-                    onBlur={addTag}
-                    placeholder="Add tag…"
-                    className="h-6 w-24 rounded-full px-2.5 text-xs"
-                  />
-                </div>
-              </div>
-
-              {/* Download link */}
-              <div className="border-t pt-3">
-                <a
-                  href={dlHref}
-                  className="text-primary inline-flex items-center gap-1.5 text-sm hover:underline"
-                >
-                  <DownloadSimpleIcon size={15} weight="bold" />
-                  Download file
-                </a>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="activity" className="p-5">
-              <ActivityFeed endpoint={`/api/files/${file.id}/activity`} />
-            </TabsContent>
-
-            <TabsContent value="versions" className="p-5">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <div className="text-muted-foreground text-xs font-medium uppercase tracking-wider">
-                  Version history
-                </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={uploadingVersion}
-                  onClick={() => versionFileInput.current?.click()}
-                >
-                  <UploadSimpleIcon size={13} weight="bold" />
-                  {uploadingVersion ? "Uploading…" : "Upload new version"}
-                </Button>
-                <input
-                  ref={versionFileInput}
-                  type="file"
-                  hidden
-                  onChange={(e) => {
-                    const f = e.target.files?.[0]
-                    e.target.value = ""
-                    if (f) void pickNewVersion(f)
-                  }}
+        <div className="flex-1 overflow-y-auto">
+          <TabsContent value="info" className="space-y-4 p-5">
+            {/* Thumbnail preview */}
+            {showThumb && (
+              <div className="overflow-hidden rounded-xl border">
+                <img
+                  src={apiUrl(`/api/files/${file.id}/thumbnail`)}
+                  alt=""
+                  className="max-h-48 w-full object-cover"
+                  onError={() => setThumbFailed(true)}
                 />
               </div>
+            )}
 
-              {versionsLoading && (
-                <div className="text-muted-foreground py-10 text-center text-sm">
-                  Loading versions…
-                </div>
+            {/* Stats grid */}
+            <dl className="grid grid-cols-[7rem_1fr] gap-x-3 gap-y-2 text-sm">
+              <Row label="Type" value={file.mimeType || "—"} mono />
+              <Row label="Size" value={formatBytes(file.size)} />
+              <Row label="Created" value={formatDate(file.createdAt)} />
+              <Row label="Modified" value={formatDate(file.updatedAt)} />
+              <Row label="Starred" value={file.isStarred ? "Yes" : "No"} />
+              <Row label="Hidden" value={file.isHidden ? "Yes" : "No"} />
+              {file.isShortcut && <Row label="Shortcut" value="Yes" />}
+              <Row label="File ID" value={file.id} mono small />
+              <Row label="Folder ID" value={file.folderId} mono small />
+              {file.spaceId && (
+                <Row label="Space ID" value={file.spaceId} mono small />
               )}
-              {versionsErr && (
-                <div className="text-destructive py-10 text-center text-sm">
-                  Failed to load: {versionsErr}
-                </div>
-              )}
-              {versions && (
-                <div className="space-y-0.5">
+              <Row label="Storage key" value={file.storageKey} mono small />
+            </dl>
+
+            {/* Tags */}
+            <div className="border-t pt-3">
+              <div className="text-muted-foreground mb-2 text-xs font-medium uppercase tracking-wider">
+                Tags
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {tags.map((t) => (
+                  <Badge key={t} variant="secondary" className="pr-1">
+                    {t}
+                    <button
+                      onClick={() => commitTags(tags.filter((x) => x !== t))}
+                      title={`Remove "${t}"`}
+                      className="hover:bg-foreground/10 rounded-full p-0.5"
+                    >
+                      <XIcon size={10} weight="bold" />
+                    </button>
+                  </Badge>
+                ))}
+                <Input
+                  value={tagInput}
+                  onChange={(e) => setTagInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === ",") {
+                      e.preventDefault()
+                      addTag()
+                    }
+                  }}
+                  onBlur={addTag}
+                  placeholder="Add tag…"
+                  className="h-6 w-24 rounded-full px-2.5 text-xs"
+                />
+              </div>
+            </div>
+
+            {/* Download link */}
+            <div className="border-t pt-3">
+              <a
+                href={dlHref}
+                className="text-primary inline-flex items-center gap-1.5 text-sm hover:underline"
+              >
+                <DownloadSimpleIcon size={15} weight="bold" />
+                Download file
+              </a>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="activity" className="p-5">
+            <ActivityFeed endpoint={`/api/files/${file.id}/activity`} />
+          </TabsContent>
+
+          <TabsContent value="versions" className="p-5">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div className="text-muted-foreground text-xs font-medium uppercase tracking-wider">
+                Version history
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={uploadingVersion}
+                onClick={() => versionFileInput.current?.click()}
+              >
+                <UploadSimpleIcon size={13} weight="bold" />
+                {uploadingVersion ? "Uploading…" : "Upload new version"}
+              </Button>
+              <input
+                ref={versionFileInput}
+                type="file"
+                hidden
+                onChange={(e) => {
+                  const f = e.target.files?.[0]
+                  e.target.value = ""
+                  if (f) void pickNewVersion(f)
+                }}
+              />
+            </div>
+
+            {versionsLoading && (
+              <div className="text-muted-foreground py-10 text-center text-sm">
+                Loading versions…
+              </div>
+            )}
+            {versionsErr && (
+              <div className="text-destructive py-10 text-center text-sm">
+                Failed to load: {versionsErr}
+              </div>
+            )}
+            {versions && (
+              <div className="space-y-0.5">
+                <VersionRow
+                  current
+                  size={versions.current.size}
+                  at={versions.current.updatedAt}
+                  uploadedBy={versions.current.uploadedBy}
+                />
+                {versions.versions.map((v) => (
                   <VersionRow
-                    current
-                    size={versions.current.size}
-                    at={versions.current.updatedAt}
-                    uploadedBy={versions.current.uploadedBy}
+                    key={v.id}
+                    size={v.size}
+                    at={v.createdAt}
+                    uploadedBy={v.uploadedBy}
+                    downloadHref={apiUrl(`/api/files/${file.id}/versions/${v.id}/download`)}
+                    onRestore={() => restoreVersion(v.id)}
+                    restoring={restoringId === v.id}
                   />
-                  {versions.versions.map((v) => (
-                    <VersionRow
-                      key={v.id}
-                      size={v.size}
-                      at={v.createdAt}
-                      uploadedBy={v.uploadedBy}
-                      downloadHref={apiUrl(`/api/files/${file.id}/versions/${v.id}/download`)}
-                      onRestore={() => restoreVersion(v.id)}
-                      restoring={restoringId === v.id}
-                    />
-                  ))}
-                  {versions.versions.length === 0 && (
-                    <div className="text-muted-foreground py-6 text-center text-sm">
-                      No earlier versions — upload a new version to start keeping history.
-                    </div>
-                  )}
-                </div>
-              )}
-            </TabsContent>
-          </div>
-        </Tabs>
-      </DialogContent>
-    </Dialog>
+                ))}
+                {versions.versions.length === 0 && (
+                  <div className="text-muted-foreground py-6 text-center text-sm">
+                    No earlier versions — upload a new version to start keeping history.
+                  </div>
+                )}
+              </div>
+            )}
+          </TabsContent>
+        </div>
+      </Tabs>
+    </Modal>
   )
 }
 

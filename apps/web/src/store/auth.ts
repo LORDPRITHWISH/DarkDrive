@@ -1,5 +1,6 @@
 import { create } from "zustand"
 import { apiGet, apiJson } from "@/lib/api"
+import { desktop } from "@/lib/desktop"
 import type { User } from "@/lib/types"
 
 type AuthState = {
@@ -27,6 +28,9 @@ export const useAuth = create<AuthState>((set, get) => ({
     }
   },
   logout: async () => {
+    // The desktop app signs in with this computer's device token, not a
+    // cookie: it drops that itself, then reloads this page signed out.
+    if (desktop) return desktop.signOut()
     await apiJson<{ ok: boolean }>("/api/auth/logout", "POST")
     set({ user: null })
   },

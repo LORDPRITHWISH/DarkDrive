@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import { CopyIcon, TrashIcon } from "@phosphor-icons/react"
 import { apiGet, apiJson } from "@/lib/api"
+import { WEB_ORIGIN } from "@/lib/config"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
 import { Modal } from "@/components/Modal"
@@ -120,7 +121,7 @@ export function ShareDialog({ open, onClose, resourceType, resourceId, resourceN
         ) : (
           <ul className="space-y-2">
             {shares.map((s) => {
-              const url = `${window.location.origin}/s/${s.token}`
+              const url = `${WEB_ORIGIN}/s/${s.token}`
               return (
                 <li
                   key={s.id}

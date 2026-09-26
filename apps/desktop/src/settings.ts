@@ -20,8 +20,10 @@ const DEFAULT_WEB = "https://darkdrive.zenux.live"
  * "Synced Folders". `id` is that DarkDrive folder's id, `name` its name there.
  */
 export type SyncedFolder = { id: string; name: string; dir: string }
-// webUrl is where the web app for apiUrl is hosted: the drive window shows it.
-export type Account = { apiUrl: string; webUrl: string; token: string; device: string }
+// webUrl is where the web app for apiUrl is hosted: links meant for other
+// people (shares, invites) point there. deviceId is the token's row on the
+// server, so signing out can revoke it.
+export type Account = { apiUrl: string; webUrl: string; token: string; deviceId: string; device: string }
 export type Settings = Account & { folders: SyncedFolder[] }
 
 function readJson(file: string): Partial<Settings> | undefined {
@@ -42,6 +44,7 @@ export function readSettings(): Settings {
     apiUrl: saved.apiUrl ?? DEFAULT_API,
     webUrl: saved.webUrl ?? DEFAULT_WEB,
     token: saved.token ?? "",
+    deviceId: saved.deviceId ?? "",
     device: saved.device ?? os.hostname(),
     folders: saved.folders ?? [],
   }
@@ -58,6 +61,7 @@ export function writeSettings(s: Settings) {
     apiUrl: httpUrl(String(s.apiUrl).trim()),
     webUrl: httpUrl(String(s.webUrl).trim()),
     token: String(s.token).trim(),
+    deviceId: String(s.deviceId),
     device: String(s.device).trim() || os.hostname(),
     folders: s.folders,
   }

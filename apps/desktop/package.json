@@ -1,0 +1,71 @@
+{
+  "name": "desktop",
+  "productName": "DarkDrive",
+  "version": "0.1.0",
+  "description": "Keeps a folder on this computer in sync with DarkDrive",
+  "author": {
+    "name": "LORDPRITHWISH",
+    "email": "zenuxstudios@gmail.com"
+  },
+  "homepage": "https://github.com/LORDPRITHWISH/DarkDrive",
+  "type": "module",
+  "private": true,
+  "main": "dist/main.cjs",
+  "scripts": {
+    "build": "esbuild src/main.ts src/preload.cts --bundle --platform=node --format=cjs --external:electron --outdir=dist --out-extension:.js=.cjs && esbuild node_modules/sync/dist/index.js --bundle --platform=node --format=esm --outfile=dist/sync.mjs && esbuild src/renderer.ts --bundle --format=esm --outfile=dist/renderer.js",
+    "start": "pnpm build && env -u ELECTRON_RUN_AS_NODE electron .",
+    "dist": "pnpm build && electron-builder --publish never",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "electron": "^44.4.5",
+    "electron-builder": "^26.15.3",
+    "electron-updater": "^6.8.9",
+    "esbuild": "^0.28.2",
+    "sync": "workspace:*",
+    "typescript": "^5.9.3"
+  },
+  "desktopName": "darkdrive.desktop",
+  "build": {
+    "appId": "live.zenux.darkdrive",
+    "executableName": "darkdrive",
+    "files": [
+      "dist/**",
+      "ui/**"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "LORDPRITHWISH",
+      "repo": "DarkDrive",
+      "releaseType": "release"
+    },
+    "linux": {
+      "target": "deb",
+      "category": "Network",
+      "icon": "ui/icon.png",
+      "syncDesktopName": true,
+      "synopsis": "DarkDrive folder sync"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "ui/icon.png"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "runAfterFinish": true,
+      "artifactName": "DarkDrive-Setup-${version}.${ext}"
+    },
+    "deb": {
+      "packageName": "darkdrive",
+      "artifactName": "darkdrive_${version}_${arch}.${ext}"
+    }
+  }
+}

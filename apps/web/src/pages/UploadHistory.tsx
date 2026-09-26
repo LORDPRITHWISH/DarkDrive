@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
+import { ScrollArea } from "@workspace/ui/components/scroll-area"
 import { useMe } from "@/store/me"
 import { Sidebar } from "@/components/Sidebar"
 import { SidebarToggle } from "@/components/SidebarToggle"
@@ -137,96 +138,100 @@ export function UploadHistoryPage() {
             <HeaderActions onReload={() => void loadUploadHistory()} />
           </div>
         </header>
-        <div className="flex items-center gap-2 overflow-x-auto border-b px-4 py-3 md:px-6">
-          <FilterChip active={filter === "all"} onClick={() => setFilter("all")}>
-            All
-          </FilterChip>
-          <FilterChip active={filter === "image"} onClick={() => setFilter("image")}>
-            <ImageIcon size={14} /> Images
-          </FilterChip>
-          <FilterChip active={filter === "video"} onClick={() => setFilter("video")}>
-            <FileVideoIcon size={14} /> Videos
-          </FilterChip>
-          <FilterChip active={filter === "doc"} onClick={() => setFilter("doc")}>
-            <FileTextIcon size={14} /> Docs
-          </FilterChip>
-          <FilterChip active={filter === "other"} onClick={() => setFilter("other")}>
-            <FileIcon size={14} /> Other
-          </FilterChip>
-        </div>
-        <div className="flex-1 overflow-auto px-4 py-5 md:px-6">
-          {grouped.length === 0 ? (
-            <div className="text-muted-foreground py-20 text-center text-sm">
-              {uploadHistoryLoading ? "Loading…" : "No uploads yet."}
-            </div>
-          ) : (
-            <>
-              {grouped.map(({ bucket, files }) => (
-                <section key={bucket.key} className="mb-8">
-                  <h2 className="text-muted-foreground mb-3 text-sm font-medium">
-                    {bucket.label}
-                  </h2>
-                  {view === "grid" ? (
-                    <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
-                      {files.map((f) => (
-                        <UploadCard
-                          key={f.id}
-                          file={f}
-                          onOpen={() => setPreview(f)}
-                          onMenu={(e) => openMenu(e, "file", f)}
-                        />
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="overflow-hidden rounded-lg border">
-                      <Table>
-                        <TableHeader>
-                          <TableRow className="hover:bg-transparent">
-                            <TableHead className="p-0 py-2 pl-3">Name</TableHead>
-                            <TableHead className="p-0 py-2">Uploaded</TableHead>
-                            <TableHead className="p-0 py-2 pr-3">Size</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {files.map((f) => (
-                            <TableRow
-                              key={f.id}
-                              className="cursor-pointer last:border-b-0"
-                              onClick={() => setPreview(f)}
-                              onDoubleClick={() => setPreview(f)}
-                              onContextMenu={(e) => openMenu(e, "file", f)}
-                            >
-                              <TableCell className="p-0 py-2 pl-3">
-                                <div className="flex items-center gap-2">
-                                  {iconFor(f.mimeType, 18, f.name)}
-                                  <HoverName as="span" name={f.name} className="min-w-0 truncate" />
-                                </div>
-                              </TableCell>
-                              <TableCell className="p-0 py-2">{formatDate(f.createdAt)}</TableCell>
-                              <TableCell className="p-0 py-2 pr-3">{formatBytes(f.size)}</TableCell>
+        <ScrollArea className="border-b">
+          <div className="flex items-center gap-2 px-4 py-3 md:px-6">
+            <FilterChip active={filter === "all"} onClick={() => setFilter("all")}>
+              All
+            </FilterChip>
+            <FilterChip active={filter === "image"} onClick={() => setFilter("image")}>
+              <ImageIcon size={14} /> Images
+            </FilterChip>
+            <FilterChip active={filter === "video"} onClick={() => setFilter("video")}>
+              <FileVideoIcon size={14} /> Videos
+            </FilterChip>
+            <FilterChip active={filter === "doc"} onClick={() => setFilter("doc")}>
+              <FileTextIcon size={14} /> Docs
+            </FilterChip>
+            <FilterChip active={filter === "other"} onClick={() => setFilter("other")}>
+              <FileIcon size={14} /> Other
+            </FilterChip>
+          </div>
+        </ScrollArea>
+        <ScrollArea className="min-h-0 flex-1">
+          <div className="px-4 py-5 md:px-6">
+            {grouped.length === 0 ? (
+              <div className="text-muted-foreground py-20 text-center text-sm">
+                {uploadHistoryLoading ? "Loading…" : "No uploads yet."}
+              </div>
+            ) : (
+              <>
+                {grouped.map(({ bucket, files }) => (
+                  <section key={bucket.key} className="mb-8">
+                    <h2 className="text-muted-foreground mb-3 text-sm font-medium">
+                      {bucket.label}
+                    </h2>
+                    {view === "grid" ? (
+                      <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
+                        {files.map((f) => (
+                          <UploadCard
+                            key={f.id}
+                            file={f}
+                            onOpen={() => setPreview(f)}
+                            onMenu={(e) => openMenu(e, "file", f)}
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="overflow-hidden rounded-lg border">
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="hover:bg-transparent">
+                              <TableHead className="p-0 py-2 pl-3">Name</TableHead>
+                              <TableHead className="p-0 py-2">Uploaded</TableHead>
+                              <TableHead className="p-0 py-2 pr-3">Size</TableHead>
                             </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  )}
-                </section>
-              ))}
-              {uploadHistoryCursor && (
-                <div className="flex justify-center pb-4">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={uploadHistoryLoading}
-                    onClick={() => void loadUploadHistory({ more: true })}
-                  >
-                    {uploadHistoryLoading ? "Loading…" : "Load more"}
-                  </Button>
-                </div>
-              )}
-            </>
-          )}
-        </div>
+                          </TableHeader>
+                          <TableBody>
+                            {files.map((f) => (
+                              <TableRow
+                                key={f.id}
+                                className="cursor-pointer last:border-b-0"
+                                onClick={() => setPreview(f)}
+                                onDoubleClick={() => setPreview(f)}
+                                onContextMenu={(e) => openMenu(e, "file", f)}
+                              >
+                                <TableCell className="p-0 py-2 pl-3">
+                                  <div className="flex items-center gap-2">
+                                    {iconFor(f.mimeType, 18, f.name)}
+                                    <HoverName as="span" name={f.name} className="min-w-0 truncate" />
+                                  </div>
+                                </TableCell>
+                                <TableCell className="p-0 py-2">{formatDate(f.createdAt)}</TableCell>
+                                <TableCell className="p-0 py-2 pr-3">{formatBytes(f.size)}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    )}
+                  </section>
+                ))}
+                {uploadHistoryCursor && (
+                  <div className="flex justify-center pb-4">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={uploadHistoryLoading}
+                      onClick={() => void loadUploadHistory({ more: true })}
+                    >
+                      {uploadHistoryLoading ? "Loading…" : "Load more"}
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </ScrollArea>
         {itemMenu}
         <FilePreview
           file={preview}

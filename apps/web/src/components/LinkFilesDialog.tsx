@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
+import { ScrollArea } from "@workspace/ui/components/scroll-area"
 import {
   CaretDownIcon,
   CaretRightIcon,
@@ -134,7 +135,8 @@ export function LinkFilesDialog({
       onClose={onClose}
       size="6xl"
       className="h-160"
-      bodyClassName="flex overflow-hidden"
+      bodyClassName="flex"
+      scrollBody={false}
       title="Link files"
       description={`Pick files from your drive to link into ${displayName}. Originals stay put.`}
       footer={
@@ -156,31 +158,33 @@ export function LinkFilesDialog({
       }
     >
       {/* Folder tree */}
-      <div className="bg-muted/30 flex w-56 shrink-0 flex-col overflow-y-auto border-r p-2">
-        <div className="text-muted-foreground flex items-center gap-1.5 px-1.5 pb-1.5 pt-1 text-[10px] font-semibold uppercase tracking-wider">
-          <HardDrivesIcon size={12} />
-          Your drive
+      <ScrollArea className="bg-muted/30 w-56 shrink-0 border-r">
+        <div className="flex flex-col p-2">
+          <div className="text-muted-foreground flex items-center gap-1.5 px-1.5 pb-1.5 pt-1 text-[10px] font-semibold uppercase tracking-wider">
+            <HardDrivesIcon size={12} />
+            Your drive
+          </div>
+          {!tree ? (
+            <div className="text-muted-foreground p-2 text-xs">Loading…</div>
+          ) : (
+            <FolderTree
+              rootId={tree.rootId}
+              folders={tree.folders}
+              selectedId={contents?.folder.id ?? null}
+              expanded={expanded}
+              onSelect={goto}
+              onToggle={(id) =>
+                setExpanded((prev) => {
+                  const next = new Set(prev)
+                  if (next.has(id)) next.delete(id)
+                  else next.add(id)
+                  return next
+                })
+              }
+            />
+          )}
         </div>
-        {!tree ? (
-          <div className="text-muted-foreground p-2 text-xs">Loading…</div>
-        ) : (
-          <FolderTree
-            rootId={tree.rootId}
-            folders={tree.folders}
-            selectedId={contents?.folder.id ?? null}
-            expanded={expanded}
-            onSelect={goto}
-            onToggle={(id) =>
-              setExpanded((prev) => {
-                const next = new Set(prev)
-                if (next.has(id)) next.delete(id)
-                else next.add(id)
-                return next
-              })
-            }
-          />
-        )}
-      </div>
+      </ScrollArea>
 
       {/* Current folder */}
       <div className="flex min-w-0 flex-1 flex-col">
@@ -233,7 +237,7 @@ export function LinkFilesDialog({
           </div>
         )}
 
-        <div className="flex-1 overflow-y-auto">
+        <ScrollArea className="min-h-0 flex-1">
           {err && <div className="text-destructive p-3 text-sm">{err}</div>}
           {!contents ? (
             <div className="text-muted-foreground p-6 text-sm">Loading…</div>
@@ -259,7 +263,7 @@ export function LinkFilesDialog({
               onToggleFile={toggleFile}
             />
           )}
-        </div>
+        </ScrollArea>
       </div>
     </Modal>
   )

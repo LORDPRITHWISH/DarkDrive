@@ -1,14 +1,15 @@
 import { cn } from "@workspace/ui/lib/utils"
+import { ScrollArea } from "@workspace/ui/components/scroll-area"
 
 function Table({ className, ...props }: React.ComponentProps<"table">) {
   return (
-    <div data-slot="table-container" className="relative w-full overflow-auto">
+    <ScrollArea data-slot="table-container" className="w-full">
       <table
         data-slot="table"
         className={cn("w-full caption-bottom text-sm", className)}
         {...props}
       />
-    </div>
+    </ScrollArea>
   )
 }
 

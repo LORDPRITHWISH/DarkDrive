@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react"
+import { ScrollArea } from "@workspace/ui/components/scroll-area"
 import {
   ClockCounterClockwiseIcon,
   DownloadSimpleIcon,
@@ -131,7 +132,8 @@ export function FilePropertiesDialog({
     <Modal
       open
       onClose={onClose}
-      bodyClassName="flex flex-col overflow-hidden"
+      bodyClassName="flex flex-col"
+      scrollBody={false}
       icon={iconFor(file.mimeType, 28, file.name)}
       title={<HoverName as="span" name={file.name} className="block truncate" />}
       description={`${formatBytes(file.size)} · ${file.mimeType || "unknown type"}`}
@@ -153,7 +155,7 @@ export function FilePropertiesDialog({
           </TabsTrigger>
         </TabsList>
 
-        <div className="flex-1 overflow-y-auto">
+        <ScrollArea className="min-h-0 flex-1">
           <TabsContent value="info" className="space-y-4 p-5">
             {/* Thumbnail preview */}
             {showThumb && (
@@ -297,7 +299,7 @@ export function FilePropertiesDialog({
               </div>
             )}
           </TabsContent>
-        </div>
+        </ScrollArea>
       </Tabs>
     </Modal>
   )

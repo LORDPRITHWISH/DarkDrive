@@ -215,7 +215,7 @@ export function FileGrid() {
 
   if (folders.length === 0 && files.length === 0) {
     return (
-      <div className="text-muted-foreground grid h-full place-items-center text-sm">
+      <div className="text-muted-foreground grid min-h-[50vh] place-items-center text-sm">
         This folder is empty. Drag files in or use Upload.
       </div>
     )

@@ -7,6 +7,7 @@ Self-hosted Drive clone — folders, files, sharing, collaborative spaces.
 - **DarkGallery web** (`apps/gallery`) — separate Vite + React app, its own look, same account and storage
 - **DarkGallery mobile** (`apps/gallery-mobile`) — Expo app that backs up the camera roll
 - **Desktop sync** (`apps/sync`) — zero-dependency Node daemon, two-way folder sync
+- **Desktop app** (`apps/desktop`) — Electron tray app that runs that daemon, starts at login and auto-updates from GitHub Releases. Dev: `pnpm --filter desktop... build && pnpm --filter desktop start`; installer for this OS: `pnpm --filter desktop dist`; ship: bump `version` in its package.json, push tag `v<version>`
 - **Mobile** (`apps/mobile`) — Expo / React Native app, same sync engine
 - **Sync core** (`packages/sync-core`) — the conflict rules both clients share
 - **Shared UI** (`packages/ui`) — shadcn components

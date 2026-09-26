@@ -13,7 +13,8 @@ import type { AdminStats } from "@/lib/types"
 export function TrashPanel({ stats }: { stats: AdminStats }) {
   const liveBytes = stats.storage.usedBytes
   const trashedBytes = stats.storage.trashedBytes
-  const totalFootprint = liveBytes + trashedBytes
+  const recycleBinBytes = stats.storage.recycleBinBytes
+  const totalFootprint = liveBytes + trashedBytes + recycleBinBytes
   const pct = totalFootprint > 0 ? (trashedBytes / totalFootprint) * 100 : 0
 
   return (
@@ -44,7 +45,8 @@ export function TrashPanel({ stats }: { stats: AdminStats }) {
           indicatorClassName={pct >= 20 ? "bg-amber-500" : undefined}
         />
         <CardDescription>
-          {formatBytes(liveBytes)} live · reclaimable by permanent delete
+          {formatBytes(liveBytes)} live · {formatBytes(recycleBinBytes)} in
+          admin recycle bin (reclaimed only when purged)
         </CardDescription>
       </CardContent>
     </Card>

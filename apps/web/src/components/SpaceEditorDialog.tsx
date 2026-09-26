@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react"
+import { ScrollArea } from "@workspace/ui/components/scroll-area"
 import {
   UploadIcon,
   TrashIcon,
@@ -203,27 +204,29 @@ export function SpaceEditorDialog({
                 Pick an icon from the set below. It's tinted with the
                 space color.
               </div>
-              <div className="grid max-h-44 grid-cols-9 gap-1 overflow-auto pr-1">
-                {SPACE_ICONS.map(({ key, label, Icon }) => {
-                  const selected = icon === key
-                  return (
-                    <button
-                      key={key}
-                      type="button"
-                      title={label}
-                      onClick={() => pickIcon(key)}
-                      className={`grid aspect-square place-items-center rounded-lg border transition-all ${
-                        selected
-                          ? "border-primary bg-primary/10 text-primary"
-                          : "hover:bg-accent text-muted-foreground hover:text-foreground border-transparent"
-                      }`}
-                      aria-pressed={selected}
-                    >
-                      <Icon size={16} weight="fill" />
-                    </button>
-                  )
-                })}
-              </div>
+              <ScrollArea className="max-h-44">
+                <div className="grid grid-cols-9 gap-1 pr-3">
+                  {SPACE_ICONS.map(({ key, label, Icon }) => {
+                    const selected = icon === key
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        title={label}
+                        onClick={() => pickIcon(key)}
+                        className={`grid aspect-square place-items-center rounded-lg border transition-all ${
+                          selected
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "hover:bg-accent text-muted-foreground hover:text-foreground border-transparent"
+                        }`}
+                        aria-pressed={selected}
+                      >
+                        <Icon size={16} weight="fill" />
+                      </button>
+                    )
+                  })}
+                </div>
+              </ScrollArea>
               {icon && (
                 <button
                   type="button"

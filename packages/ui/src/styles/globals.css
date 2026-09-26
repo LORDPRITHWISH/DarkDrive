@@ -182,6 +182,22 @@
   animation: rb-star-move-left linear infinite alternate;
 }
 
+/* Magic UI animations */
+/* AnimatedThemeToggler: JS drives the reveal, so drop the default crossfade */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+@keyframes mu-border-beam {
+  100% {
+    offset-distance: 100%;
+  }
+}
+.animate-border-beam {
+  animation: mu-border-beam calc(var(--duration) * 1s) infinite linear;
+}
+
 /* Fancy CTA button animations */
 @keyframes cta-gradient {
   0%,

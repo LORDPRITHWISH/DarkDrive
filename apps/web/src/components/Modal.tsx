@@ -1,5 +1,6 @@
 import type { ReactNode } from "react"
 import { cn } from "@workspace/ui/lib/utils"
+import { ScrollArea } from "@workspace/ui/components/scroll-area"
 import {
   Dialog,
   DialogContent,
@@ -32,8 +33,10 @@ type Props = {
   children?: ReactNode
   /** On the dialog itself — e.g. a fixed height for browser-style pickers. */
   className?: string
-  /** On the scrolling body — padding, or `flex overflow-hidden` for multi-pane layouts. */
+  /** On the body — padding, or `flex` for multi-pane layouts. */
   bodyClassName?: string
+  /** False for multi-pane layouts whose panes scroll themselves. */
+  scrollBody?: boolean
   showCloseButton?: boolean
 }
 
@@ -50,6 +53,7 @@ export function Modal({
   children,
   className,
   bodyClassName,
+  scrollBody = true,
   showCloseButton,
 }: Props) {
   return (
@@ -68,7 +72,13 @@ export function Modal({
           </div>
         </DialogHeader>
         {children != null && (
-          <div className={cn("min-h-0 flex-1 overflow-y-auto", bodyClassName)}>{children}</div>
+          scrollBody ? (
+            <ScrollArea className="min-h-0 flex-1">
+              <div className={bodyClassName}>{children}</div>
+            </ScrollArea>
+          ) : (
+            <div className={cn("min-h-0 flex-1 overflow-hidden", bodyClassName)}>{children}</div>
+          )
         )}
         {footer && (
           <DialogFooter className="flex-row items-center justify-end border-t p-3">

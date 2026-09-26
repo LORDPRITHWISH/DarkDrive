@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react"
+import { ScrollArea } from "@workspace/ui/components/scroll-area"
 import { FolderIcon, TrashIcon, UploadIcon } from "@phosphor-icons/react"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
@@ -115,7 +116,8 @@ export function FolderPropertiesDialog({
       open
       onClose={onClose}
       size="sm"
-      bodyClassName="flex flex-col overflow-hidden"
+      bodyClassName="flex flex-col"
+      scrollBody={false}
       title="Folder properties"
       footer={
         <>
@@ -142,7 +144,7 @@ export function FolderPropertiesDialog({
           </TabsTrigger>
         </TabsList>
 
-        <div className="flex-1 overflow-y-auto">
+        <ScrollArea className="min-h-0 flex-1">
           <TabsContent value="info" className="p-5">
             <div className="space-y-5">
               {/* Thumbnail */}
@@ -251,7 +253,7 @@ export function FolderPropertiesDialog({
           <TabsContent value="activity" className="p-5">
             <ActivityFeed endpoint={`/api/folders/${folder.id}/activity`} />
           </TabsContent>
-        </div>
+        </ScrollArea>
       </Tabs>
     </Modal>
   )

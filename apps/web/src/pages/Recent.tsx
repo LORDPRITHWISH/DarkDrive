@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
+import { ScrollArea } from "@workspace/ui/components/scroll-area"
 import { useMe } from "@/store/me"
 import { Sidebar } from "@/components/Sidebar"
 import { SidebarToggle } from "@/components/SidebarToggle"
@@ -139,88 +140,92 @@ export function RecentPage() {
             <HeaderActions onReload={() => void loadRecent(100)} />
           </div>
         </header>
-        <div className="flex items-center gap-2 overflow-x-auto border-b px-4 py-3 md:px-6">
-          <FilterChip active={filter === "all"} onClick={() => setFilter("all")}>
-            All
-          </FilterChip>
-          <FilterChip active={filter === "image"} onClick={() => setFilter("image")}>
-            <ImageIcon size={14} /> Images
-          </FilterChip>
-          <FilterChip active={filter === "video"} onClick={() => setFilter("video")}>
-            <FileVideoIcon size={14} /> Videos
-          </FilterChip>
-          <FilterChip active={filter === "doc"} onClick={() => setFilter("doc")}>
-            <FileTextIcon size={14} /> Docs
-          </FilterChip>
-          <FilterChip active={filter === "other"} onClick={() => setFilter("other")}>
-            <FileIcon size={14} /> Other
-          </FilterChip>
-        </div>
-        <div ref={contentRef} className="flex-1 overflow-auto px-4 py-5 md:px-6">
-          {grouped.length === 0 ? (
-            <div className="text-muted-foreground py-20 text-center text-sm">
-              Nothing here yet. Files you open will show up here.
-            </div>
-          ) : (
-            grouped.map(({ bucket, files }) => (
-              <section key={bucket.key} className="mb-8">
-                <h2 className="text-muted-foreground mb-3 text-sm font-medium">
-                  {bucket.label}
-                </h2>
-                {view === "grid" ? (
-                  <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
-                    {files.map((f) => (
-                      <RecentCard
-                        key={f.id}
-                        file={f}
-                        onOpen={() => setPreview(f)}
-                        onMenu={(e) => openMenu(e, "file", f)}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <div className="overflow-hidden rounded-lg border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="hover:bg-transparent">
-                          <TableHead className="p-0 py-2 pl-3">Name</TableHead>
-                          <TableHead className="p-0 py-2">Action</TableHead>
-                          <TableHead className="p-0 py-2">Accessed</TableHead>
-                          <TableHead className="p-0 py-2 pr-3">Size</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {files.map((f) => (
-                          <TableRow
-                            key={f.id}
-                            tabIndex={0}
-                            className="focus-visible:bg-accent/40 cursor-pointer outline-none last:border-b-0"
-                            onClick={() => setPreview(f)}
-                            onDoubleClick={() => setPreview(f)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") setPreview(f)
-                            }}
-                            onContextMenu={(e) => openMenu(e, "file", f)}
-                          >
-                            <TableCell className="p-0 py-2 pl-3">
-                              <div className="flex items-center gap-2">
-                                {iconFor(f.mimeType, 18, f.name)}
-                                <HoverName as="span" name={f.name} className="min-w-0 truncate" />
-                              </div>
-                            </TableCell>
-                            <TableCell className="p-0 py-2 capitalize">{f.action}</TableCell>
-                            <TableCell className="p-0 py-2">{formatDate(f.accessedAt)}</TableCell>
-                            <TableCell className="p-0 py-2 pr-3">{formatBytes(f.size)}</TableCell>
+        <ScrollArea className="border-b">
+          <div className="flex items-center gap-2 px-4 py-3 md:px-6">
+            <FilterChip active={filter === "all"} onClick={() => setFilter("all")}>
+              All
+            </FilterChip>
+            <FilterChip active={filter === "image"} onClick={() => setFilter("image")}>
+              <ImageIcon size={14} /> Images
+            </FilterChip>
+            <FilterChip active={filter === "video"} onClick={() => setFilter("video")}>
+              <FileVideoIcon size={14} /> Videos
+            </FilterChip>
+            <FilterChip active={filter === "doc"} onClick={() => setFilter("doc")}>
+              <FileTextIcon size={14} /> Docs
+            </FilterChip>
+            <FilterChip active={filter === "other"} onClick={() => setFilter("other")}>
+              <FileIcon size={14} /> Other
+            </FilterChip>
+          </div>
+        </ScrollArea>
+        <ScrollArea ref={contentRef} className="min-h-0 flex-1">
+          <div className="px-4 py-5 md:px-6">
+            {grouped.length === 0 ? (
+              <div className="text-muted-foreground py-20 text-center text-sm">
+                Nothing here yet. Files you open will show up here.
+              </div>
+            ) : (
+              grouped.map(({ bucket, files }) => (
+                <section key={bucket.key} className="mb-8">
+                  <h2 className="text-muted-foreground mb-3 text-sm font-medium">
+                    {bucket.label}
+                  </h2>
+                  {view === "grid" ? (
+                    <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
+                      {files.map((f) => (
+                        <RecentCard
+                          key={f.id}
+                          file={f}
+                          onOpen={() => setPreview(f)}
+                          onMenu={(e) => openMenu(e, "file", f)}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="overflow-hidden rounded-lg border">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="hover:bg-transparent">
+                            <TableHead className="p-0 py-2 pl-3">Name</TableHead>
+                            <TableHead className="p-0 py-2">Action</TableHead>
+                            <TableHead className="p-0 py-2">Accessed</TableHead>
+                            <TableHead className="p-0 py-2 pr-3">Size</TableHead>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
-              </section>
-            ))
-          )}
-        </div>
+                        </TableHeader>
+                        <TableBody>
+                          {files.map((f) => (
+                            <TableRow
+                              key={f.id}
+                              tabIndex={0}
+                              className="focus-visible:bg-accent/40 cursor-pointer outline-none last:border-b-0"
+                              onClick={() => setPreview(f)}
+                              onDoubleClick={() => setPreview(f)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") setPreview(f)
+                              }}
+                              onContextMenu={(e) => openMenu(e, "file", f)}
+                            >
+                              <TableCell className="p-0 py-2 pl-3">
+                                <div className="flex items-center gap-2">
+                                  {iconFor(f.mimeType, 18, f.name)}
+                                  <HoverName as="span" name={f.name} className="min-w-0 truncate" />
+                                </div>
+                              </TableCell>
+                              <TableCell className="p-0 py-2 capitalize">{f.action}</TableCell>
+                              <TableCell className="p-0 py-2">{formatDate(f.accessedAt)}</TableCell>
+                              <TableCell className="p-0 py-2 pr-3">{formatBytes(f.size)}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                </section>
+              ))
+            )}
+          </div>
+        </ScrollArea>
         {itemMenu}
         <FilePreview
           file={preview}

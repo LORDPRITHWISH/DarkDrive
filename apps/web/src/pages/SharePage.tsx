@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { ScrollArea } from "@workspace/ui/components/scroll-area"
 import { Link, useParams } from "react-router-dom"
 import {
   DownloadIcon,
@@ -267,24 +268,26 @@ function SharedFileModal({
         <div className="bg-muted flex min-w-0 items-center justify-center overflow-hidden">
           <FileViewer file={file} src={shareInlineUrl(token, file.id, password)} />
         </div>
-        <aside className="flex w-72 shrink-0 flex-col gap-3 overflow-auto border-l p-4">
-          <div className="flex items-start justify-between gap-2">
-            <DialogTitle className="min-w-0 flex-1 truncate text-base font-semibold">
-              <HoverName as="span" name={file.name} className="truncate" />
-            </DialogTitle>
-          </div>
-          <a
-            href={shareDownloadUrl(token, file.id, password)}
-            className="text-primary inline-flex items-center gap-1.5 text-sm hover:underline"
-          >
-            <DownloadIcon size={14} /> Download
-          </a>
-          <div className="text-muted-foreground border-t pt-3 text-sm">
-            <div>{file.mimeType || "unknown"}</div>
-            <div>{formatBytes(file.size)}</div>
-            <div>Added {formatDate(file.createdAt)}</div>
-          </div>
-        </aside>
+        <ScrollArea className="w-72 shrink-0 border-l">
+          <aside className="flex flex-col gap-3 p-4">
+            <div className="flex items-start justify-between gap-2">
+              <DialogTitle className="min-w-0 flex-1 truncate text-base font-semibold">
+                <HoverName as="span" name={file.name} className="truncate" />
+              </DialogTitle>
+            </div>
+            <a
+              href={shareDownloadUrl(token, file.id, password)}
+              className="text-primary inline-flex items-center gap-1.5 text-sm hover:underline"
+            >
+              <DownloadIcon size={14} /> Download
+            </a>
+            <div className="text-muted-foreground border-t pt-3 text-sm">
+              <div>{file.mimeType || "unknown"}</div>
+              <div>{formatBytes(file.size)}</div>
+              <div>Added {formatDate(file.createdAt)}</div>
+            </div>
+          </aside>
+        </ScrollArea>
       </DialogContent>
     </Dialog>
   )

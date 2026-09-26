@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
+import { ScrollArea } from "@workspace/ui/components/scroll-area"
 import { useNavigate } from "react-router-dom"
 import {
   ArrowLeftIcon,
@@ -339,42 +340,44 @@ export function StoragePage() {
           </div>
         )}
 
-        <div ref={contentRef} className="flex-1 overflow-auto px-4 py-5 md:px-6">
-          {loading ? (
-            <div className="text-muted-foreground py-20 text-center text-sm">Loading…</div>
-          ) : files.length === 0 ? (
-            <div className="text-muted-foreground py-20 text-center text-sm">
-              Nothing stored yet. Upload some files and this fills in.
-            </div>
-          ) : view === "treemap" ? (
-            <div className="flex flex-col gap-4">
-              {group === "folder" && (
-                <FolderTree
-                  tree={tree}
-                  selectedId={currentId}
-                  onSelect={(f) => setPath(chainOf(f.id))}
-                  onHover={setHoverId}
-                  onMenu={(e, f) => openMenu(e, "folder", f)}
+        <ScrollArea ref={contentRef} className="min-h-0 flex-1">
+          <div className="px-4 py-5 md:px-6">
+            {loading ? (
+              <div className="text-muted-foreground py-20 text-center text-sm">Loading…</div>
+            ) : files.length === 0 ? (
+              <div className="text-muted-foreground py-20 text-center text-sm">
+                Nothing stored yet. Upload some files and this fills in.
+              </div>
+            ) : view === "treemap" ? (
+              <div className="flex flex-col gap-4">
+                {group === "folder" && (
+                  <FolderTree
+                    tree={tree}
+                    selectedId={currentId}
+                    onSelect={(f) => setPath(chainOf(f.id))}
+                    onHover={setHoverId}
+                    onMenu={(e, f) => openMenu(e, "folder", f)}
+                  />
+                )}
+                <Treemap
+                  nodes={nodes}
+                  highlight={hoverId}
+                  onOpen={openNode}
+                  onMenu={menuFor}
                 />
-              )}
-              <Treemap
-                nodes={nodes}
-                highlight={hoverId}
-                onOpen={openNode}
-                onMenu={menuFor}
+              </div>
+            ) : (
+              <FileList
+                files={filtered}
+                total={totals.used}
+                folderPath={(id) => pathOf.get(id) ?? null}
+                onOpen={setPreview}
+                onOpenLocation={(id) => nav(`/drive/${id}`)}
+                onMenu={(e, f) => openMenu(e, "file", f)}
               />
-            </div>
-          ) : (
-            <FileList
-              files={filtered}
-              total={totals.used}
-              folderPath={(id) => pathOf.get(id) ?? null}
-              onOpen={setPreview}
-              onOpenLocation={(id) => nav(`/drive/${id}`)}
-              onMenu={(e, f) => openMenu(e, "file", f)}
-            />
-          )}
-        </div>
+            )}
+          </div>
+        </ScrollArea>
 
         {itemMenu}
         <FilePreview
@@ -520,7 +523,7 @@ function FolderTree({
 
   if (roots.length === 0) return null
   return (
-    <div className="max-h-72 overflow-auto rounded-lg border">
+    <ScrollArea className="max-h-72 rounded-lg border">
       <Table>
         <TableHeader className="bg-card sticky top-0 z-10">
           <TableRow className="hover:bg-transparent">
@@ -532,7 +535,7 @@ function FolderTree({
         </TableHeader>
         <TableBody>{rows(roots, tree.size.get(null) ?? 0, 0)}</TableBody>
       </Table>
-    </div>
+    </ScrollArea>
   )
 }
 

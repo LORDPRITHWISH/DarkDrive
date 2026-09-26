@@ -27,6 +27,8 @@ import { ProfilePage } from "@/pages/Profile"
 import { ShareTargetPage } from "@/pages/ShareTarget"
 import { TempLoginPage } from "@/pages/TempLogin"
 import { PairPage } from "@/pages/Pair"
+import { SyncPage } from "@/pages/Sync"
+import { desktop } from "@/lib/desktop"
 import { UploadToaster } from "@/components/UploadToaster"
 import { Toaster } from "@/components/Toaster"
 import { ConfirmDialog } from "@/components/ConfirmDialog"
@@ -107,6 +109,8 @@ function Root() {
   if (loading)
     return <div className="grid min-h-svh place-items-center">Loading…</div>
   if (user) return null
+  // The desktop app is already installed: no pitch, straight to signing in.
+  if (desktop) return <Navigate to="/login" replace />
   return <LandingPage />
 }
 
@@ -296,6 +300,14 @@ export function App() {
           element={
             <Protected>
               <PairPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/sync"
+          element={
+            <Protected>
+              <SyncPage />
             </Protected>
           }
         />

@@ -23,6 +23,8 @@ import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
 import { apiUrl } from "@/lib/config"
 import { apiGet, apiJson } from "@/lib/api"
+import { desktop } from "@/lib/desktop"
+import { DesktopSignIn } from "@/components/DesktopSignIn"
 
 type IconC = ComponentType<{
   size?: number
@@ -387,28 +389,36 @@ export function LoginPage() {
                 of storage — request more from your admin any time.
               </p>
 
-              <Button
-                size="lg"
-                className="mt-8 h-12 w-full text-base"
-                onClick={() =>
-                  (window.location.href = apiUrl("/api/auth/google"))
-                }
-              >
-                <img
-                  src="/Google_Favicon_2025.svg"
-                  alt=""
-                  className="h-5 w-5"
-                />
-                Continue with Google
-              </Button>
-              <Link
-                to="/t"
-                className="text-muted-foreground hover:text-foreground mt-3 block text-center text-xs hover:underline"
-              >
-                Have a temporary sign-in code?
-              </Link>
+              {desktop ? (
+                // Temp codes and dev login are cookie sessions, which the
+                // desktop app can't pair for sync, so it only offers this.
+                <DesktopSignIn />
+              ) : (
+                <>
+                  <Button
+                    size="lg"
+                    className="mt-8 h-12 w-full text-base"
+                    onClick={() =>
+                      (window.location.href = apiUrl("/api/auth/google"))
+                    }
+                  >
+                    <img
+                      src="/Google_Favicon_2025.svg"
+                      alt=""
+                      className="h-5 w-5"
+                    />
+                    Continue with Google
+                  </Button>
+                  <Link
+                    to="/t"
+                    className="text-muted-foreground hover:text-foreground mt-3 block text-center text-xs hover:underline"
+                  >
+                    Have a temporary sign-in code?
+                  </Link>
+                </>
+              )}
 
-              {devLoginEnabled && (
+              {devLoginEnabled && !desktop && (
                 <form
                   onSubmit={submitDevLogin}
                   className="mt-4 rounded-xl border border-dashed p-4"

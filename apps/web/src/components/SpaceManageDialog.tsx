@@ -35,6 +35,7 @@ import { PopConfirm } from "@workspace/ui/components/popconfirm"
 import { useDrive } from "@/store/drive"
 import { useAuth } from "@/store/auth"
 import { apiGet, apiJson } from "@/lib/api"
+import { WEB_ORIGIN } from "@/lib/config"
 import type { Space, SpaceInvite } from "@/lib/types"
 import { SpaceLogo } from "./SpaceLogo"
 import { SpaceEditorDialog } from "./SpaceEditorDialog"
@@ -403,7 +404,7 @@ export function SpaceManageDialog({
             {invites.length > 0 && (
               <ul className="mt-2 flex flex-col gap-1.5">
                 {invites.map((inv) => {
-                  const url = `${window.location.origin}/invite/${inv.token}`
+                  const url = `${WEB_ORIGIN}/invite/${inv.token}`
                   const expired = inv.expiresAt && new Date(inv.expiresAt) < new Date()
                   const exhausted = inv.maxUses != null && inv.useCount >= inv.maxUses
                   const dead = expired || exhausted

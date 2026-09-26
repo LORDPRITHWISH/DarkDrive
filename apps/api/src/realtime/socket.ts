@@ -5,11 +5,12 @@ import { env } from "../env.js"
 import { sessionMiddleware } from "../auth/session.js"
 import { passport } from "../auth/passport.js"
 import { bearerAuth } from "../auth/deviceToken.js"
+import { DESKTOP_ORIGIN } from "../lib/origins.js"
 import type { Request, Response, NextFunction } from "express"
 
 const SOCKET_ORIGINS = Array.from(
   new Set(
-    [env.WEB_URL, ...(env.ALLOWED_ORIGINS?.split(",") ?? [])]
+    [env.WEB_URL, DESKTOP_ORIGIN, ...(env.ALLOWED_ORIGINS?.split(",") ?? [])]
       .map((s) => s.trim().replace(/\/+$/, ""))
       .filter(Boolean)
   )

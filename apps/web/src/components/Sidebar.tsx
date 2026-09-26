@@ -31,6 +31,7 @@ import { useDrive } from "@/store/drive"
 import { useMe } from "@/store/me"
 import { useSidebar } from "@/store/sidebar"
 import { formatBytes } from "@/lib/format"
+import { desktop } from "@/lib/desktop"
 import { TYPE_META, TYPE_ORDER } from "@/lib/fileType"
 import type { QuotaInfo } from "@/lib/types"
 import { Button } from "@workspace/ui/components/button"
@@ -44,9 +45,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@workspace/ui/component
 import { ThemeToggle } from "@/components/ThemeToggle"
 import { MobileTabBar } from "@/components/MobileTabBar"
 
-// Set by the desktop app (apps/desktop, drive-preload.cts) when this page is
-// its drive window. Absent in a browser.
-const desktop = (window as { darkdriveDesktop?: { openSyncSettings(): void } }).darkdriveDesktop
 
 export function Sidebar() {
   const user = useAuth((s) => s.user)
@@ -218,17 +216,7 @@ export function Sidebar() {
             "Synced Folders",
             <ArrowsClockwiseIcon size={18} />
           )}
-        {desktop && (
-          <button
-            type="button"
-            onClick={() => desktop.openSyncSettings()}
-            title={collapsed ? "Sync settings" : undefined}
-            className={navClass(false)}
-          >
-            <DesktopIcon size={18} />
-            {!collapsed && <span>Sync settings</span>}
-          </button>
-        )}
+        {desktop && navItem("/sync", "This computer", <DesktopIcon size={18} />)}
         {navItem("/spaces", "Spaces", <UsersThreeIcon size={18} />)}
         {navItem("/search", "Search", <MagnifyingGlassIcon size={18} />)}
         {navItem("/recent", "Recent", <ClockCounterClockwiseIcon size={18} />)}

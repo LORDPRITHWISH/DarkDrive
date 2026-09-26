@@ -1,5 +1,10 @@
 import { env } from "../env.js"
 
+// The desktop app (apps/desktop) serves its bundled copy of the web app from
+// this origin. Only an app on the user's own machine can claim it — no web
+// page can — and it signs in with a device token, never a cookie.
+export const DESKTOP_ORIGIN = "darkdrive://app"
+
 // One allowlist, two jobs: which origins may call the API cross-origin, and
 // which frontends a freshly signed-in user may be sent back to. They are the
 // same set by definition — an origin we already trust with the session cookie
@@ -13,6 +18,7 @@ export const ALLOWED_ORIGINS: string[] = Array.from(
       env.APP_URL,
       env.WEB_URL,
       env.GALLERY_URL,
+      DESKTOP_ORIGIN,
       ...(env.ALLOWED_ORIGINS?.split(",") ?? []),
     ]
       .map((s) => s?.trim().replace(/\/+$/, ""))

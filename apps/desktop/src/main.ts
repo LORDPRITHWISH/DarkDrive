@@ -1,17 +1,19 @@
-// DarkDrive desktop: the drive itself, plus what a browser can't do.
+// DarkDrive desktop: the web app, plus what a browser can't do.
 //
-// The drive window is the hosted web app, signed in with this computer's
-// device token (drive.ts). Syncing is the apps/sync daemon's job, one copy per
-// synced folder (folders.ts). This is the shell around both: the tray, the
-// sync settings window, sign-in, updates. It keeps the settings the daemons
-// read (settings.ts), starts and stops them, and shows what they print. They run in utility processes rather than in here so
-// the daemon's process.exit()/top-level-await design stays as is, and a crash
-// on either side can't take the other down.
+// The window is apps/web, built into this app and signed in with this
+// computer's device token (drive.ts). Syncing is the apps/sync daemon's job,
+// one copy per synced folder (folders.ts). This is the shell around both: the
+// tray, sign-in, updates, and the bridge the web app's desktop-only pages talk
+// to (drive-preload.cts). It keeps the settings the daemons read
+// (settings.ts), starts and stops them, and shows what they print. They run
+// in utility processes rather than in here so the daemon's
+// process.exit()/top-level-await design stays as is, and a crash on either
+// side can't take the other down.
 //
 // esbuild bundles this file to CommonJS (dist/main.cjs) and the daemon to
 // dist/sync.mjs, so the packaged app ships no node_modules at all. Hence
 // __dirname below despite the package being "type": "module".
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, Notification, shell, Tray } from "electron"
+import { app, dialog, ipcMain, Menu, nativeImage, Notification, shell, Tray } from "electron"
 import { autoUpdater } from "electron-updater"
 import crypto from "node:crypto"
 import fs from "node:fs"
@@ -20,7 +22,7 @@ import os from "node:os"
 import path from "node:path"
 import * as drive from "./drive.js"
 import * as folders from "./folders.js"
-import { httpUrl, readSettings, writeSettings, type Account } from "./settings.js"
+import { apiCall, httpUrl, readSettings, writeSettings, type Settings } from "./settings.js"
 
 const here = __dirname
 const LOG_LINES = 300
@@ -29,14 +31,23 @@ const SIGN_IN_TIMEOUT_MS = 10 * 60 * 1000
 
 // --------------------------------------------------------------- sign-in
 
+/** A bare page in the app's colours, for the browser tab sign-in ends in. */
+const plainPage = (html: string) =>
+  `<!doctype html><meta charset="utf-8"><title>DarkDrive</title><body style="margin:0;min-height:100vh;display:grid;place-items:center;background:#0a0a0a;color:#e5e5e5;font:16px system-ui,sans-serif"><div style="text-align:center">${html}</div></body>`
+
+let cancelSignIn = () => {}
 
 /**
  * Browser sign-in (RFC 8252): listen on a loopback port, send the browser to
  * the server's pairing page, and wait for it to come back with a one-time code
  * that we trade for a device token. Google sign-in happens in the browser the
  * user already trusts, so the app never sees a password.
+ *
+ * A second attempt (the user closed the tab and clicked again) ends the first,
+ * which then resolves null.
  */
-function signIn(apiUrl: string, device: string): Promise<string> {
+function signIn(apiUrl: string, device: string): Promise<{ token: string; id: string } | null> {
+  cancelSignIn()
   const base = httpUrl(apiUrl)
   // Ties the callback to this attempt, so a stray or forged request to the
   // port (another tab, another app) can't feed us someone else's code.
@@ -53,11 +64,11 @@ function signIn(apiUrl: string, device: string): Promise<string> {
           body: JSON.stringify({ code: url.searchParams.get("code") }),
         })
         if (!r.ok) throw new Error(`Sign-in failed (${r.status}). Try again.`)
-        const { token } = (await r.json()) as { token: string }
-        res.writeHead(200, { "content-type": "text/html" }).end(drive.plainPage("Signed in. You can close this tab and go back to DarkDrive."))
-        resolve(token)
+        const got = (await r.json()) as { token: string; id: string }
+        res.writeHead(200, { "content-type": "text/html" }).end(plainPage("Signed in. You can close this tab and go back to DarkDrive."))
+        resolve(got)
       } catch (e) {
-        res.writeHead(500, { "content-type": "text/html" }).end(drive.plainPage("Sign-in failed. Go back to DarkDrive and try again."))
+        res.writeHead(500, { "content-type": "text/html" }).end(plainPage("Sign-in failed. Go back to DarkDrive and try again."))
         reject(e)
       }
       finish()
@@ -65,6 +76,7 @@ function signIn(apiUrl: string, device: string): Promise<string> {
     const timer = setTimeout(() => (finish(), reject(new Error("Sign-in timed out. Try again."))), SIGN_IN_TIMEOUT_MS)
     // close() also drops the browser's keep-alive socket once the reply is out.
     const finish = () => (clearTimeout(timer), server.close())
+    cancelSignIn = () => (finish(), resolve(null))
     server.on("error", reject)
     // 127.0.0.1, never 0.0.0.0: the port must not be reachable from the network.
     server.listen(0, "127.0.0.1", () => {
@@ -75,46 +87,62 @@ function signIn(apiUrl: string, device: string): Promise<string> {
   })
 }
 
+/**
+ * Revoke the token `s` held, once saveAccount has moved the daemons off it.
+ * Best effort: it's forgotten here either way, so an offline server only
+ * keeps a dead row (Profile → Devices can still revoke it).
+ */
+async function revoke(s: Settings) {
+  if (s.token && s.deviceId) await apiCall(s, "DELETE", `/api/devices/${s.deviceId}`).catch(() => {})
+}
+
+/**
+ * Daemons read the token and device name when they start, so an account
+ * change restarts them all, and the window reloads under the new one.
+ * `fresh` is a new sign-in, which may be a different account: its folders are
+ * then checked against that account.
+ */
+async function saveAccount(patch: Partial<Settings>, fresh = false) {
+  await folders.pause()
+  try {
+    const s = { ...readSettings(), ...patch }
+    // Offline right after signing in: keep the list, the daemons will say.
+    if (fresh) s.folders = await folders.forAccount(s).catch(() => s.folders)
+    writeSettings(s)
+  } finally {
+    folders.resume(readSettings())
+    drive.authorize(readSettings())
+  }
+}
+
 // ------------------------------------------------------------------- log
 
 const log: string[] = []
 
-function emit(channel: string, value: unknown) {
-  win?.webContents.send(channel, value)
+// Batched: the first sync of a big folder prints a line per file.
+let changeQueued = false
+function changed() {
+  if (changeQueued) return
+  changeQueued = true
+  setTimeout(() => ((changeQueued = false), drive.send("desktop:changed")), 200)
 }
 
 function addLine(line: string) {
   log.push(line)
   if (log.length > LOG_LINES) log.shift()
-  emit("log", line)
+  changed()
 }
 
 folders.events.on("line", addLine)
 folders.events.on("change", () => {
-  emit("running", folders.isRunning())
+  changed()
   refreshTray()
 })
 
-// -------------------------------------------------------------------- ui
+// ------------------------------------------------------------------ tray
 
 const icon = nativeImage.createFromPath(path.join(here, "../ui/icon.png"))
-let win: BrowserWindow | null = null
 let tray: Tray | null = null
-
-function show() {
-  if (win) return void (win.show(), win.focus())
-  win = new BrowserWindow({
-    width: 560,
-    height: 720,
-    title: "DarkDrive",
-    icon,
-    backgroundColor: "#0a0a0a",
-    autoHideMenuBar: true,
-    webPreferences: { preload: path.join(here, "preload.cjs") },
-  })
-  win.loadFile(path.join(here, "../ui/index.html"))
-  win.on("closed", () => (win = null))
-}
 
 function refreshTray() {
   if (!tray) return
@@ -140,8 +168,8 @@ function refreshTray() {
             },
           ]
         : []),
-      { label: "Open DarkDrive", click: drive.open },
-      { label: "Sync settings…", click: show },
+      { label: "Open DarkDrive", click: () => drive.open() },
+      { label: "Sync settings…", click: () => drive.open("/sync") },
       { type: "separator" },
       { label: "Quit", click: () => app.quit() },
     ])
@@ -164,7 +192,6 @@ autoUpdater.on("update-downloaded", ({ version }) => {
   if (process.platform === "win32") return autoUpdater.quitAndInstall(true, true)
   updateReady = version
   addLine(`[desktop] version ${version} downloaded — restart to install`)
-  emit("update", version)
   refreshTray()
   new Notification({ title: "DarkDrive update ready", body: `Restart DarkDrive to update to ${version}.` }).show()
 })
@@ -186,74 +213,91 @@ function registerAutostart() {
   )
 }
 
-ipcMain.handle("settings:get", () => readSettings())
+// ---------------------------------------------------------------- bridge
+// What drive-preload.cts calls, for the web app (apps/web lib/desktop.ts).
 
-/**
- * Daemons read the token and device name when they start, so an account
- * change restarts them all. `fresh` is a new sign-in, which may be a
- * different account: its folders are then checked against that account.
- */
-async function saveAccount(a: Account, fresh = false) {
-  await folders.pause()
-  try {
-    const s = { ...readSettings(), apiUrl: a.apiUrl, webUrl: a.webUrl, token: a.token, device: a.device }
-    // Offline right after signing in: keep the list, the daemons will say.
-    if (fresh) s.folders = await folders.forAccount(s).catch(() => s.folders)
-    writeSettings(s)
-  } finally {
-    folders.resume(readSettings())
-    drive.authorize(readSettings())
-  }
+function bridge(channel: string, fn: (...args: any[]) => unknown) {
+  ipcMain.handle(`desktop:${channel}`, (e, ...args) => {
+    if (!drive.fromApp(e)) throw new Error("Not allowed.")
+    return fn(...args)
+  })
 }
 
-ipcMain.handle("settings:save", (_e, a: Account) => saveAccount(a))
-ipcMain.handle("sign-in", async (_e, a: Account) => {
-  const token = await signIn(a.apiUrl, a.device)
-  await saveAccount({ ...a, token }, true)
-  drive.open() // the browser has focus now; bring the user back
+ipcMain.on("desktop:config", (e) => {
+  const { apiUrl, webUrl } = readSettings()
+  // Always answered: sendSync would hang the page otherwise.
+  e.returnValue = drive.fromApp(e) ? { apiUrl, webUrl } : null
 })
+
+bridge("state", () => {
+  const { apiUrl, webUrl, device, folders: list } = readSettings()
+  return { apiUrl, webUrl, device, folders: list, syncing: folders.isRunning(), log, version: app.getVersion(), updateReady }
+})
+
+bridge("sign-in", async () => {
+  const old = readSettings()
+  const got = await signIn(old.apiUrl, old.device)
+  if (!got) return
+  await saveAccount({ token: got.token, deviceId: got.id }, true)
+  drive.open() // the browser has focus now; bring the user back
+  await revoke(old) // signed in again, maybe as someone else
+})
+
+bridge("sign-out", async () => {
+  const old = readSettings()
+  await saveAccount({ token: "", deviceId: "" })
+  await revoke(old)
+})
+
+// Where this computer signs in. A token is only good on the server that made it.
+bridge("save-server", async (a: { apiUrl: string; webUrl: string; device: string }) => {
+  const old = readSettings()
+  const moved = httpUrl(String(a.apiUrl)) !== httpUrl(old.apiUrl)
+  await saveAccount({ apiUrl: a.apiUrl, webUrl: a.webUrl, device: a.device, ...(moved && { token: "", deviceId: "" }) })
+  if (moved) await revoke(old)
+})
+
+bridge("syncing", (on: boolean) => (on ? folders.resume(readSettings()) : folders.pause()))
+bridge("update:install", () => autoUpdater.quitAndInstall())
 
 async function pickDir(title: string): Promise<string | null> {
   const r = await dialog.showOpenDialog({ title, buttonLabel: "Choose", properties: ["openDirectory", "createDirectory"] })
   return r.canceled ? null : r.filePaths[0]
 }
 
-ipcMain.handle("drive:open", () => drive.open())
-ipcMain.handle("folders:available", () => folders.available(readSettings()))
-ipcMain.handle("folders:add-local", async () => {
+bridge("folders:available", () => folders.available(readSettings()))
+bridge("folders:add-local", async () => {
   const dir = await pickDir("Choose a folder to sync with DarkDrive")
-  return dir ? folders.addLocal(readSettings(), dir) : readSettings().folders
+  if (dir) await folders.addLocal(readSettings(), dir)
 })
 // Takes only the id from the page; the name, which becomes a path on disk,
 // comes fresh from the server.
-ipcMain.handle("folders:add-remote", async (_e, id: string) => {
+bridge("folders:add-remote", async (id: string) => {
   const remote = (await folders.available(readSettings())).find((r) => r.id === id)
   if (!remote) throw new Error("That folder isn't in DarkDrive's Synced Folders any more.")
   const parent = await pickDir(`Choose where to keep "${remote.name}"`)
-  return parent ? folders.addRemote(readSettings(), remote, parent) : readSettings().folders
+  if (parent) folders.addRemote(readSettings(), remote, parent)
 })
-ipcMain.handle("folders:remove", (_e, id: string) => folders.remove(readSettings(), id))
-ipcMain.handle("folders:open", (_e, id: string) => {
+bridge("folders:remove", (id: string) => folders.remove(readSettings(), id))
+bridge("folders:open", (id: string) => {
   const f = readSettings().folders.find((f) => f.id === id)
   if (f) shell.openPath(f.dir)
 })
-ipcMain.handle("state:get", () => ({ running: folders.isRunning(), log, version: app.getVersion(), updateReady }))
-ipcMain.handle("update:install", () => autoUpdater.quitAndInstall())
-ipcMain.handle("sync:start", () => folders.resume(readSettings()))
-ipcMain.handle("sync:stop", () => folders.pause())
+
+// ------------------------------------------------------------------ main
 
 // Two copies would run two daemons over each state file.
 if (!app.requestSingleInstanceLock()) app.quit()
 else {
-  app.on("second-instance", drive.open)
+  app.on("second-instance", () => drive.open())
   // Closing the window leaves sync running in the tray; Quit is in its menu.
   app.on("window-all-closed", () => {})
   app.on("before-quit", () => void folders.pause())
   app.whenReady().then(() => {
     tray = new Tray(icon.resize({ width: 22, height: 22 }))
-    tray.on("click", drive.open)
+    tray.on("click", () => drive.open())
     refreshTray()
-    drive.setup(show)
+    drive.setup()
     drive.authorize(readSettings())
     folders.resume(readSettings())
     // Dev runs would register the bare electron binary, and have nothing to update.
@@ -262,8 +306,8 @@ else {
       checkForUpdates()
       setInterval(checkForUpdates, UPDATE_CHECK_MS)
     }
-    // --hidden is for launching at login: straight to the tray.
-    if (!readSettings().token) show()
-    else if (!process.argv.includes("--hidden")) drive.open()
+    // --hidden is for launching at login: straight to the tray, unless
+    // there's no sign-in yet to sync with.
+    if (!readSettings().token || !process.argv.includes("--hidden")) drive.open()
   })
 }

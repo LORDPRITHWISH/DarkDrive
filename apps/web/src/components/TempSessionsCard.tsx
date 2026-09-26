@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@workspace/ui/components/select"
 import { apiGet, apiJson } from "@/lib/api"
+import { WEB_ORIGIN } from "@/lib/config"
 import { formatDate, relativeTime } from "@/lib/format"
 import { parseUA } from "@/pages/admin/UserDetail"
 import { toast } from "@/store/toast"
@@ -100,7 +101,7 @@ export function TempSessionsCard() {
     toast.success("Copied.")
   }
 
-  const link = created ? `${window.location.origin}/t/${created.code}` : ""
+  const link = created ? `${WEB_ORIGIN}/t/${created.code}` : ""
   const now = Date.now()
 
   return (
@@ -205,7 +206,7 @@ export function TempSessionsCard() {
               <p className="text-muted-foreground text-xs">
                 Scan the QR or open the login link on the other device to sign in straight
                 away — or go to{" "}
-                <span className="text-foreground font-mono">{window.location.host}/t</span> there
+                <span className="text-foreground font-mono">{new URL(WEB_ORIGIN).host}/t</span> there
                 and type the code.
               </p>
               <div className="flex gap-2">

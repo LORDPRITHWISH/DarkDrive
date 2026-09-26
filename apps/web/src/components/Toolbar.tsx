@@ -15,6 +15,7 @@ import {
   LinkSimpleIcon,
   LinkIcon,
   TelegramLogoIcon,
+  GearSixIcon,
 } from "@phosphor-icons/react"
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -131,6 +132,15 @@ export function Toolbar() {
             onClose={() => setLinkFilesOpen(false)}
             onLinked={() => void refresh()}
           />
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => nav(`/spaces/${folder.spaceId}`)}
+            title="Manage members, name, and settings for this space"
+          >
+            <GearSixIcon size={16} />
+            <span className="hidden md:inline">Manage space</span>
+          </Button>
         </>
       )}
 

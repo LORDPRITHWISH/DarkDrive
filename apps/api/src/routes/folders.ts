@@ -6,7 +6,7 @@ import path from "node:path"
 import multer from "multer"
 import { prisma } from "../db/prisma.js"
 import { currentUser, requireAuth } from "../middleware/auth.js"
-import { getFolderWithAccess, assertUserRootFolderId } from "../lib/access.js"
+import { getFolderWithAccess, assertUserRootFolderId, memberOf, visibleTo } from "../lib/access.js"
 import { renderImage } from "../lib/thumbnails.js"
 import { storage, newStorageKey, newScratchPath, SCRATCH_ROOT } from "../storage/index.js"
 import { logActivity } from "../lib/activity.js"
@@ -53,7 +53,12 @@ foldersRouter.get("/:id/contents", async (req, res) => {
   const [folders, realFiles, shortcuts, path] = await Promise.all([
     prisma.folder.findMany({
       where: {
-        parentId: folder.id,
+        // "Synced Folders" also lists the ones other people share with the
+        // user (FolderMember), which live under their owners' roots.
+        OR: [
+          { parentId: folder.id },
+          ...(folder.id === user.syncRootFolderId ? [{ members: { some: { userId: user.id } } }] : []),
+        ],
         ...(includeTrashed ? {} : { isTrashed: false }),
         ...(includeHidden ? {} : { isHidden: false }),
       },
@@ -62,6 +67,7 @@ foldersRouter.get("/:id/contents", async (req, res) => {
     prisma.file.findMany({
       where: {
         folderId: folder.id,
+        ...(folder.ownerId === user.id ? {} : visibleTo(user.id)),
         ...(includeTrashed ? {} : { isTrashed: false }),
         ...(includeHidden ? {} : { isHidden: false }),
       },
@@ -70,6 +76,7 @@ foldersRouter.get("/:id/contents", async (req, res) => {
     prisma.fileShortcut.findMany({
       where: {
         folderId: folder.id,
+        ...(folder.ownerId === user.id ? {} : visibleTo(user.id)),
         file: {
           ...(includeTrashed ? {} : { isTrashed: false }),
           ...(includeHidden ? {} : { isHidden: false }),
@@ -212,8 +219,26 @@ foldersRouter.patch("/:id", async (req, res) => {
       parentId: z.string().optional(),
     })
     .parse(req.body)
-  const folder = await getFolderWithAccess(user.id, req.params.id, "write")
+  // Binning is a permission of its own in a shared synced folder
+  // (FolderMember), so a request for that and nothing else needs only that.
+  const binning = body.isTrashed === true
+  const folder = await getFolderWithAccess(
+    user.id,
+    req.params.id,
+    binning && Object.keys(body).length === 1 ? "trash" : "write"
+  )
   if (!folder) return res.status(403).json({ error: "forbidden" })
+  const member = folder.ownerId !== user.id ? await memberOf(user.id, folder.id) : null
+  if (member) {
+    // A member works inside the space or shared folder. Its top folder is the
+    // owner's to rename, move or bin: any of those would do it to everyone.
+    if (member.root === folder.id) return res.status(403).json({ error: "forbidden" })
+    // Binned, or moved out of it, a folder is gone for everyone there. Unlike
+    // a file there is no asking for one: a member who has to ask can't.
+    const leaves =
+      body.parentId !== undefined && (await memberOf(user.id, body.parentId))?.root !== member.root
+    if ((binning || leaves) && member.delete !== "YES") return res.status(403).json({ error: "forbidden" })
+  }
 
   let targetFolderName: string | undefined
   if (body.parentId) {

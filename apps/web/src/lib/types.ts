@@ -38,6 +38,7 @@ export type NotificationType =
   | "space_removed"
   | "space_access_requested"
   | "space_access_denied"
+  | "folder_share"
   | "quota_upgrade_approved"
   | "quota_upgrade_denied"
   | "quota_changed"
@@ -404,9 +405,27 @@ export type SearchResponse = {
   scope: { id: string; name: string } | null
 }
 
+// The permission layer a space and a shared synced folder have in common
+// (apps/api lib/access.ts): what a member may do about adding and changing,
+// and about deleting. "ASK" holds the change until the owner agrees; "NO" to
+// both is read-only.
+export type Can = "YES" | "ASK" | "NO"
+export type MemberCan = { canUpload: Can; canDelete: Can }
+/** A change by a member who has to ask: something added, or something to delete. */
+export type MemberRequest = {
+  id: string
+  path: string
+  size: number
+  kind: "upload" | "delete"
+  by: string
+}
+
 export type SpaceMember = {
   userId: string
+  // The coarse form of the two settings below: VIEWER when canUpload is "NO".
   role: "VIEWER" | "EDITOR"
+  canUpload: Can
+  canDelete: Can
   name: string
   email: string
   avatarUrl?: string | null

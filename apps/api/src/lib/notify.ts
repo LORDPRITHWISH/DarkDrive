@@ -9,6 +9,7 @@ export type NotificationType =
   | "space_removed"
   | "space_access_requested"
   | "space_access_denied"
+  | "folder_share"
   | "quota_upgrade_approved"
   | "quota_upgrade_denied"
   | "quota_changed"
@@ -33,6 +34,37 @@ export async function notify(
     ?.to(`user:${userId}`)
     .emit("notification:new", { ...n, createdAt: n.createdAt.toISOString() })
   return n
+}
+
+// Tells the owner of a shared synced folder or a space that a member's change
+// waits for their yes (File.pending, FileShortcut.pending). `rootId` is its
+// top folder (Member.root). Once per member and place until it's read: a sync
+// client asks about a hundred files one at a time.
+export async function notifyRequest(rootId: string, by: { name: string }) {
+  const root = await prisma.folder.findUnique({
+    where: { id: rootId },
+    select: {
+      name: true, ownerId: true, parentId: true,
+      spaceRootOf: { select: { id: true, name: true, ownerId: true } },
+    },
+  })
+  if (!root) return
+  const space = root.spaceRootOf
+  const to = space?.ownerId ?? root.ownerId
+  const title = `${by.name} has changes waiting for your OK in "${space?.name ?? root.name}"`
+  const unread = await prisma.notification.findFirst({
+    where: { userId: to, type: "folder_share", title, readAt: null },
+  })
+  if (unread) return
+  await notify(to, {
+    type: "folder_share",
+    title,
+    body: space
+      ? "Managing the space lists them, to agree to or decline."
+      : "Share… on the folder lists them, to agree to or decline.",
+    // The space, or where the folder is listed and so where its Share… is.
+    link: space ? `/spaces/${space.id}` : `/drive/${root.parentId}`,
+  })
 }
 
 const QUOTA_NEAR_LIMIT_THRESHOLD = 0.9

@@ -5,6 +5,7 @@ import type {
   Breadcrumb,
   FileItem,
   Folder,
+  MemberCan,
   PublicSpace,
   Space,
 } from "@/lib/types"
@@ -267,8 +268,14 @@ type DriveState = {
       isPublic?: boolean
     }
   ) => Promise<void>
-  addMember: (spaceId: string, email: string, role?: "VIEWER" | "EDITOR") => Promise<void>
-  updateMemberRole: (spaceId: string, userId: string, role: "VIEWER" | "EDITOR") => Promise<void>
+  // What a member may do: the two settings, or the
+  // coarser role the "ask to upload" flow speaks, an editor being yes to both.
+  addMember: (spaceId: string, email: string, can?: Partial<MemberCan>) => Promise<void>
+  updateMemberRole: (
+    spaceId: string,
+    userId: string,
+    patch: Partial<MemberCan> & { role?: "VIEWER" | "EDITOR" }
+  ) => Promise<void>
   removeMember: (spaceId: string, userId: string) => Promise<void>
   deleteSpace: (spaceId: string) => Promise<void>
   joinSpace: (spaceId: string) => Promise<void>
@@ -481,13 +488,16 @@ export const useDrive = create<DriveState>((set, get) => ({
     const list = type === "folder" ? get().folders : get().files
     const name = list.find((x) => x.id === id)?.name
     try {
-      await apiJson(
+      const { pending } = await apiJson<{ pending?: string | null }>(
         `/api/${type === "folder" ? "folders" : "files"}/${id}`,
         "PATCH",
         { isTrashed: true }
       )
       await get().refresh()
       const label = name ? `"${name}"` : type === "folder" ? "Folder" : "File"
+      // In a shared synced folder where deleting has to be asked for, it
+      // stays until the folder's owner agrees.
+      if (pending === "delete") return void toast.info(`${label} goes once the folder's owner agrees.`)
       toast.action(`${label} moved to bin`, {
         label: "Undo",
         onClick: () => get().restoreItem(type, id),
@@ -564,8 +574,10 @@ export const useDrive = create<DriveState>((set, get) => ({
     }
   },
   removeShortcut: async (shortcutId) => {
-    await apiJson(`/api/files/shortcuts/${shortcutId}`, "DELETE")
+    const { pending } = await apiJson<{ pending?: string }>(`/api/files/shortcuts/${shortcutId}`, "DELETE")
     await get().refresh()
+    // In a space where deleting has to be asked for, it stays until then.
+    if (pending === "delete") toast.info("It goes once the space's owner agrees.")
   },
   addFileToSpace: async (fileId, targetFolderId) => {
     await apiJson(`/api/files/${fileId}/shortcut`, "POST", { targetFolderId })
@@ -912,9 +924,9 @@ export const useDrive = create<DriveState>((set, get) => ({
       throw e
     }
   },
-  addMember: async (spaceId, email, role = "EDITOR") => {
+  addMember: async (spaceId, email, can) => {
     try {
-      await apiJson(`/api/spaces/${spaceId}/members`, "POST", { email, role })
+      await apiJson(`/api/spaces/${spaceId}/members`, "POST", { email, ...can })
       await get().loadSpaces()
       toast.success(`Invited ${email}.`)
     } catch (e) {
@@ -923,8 +935,8 @@ export const useDrive = create<DriveState>((set, get) => ({
       throw e
     }
   },
-  updateMemberRole: async (spaceId, userId, role) => {
-    await apiJson(`/api/spaces/${spaceId}/members/${userId}`, "PATCH", { role })
+  updateMemberRole: async (spaceId, userId, patch) => {
+    await apiJson(`/api/spaces/${spaceId}/members/${userId}`, "PATCH", patch)
     await get().loadSpaces()
   },
   removeMember: async (spaceId, userId) => {

@@ -49,7 +49,7 @@ const tomorrow = () => new Date(new Date().setHours(24, 0, 0, 0)).getTime()
 // "Synced Folders", which is where the web shows them.
 export function SyncPage() {
   const [state, setState] = useState<DesktopState | null>(null)
-  const [available, setAvailable] = useState<{ id: string; name: string }[] | null>(null)
+  const [available, setAvailable] = useState<{ id: string; name: string; sharedBy?: string }[] | null>(null)
   const temp = useAuth((s) => !!s.user?.tempSessionExpiresAt)
   const nav = useNavigate()
 
@@ -208,6 +208,7 @@ export function SyncPage() {
                         }
                       >
                         {r.name}
+                        {r.sharedBy && <span className="text-muted-foreground">from {r.sharedBy}</span>}
                       </Button>
                     ))}
                   </div>

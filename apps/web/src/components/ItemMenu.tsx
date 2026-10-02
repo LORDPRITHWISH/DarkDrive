@@ -31,7 +31,9 @@ export function useItemMenu({
   const moveItems = useDrive((s) => s.moveItems)
 
   const [menu, setMenu] = useState<Menu | null>(null)
-  const [share, setShare] = useState<{ type: "FILE" | "FOLDER"; id: string; name: string } | null>(null)
+  const [share, setShare] = useState<
+    { type: "FILE" | "FOLDER"; id: string; name: string; parentId?: string | null } | null
+  >(null)
   const [moveTarget, setMoveTarget] = useState<
     { type: "folder" | "file"; id: string; name: string; parentId: string | null } | null
   >(null)
@@ -98,7 +100,11 @@ export function useItemMenu({
             closeMenu()
           }}
           onShare={() => {
-            setShare({ type: menu.type === "folder" ? "FOLDER" : "FILE", id: menu.id, name: menu.name })
+            setShare(
+              menu.type === "folder"
+                ? { type: "FOLDER", id: menu.id, name: menu.name, parentId: menu.locationId }
+                : { type: "FILE", id: menu.id, name: menu.name }
+            )
             closeMenu()
           }}
           onToggleStar={async () => {
@@ -121,6 +127,7 @@ export function useItemMenu({
           resourceType={share.type}
           resourceId={share.id}
           resourceName={share.name}
+          parentId={share.parentId}
         />
       )}
 

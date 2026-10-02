@@ -24,27 +24,18 @@ import { DateTimePicker } from "@/components/DateTimePicker"
 import { Switch } from "@workspace/ui/components/switch"
 import { Badge } from "@workspace/ui/components/badge"
 import { Avatar, AvatarImage, AvatarFallback } from "@workspace/ui/components/avatar"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@workspace/ui/components/select"
 import { PopConfirm } from "@workspace/ui/components/popconfirm"
 import { useDrive } from "@/store/drive"
 import { useAuth } from "@/store/auth"
 import { apiGet, apiJson } from "@/lib/api"
 import { WEB_ORIGIN } from "@/lib/config"
-import type { Space, SpaceInvite } from "@/lib/types"
+import type { MemberCan, MemberRequest, Space, SpaceInvite } from "@/lib/types"
+import { CanSelects, Requests } from "./MemberCan"
 import { SpaceLogo } from "./SpaceLogo"
 import { SpaceEditorDialog } from "./SpaceEditorDialog"
 
-type Role = "VIEWER" | "EDITOR"
-const ROLE_LABELS: Record<Role, string> = {
-  VIEWER: "Viewer",
-  EDITOR: "Editor",
-}
+// A new member starts with a free hand, as an editor always had.
+const FREE: MemberCan = { canUpload: "YES", canDelete: "YES" }
 
 type Contact = {
   id: string
@@ -115,7 +106,9 @@ export function SpaceManageDialog({
   )
   const space = liveSpace ?? initialSpace
   const [email, setEmail] = useState("")
-  const [role, setRole] = useState<Role>("EDITOR")
+  const [can, setCan] = useState<MemberCan>(FREE)
+  // What members who have to ask are waiting on (apps/api routes/spaces.ts).
+  const [requests, setRequests] = useState<MemberRequest[]>([])
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [contacts, setContacts] = useState<Contact[]>([])
@@ -136,7 +129,7 @@ export function SpaceManageDialog({
   useEffect(() => {
     if (!spaceId) return
     setEmail("")
-    setRole("EDITOR")
+    setCan(FREE)
     setErr(null)
     setBusy(false)
     setShowSuggestions(false)
@@ -151,9 +144,21 @@ export function SpaceManageDialog({
     setInvites(data.invites)
   }
 
+  async function loadRequests() {
+    if (!spaceId) return
+    const data = await apiGet<{ requests: MemberRequest[] }>(`/api/spaces/${spaceId}/requests`)
+    setRequests(data.requests)
+  }
+
+  async function answer(ids: string[], approve: boolean) {
+    await apiJson(`/api/spaces/${spaceId}/requests`, "POST", { ids, approve })
+    await loadRequests()
+  }
+
   useEffect(() => {
     if (!spaceId || !iAmOwner) return
     void loadInvites()
+    void loadRequests()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spaceId, iAmOwner])
 
@@ -272,7 +277,7 @@ export function SpaceManageDialog({
     setBusy(true)
     setErr(null)
     try {
-      await addMember(space.id, email.trim(), role)
+      await addMember(space.id, email.trim(), can)
       setEmail("")
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "failed"
@@ -550,19 +555,6 @@ export function SpaceManageDialog({
                   </ScrollArea>
                 )}
               </div>
-              <Select
-                items={ROLE_LABELS}
-                value={role}
-                onValueChange={(v) => setRole(v as Role)}
-              >
-                <SelectTrigger className="rounded-xl">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="VIEWER">Viewer</SelectItem>
-                  <SelectItem value="EDITOR">Editor</SelectItem>
-                </SelectContent>
-              </Select>
               <Button
                 onClick={invite}
                 disabled={!email.trim() || busy}
@@ -572,11 +564,20 @@ export function SpaceManageDialog({
                 {busy ? "…" : "Invite"}
               </Button>
             </div>
+            {/* What they may do: "Ask me first" holds what they add, or want
+                deleted, until the owner agrees. Both "No" only looks. */}
+            <CanSelects className="mt-2" value={can} onChange={(patch) => setCan({ ...can, ...patch })} />
             {err && (
               <div className="text-destructive mt-2 text-xs font-medium">
                 {err}
               </div>
             )}
+          </div>
+        )}
+
+        {iAmOwner && requests.length > 0 && (
+          <div className="border-b p-4">
+            <Requests requests={requests} onAnswer={(ids, approve) => void answer(ids, approve)} />
           </div>
         )}
 
@@ -592,7 +593,7 @@ export function SpaceManageDialog({
                 return (
                   <li
                     key={m.userId}
-                    className="group/member hover:bg-accent/60 flex items-center gap-3 rounded-xl p-2 transition-colors"
+                    className="group/member hover:bg-accent/60 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl p-2 transition-colors"
                   >
                     <Avatar className="ring-background h-9 w-9 ring-2">
                       {m.avatarUrl && <AvatarImage src={m.avatarUrl} alt="" />}
@@ -634,7 +635,7 @@ export function SpaceManageDialog({
                         <Button
                           variant="ghost"
                           size="icon-sm"
-                          onClick={() => void updateMemberRole(space.id, m.userId, "EDITOR")}
+                          onClick={() => void updateMemberRole(space.id, m.userId, { role: "EDITOR" })}
                           className="text-emerald-600 hover:bg-emerald-500/15 dark:text-emerald-400"
                           title="Approve upload access"
                           aria-label={`Approve ${m.name}`}
@@ -653,27 +654,10 @@ export function SpaceManageDialog({
                         </Button>
                       </div>
                     )}
-                    {isOwner ? (
+                    {isOwner && (
                       <span className="text-muted-foreground mr-1 text-xs font-medium">
                         Admin
                       </span>
-                    ) : (
-                      <Select
-                        items={ROLE_LABELS}
-                        value={m.role}
-                        disabled={!iAmOwner}
-                        onValueChange={(v) =>
-                          void updateMemberRole(space.id, m.userId, v as Role)
-                        }
-                      >
-                        <SelectTrigger size="sm" className="text-xs font-medium">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="VIEWER">Viewer</SelectItem>
-                          <SelectItem value="EDITOR">Editor</SelectItem>
-                        </SelectContent>
-                      </Select>
                     )}
                     {iAmOwner && !isOwner && (
                       <Button
@@ -686,6 +670,14 @@ export function SpaceManageDialog({
                       >
                         <TrashIcon size={14} />
                       </Button>
+                    )}
+                    {!isOwner && (
+                      <CanSelects
+                        className="basis-full pl-12"
+                        value={m}
+                        disabled={!iAmOwner}
+                        onChange={(patch) => void updateMemberRole(space.id, m.userId, patch)}
+                      />
                     )}
                   </li>
                 )

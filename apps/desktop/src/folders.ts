@@ -171,10 +171,14 @@ export async function available(s: Settings): Promise<Remote[]> {
   return (await listRemote(s)).filter((r) => !s.folders.some((f) => f.id === r.id))
 }
 
+// Whether path `a` is `b` or inside it. Windows doesn't care about case in a
+// path, and Explorer, a folder dialog and a saved setting don't always agree on it.
+const fold = (p: string) => (process.platform === "win32" ? p.toLowerCase() : p)
+const within = (a: string, b: string) => fold(a) === fold(b) || fold(a).startsWith(fold(b) + path.sep)
+
 // Two daemons over one tree would upload the shared files twice, into two
 // different DarkDrive folders, and then both push every edit to them.
 function assertFree(s: Settings, dir: string) {
-  const within = (a: string, b: string) => a === b || a.startsWith(b + path.sep)
   const clash = s.folders.find((f) => within(dir, f.dir) || within(f.dir, dir))
   if (clash) throw new Error(`That overlaps "${clash.name}" (${clash.dir}), which is already synced.`)
 }
@@ -239,7 +243,7 @@ export function localPath(s: Settings, type: "file" | "folder", id: string): str
  * a file open in its folder, or null if no synced folder has it (yet).
  */
 export function routeOf(s: Settings, abs: string): string | null {
-  const f = s.folders.find((f) => abs === f.dir || abs.startsWith(f.dir + path.sep))
+  const f = s.folders.find((f) => within(abs, f.dir))
   if (!f) return null
   const rel = path.relative(f.dir, abs).split(path.sep).join("/")
   if (!rel) return `/drive/${f.id}`

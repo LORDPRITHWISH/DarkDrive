@@ -33,6 +33,10 @@ import { inHours, isTime, tomorrow, wanted } from "./schedule.js"
 import { apiCall, FOREVER, httpUrl, readSettings, writeSettings, type Hours, type Settings, type SyncedFolder } from "./settings.js"
 
 const here = __dirname
+
+// Windows files an app's notifications under this id, and shows them only if
+// it's the one the installer gave the Start Menu shortcut: appId in package.json.
+if (process.platform === "win32") app.setAppUserModelId("live.zenux.darkdrive")
 const LOG_LINES = 300
 const UPDATE_CHECK_MS = 4 * 60 * 60 * 1000
 const SIGN_IN_TIMEOUT_MS = 10 * 60 * 1000
@@ -442,7 +446,8 @@ function handle(argv: string[]): boolean {
   const link = argv.find((a) => a.startsWith("darkdrive://"))
   // A link, and only a link: whatever else is on its command line may have
   // been put there by whoever wrote it (CVE-2018-1000006), and the actions
-  // below are for the file manager alone.
+  // below are for the file manager alone. On Windows Electron already won't
+  // start with anything after a URL; this is the same rule everywhere else.
   if (link) {
     void openLink(link)
     return true

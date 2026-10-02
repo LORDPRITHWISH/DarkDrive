@@ -23,7 +23,31 @@ const RUNS = new Set(
 
 const PLACES = ["home", "desktop", "documents", "downloads", "pictures", "videos", "music"] as const
 
-function places(s: Settings) {
+// Left out of a listing. Hidden is a leading dot here; on Windows it's an
+// attribute Node can't read, so the clutter every folder there has goes by name.
+const HIDDEN =
+  process.platform === "win32" ? /^[.$]|^(desktop\.ini|thumbs\.db|system volume information)$|^ntuser\./i : /^\./
+
+const DRIVE_CHECK_MS = 300
+
+/**
+ * Windows' drives, which no folder contains: there's no going up from C:\ to
+ * find D:\. Each gets a moment to answer and no longer, since a network drive
+ * that's gone can take half a minute to say so.
+ */
+async function drives(): Promise<string[]> {
+  if (process.platform !== "win32") return []
+  const roots = [..."CDEFGHIJKLMNOPQRSTUVWXYZ"].map((letter) => `${letter}:\\`)
+  const there = (root: string) =>
+    Promise.race([
+      fs.promises.access(root).then(() => true, () => false),
+      new Promise<boolean>((done) => setTimeout(done, DRIVE_CHECK_MS, false)),
+    ])
+  const up = await Promise.all(roots.map(there))
+  return roots.filter((_, i) => up[i])
+}
+
+async function places(s: Settings) {
   const found = new Map<string, string>() // dir -> name, so one shows once
   for (const name of PLACES) {
     let dir: string
@@ -35,6 +59,7 @@ function places(s: Settings) {
     if (!found.has(dir) && fs.existsSync(dir)) found.set(dir, name === "home" ? "Home" : path.basename(dir))
   }
   for (const f of s.folders) if (!found.has(f.dir)) found.set(f.dir, f.name)
+  for (const root of await drives()) if (!found.has(root)) found.set(root, root.slice(0, 2))
   return [...found].map(([dir, name]) => ({ name, dir }))
 }
 
@@ -46,15 +71,22 @@ const clean = (p: unknown) => {
 
 // ponytail: a stat per entry, all at once. Page it if folders with tens of
 // thousands of files turn out to matter.
-export function list(s: Settings, where?: unknown): LocalListing {
+export async function list(s: Settings, where?: unknown): Promise<LocalListing> {
   const dir = where === undefined || where === null ? app.getPath("home") : clean(where)
   const entries: LocalEntry[] = []
   for (const name of fs.readdirSync(dir)) {
-    if (name.startsWith(".")) continue
+    if (HIDDEN.test(name)) continue
     const p = path.join(dir, name)
-    // Followed, so a link to a folder opens as one; a broken one is skipped.
-    const st = fs.statSync(p, { throwIfNoEntry: false })
-    if (!st || !(st.isDirectory() || st.isFile())) continue
+    // Followed, so a link to a folder opens as one. Skipped if it can't be: a
+    // broken link, or something this user may not look at, which mustn't
+    // take the rest of the folder with it (every Windows home has several).
+    let st: fs.Stats
+    try {
+      st = fs.statSync(p)
+    } catch {
+      continue
+    }
+    if (!(st.isDirectory() || st.isFile())) continue
     entries.push({ name, path: p, dir: st.isDirectory(), size: st.size, modified: st.mtimeMs, route: folders.routeOf(s, p) })
   }
   entries.sort((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name, undefined, { numeric: true }))
@@ -63,7 +95,7 @@ export function list(s: Settings, where?: unknown): LocalListing {
     parents.unshift({ name: path.basename(at) || at, dir: at })
     if (path.dirname(at) === at) break
   }
-  return { dir, parents, places: places(s), entries }
+  return { dir, parents, places: await places(s), entries }
 }
 
 export async function open(where: unknown) {

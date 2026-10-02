@@ -17,6 +17,7 @@ import {
   assertUserRootFolderId,
   getFileWithAccess,
   getFolderWithAccess,
+  memberOf,
 } from "../lib/access.js"
 import { allowFrameEmbedding } from "../lib/embed.js"
 import { streamStoredFile } from "../lib/stream.js"
@@ -31,7 +32,7 @@ import {
   type StoryboardMeta,
 } from "../lib/thumbnails.js"
 import { probeAudioStreams, getAudioVariant } from "../lib/audioTracks.js"
-import { maybeNotifyQuotaNearLimit } from "../lib/notify.js"
+import { maybeNotifyQuotaNearLimit, notifyRequest } from "../lib/notify.js"
 import { logActivity, mergeActivityEvents } from "../lib/activity.js"
 import { importUrlToFile } from "../lib/urlImport.js"
 import { readCaptureDate } from "../lib/exif.js"
@@ -240,7 +241,17 @@ filesRouter.post("/upload/init", async (req, res) => {
   let folderId = body.folderId
   if (body.replaceFileId) {
     const target = await getFileWithAccess(user.id, body.replaceFileId, "write")
-    if (!target) return res.status(403).json({ error: "forbidden" })
+    if (!target) {
+      // A member of a shared synced folder who has to ask can add files but
+      // not change one in place. Answering as for a conflict is what makes a
+      // sync client keep its copy under another name, which then goes up as a
+      // new file and waits for the owner; the touch is what brings this one
+      // back to it on its next poll.
+      const theirs = await getFileWithAccess(user.id, body.replaceFileId, "add")
+      if (!theirs) return res.status(403).json({ error: "forbidden" })
+      await prisma.file.update({ where: { id: theirs.id }, data: { updatedAt: new Date() } })
+      return res.status(409).json({ error: "needs_approval" })
+    }
     if (
       body.expectedSha256 &&
       target.sha256 &&
@@ -263,7 +274,7 @@ filesRouter.post("/upload/init", async (req, res) => {
       return res.status(413).json({ error: "quota_exceeded" })
   } else {
     if (!folderId) return res.status(400).json({ error: "folder_id_required" })
-    const folder = await getFolderWithAccess(user.id, folderId, "write")
+    const folder = await getFolderWithAccess(user.id, folderId, "add")
     if (!folder) return res.status(403).json({ error: "forbidden" })
 
     // Quota always charged to the uploader, even for shared-space uploads.
@@ -346,7 +357,7 @@ filesRouter.post("/upload/:uploadId/complete", async (req, res) => {
   // Re-check access at completion — membership may have changed mid-upload.
   const folder = s.replaceFileId
     ? null
-    : await getFolderWithAccess(user.id, s.folderId, "write")
+    : await getFolderWithAccess(user.id, s.folderId, "add")
   const replaceTarget = s.replaceFileId
     ? await getFileWithAccess(user.id, s.replaceFileId, "write")
     : null
@@ -500,6 +511,11 @@ filesRouter.post("/upload/:uploadId/complete", async (req, res) => {
     ? await assertUserRootFolderId(user)
     : folder.id
   const primarySpaceId = intoSharedSpace ? null : folder.spaceId
+  // From a member who has to ask, it waits, seen by nobody else, until the
+  // owner agrees: the file itself in a shared synced folder (File.pending),
+  // the link to it in a space (FileShortcut.pending).
+  const member = folder.ownerId !== user.id ? await memberOf(user.id, folder.id) : null
+  const waiting = member?.upload === "ASK" ? { pending: "upload", pendingById: user.id } : {}
 
   const rec = await prisma.$transaction(async (tx) => {
     const file = await tx.file.create({
@@ -513,11 +529,12 @@ filesRouter.post("/upload/:uploadId/complete", async (req, res) => {
         storageKey: key,
         sha256,
         takenAt,
+        ...(intoSharedSpace ? {} : waiting),
       },
     })
     if (intoSharedSpace) {
       await tx.fileShortcut.create({
-        data: { fileId: file.id, folderId: folder.id },
+        data: { fileId: file.id, folderId: folder.id, ...waiting },
       })
     }
     return file
@@ -529,6 +546,7 @@ filesRouter.post("/upload/:uploadId/complete", async (req, res) => {
   sessions.delete(req.params.uploadId)
 
   await logActivity({ userId: user.id, fileId: rec.id, action: "upload" })
+  if (member?.upload === "ASK") void notifyRequest(member.root, user)
 
   // Kick off thumbnail generation in the background so the upload response
   // isn't blocked on ffmpeg/libreoffice. Missing thumbnails are also generated
@@ -720,18 +738,23 @@ filesRouter.post("/:id/shortcut", async (req, res) => {
     .parse(req.body)
   const file = await getFileWithAccess(user.id, req.params.id, "read")
   if (!file) return res.status(404).json({ error: "not_found" })
-  const target = await getFolderWithAccess(user.id, targetFolderId, "write")
+  const target = await getFolderWithAccess(user.id, targetFolderId, "add")
   if (!target) return res.status(403).json({ error: "forbidden_target" })
+  // From a member who has to ask, the link waits for the owner like an upload.
+  const member = target.ownerId !== user.id ? await memberOf(user.id, target.id) : null
+  const asks = member?.upload === "ASK"
   const sc = await prisma.fileShortcut.upsert({
     where: { fileId_folderId: { fileId: file.id, folderId: target.id } },
     update: {},
-    create: { fileId: file.id, folderId: target.id },
+    create: { fileId: file.id, folderId: target.id, ...(asks && { pending: "upload", pendingById: user.id }) },
   })
+  if (member && asks) void notifyRequest(member.root, user)
   res.status(201).json(sc)
 })
 
-// Remove a shortcut (unlink a file from a folder it was linked into).
-// Requires write access on the folder containing the shortcut.
+// Remove a shortcut (unlink a file from a folder it was linked into). For a
+// member that is deleting from the folder the shortcut is in, so it takes
+// that setting: one who has to ask leaves it marked for the owner to decide.
 filesRouter.delete("/shortcuts/:id", async (req, res) => {
   const user = currentUser(req)
   const sc = await prisma.fileShortcut.findUnique({
@@ -739,8 +762,16 @@ filesRouter.delete("/shortcuts/:id", async (req, res) => {
     include: { folder: true },
   })
   if (!sc) return res.status(404).json({ error: "not_found" })
-  const folder = await getFolderWithAccess(user.id, sc.folderId, "write")
+  const folder = await getFolderWithAccess(user.id, sc.folderId, "trash")
   if (!folder) return res.status(403).json({ error: "forbidden" })
+  const member = folder.ownerId !== user.id ? await memberOf(user.id, folder.id) : null
+  // One of their own that still waits for a yes is nobody else's yet.
+  const draft = sc.pending === "upload" && sc.pendingById === user.id
+  if (member?.delete === "ASK" && !draft) {
+    await prisma.fileShortcut.update({ where: { id: sc.id }, data: { pending: "delete", pendingById: user.id } })
+    void notifyRequest(member.root, user)
+    return res.status(202).json({ ok: true, pending: "delete" })
+  }
   await prisma.fileShortcut.delete({ where: { id: sc.id } })
   res.json({ ok: true })
 })
@@ -855,11 +886,14 @@ async function appendFolderToArchive(
       orderBy: { name: "asc" },
     }),
     prisma.file.findMany({
-      where: { folderId, isTrashed: false },
+      // Not what a member added to a shared synced folder that its owner
+      // hasn't agreed to yet (File.pending): that isn't in the folder so far.
+      where: { folderId, isTrashed: false, OR: [{ pending: null }, { pending: "delete" }] },
       orderBy: { name: "asc" },
     }),
     prisma.fileShortcut.findMany({
-      where: { folderId, file: { isTrashed: false } },
+      // Nor a link a space member added that waits the same way.
+      where: { folderId, file: { isTrashed: false }, OR: [{ pending: null }, { pending: "delete" }] },
       include: { file: true },
     }),
   ])
@@ -1480,15 +1514,47 @@ filesRouter.patch("/:id", async (req, res) => {
       playbackPositionSec: z.number().min(0).nullable().optional(),
     })
     .parse(req.body)
-  const file = await getFileWithAccess(user.id, req.params.id, "write")
+  // Binning is a permission of its own in a shared synced folder
+  // (FolderMember), so a request for that and nothing else needs only that.
+  const binning = body.isTrashed === true
+  const only = Object.keys(body).length === 1
+  const file = await getFileWithAccess(user.id, req.params.id, binning && only ? "trash" : "write")
   if (!file) return res.status(403).json({ error: "forbidden" })
+  // Set for a member of the space or shared synced folder the file is in.
+  // None of it applies to a file that is still theirs alone: in a synced
+  // folder one of their own that waits for the owner's yes; in a space any of
+  // their own, which is there because they put it there (elsewhere whose file
+  // it is comes first in a space, see getFileWithAccess).
+  const member = binning || body.folderId ? await memberOf(user.id, file.folderId) : null
+  const theirs = file.ownerId === user.id && (member?.kind === "space" || file.pending === "upload")
+  if (member && !theirs) {
+    // Moved out of the space or shared folder, a file is gone for everyone in it.
+    const leaves =
+      body.folderId !== undefined && (await memberOf(user.id, body.folderId))?.root !== member.root
+    if ((binning || leaves) && member.delete !== "YES") {
+      if (member.delete === "NO" || leaves || !only) return res.status(403).json({ error: "forbidden" })
+      // Has to ask. The file stays as it is, marked for the owner to decide
+      // on, and a sync client that had already dropped its copy gets it back
+      // with the next poll.
+      const asked = await prisma.file.update({
+        where: { id: file.id },
+        data: { pending: "delete", pendingById: user.id },
+      })
+      void notifyRequest(member.root, user)
+      return res.status(202).json({ ...asked, size: Number(asked.size) })
+    }
+  }
   let targetFolderName: string | undefined
   if (body.folderId) {
     const target = await getFolderWithAccess(user.id, body.folderId, "write")
     if (!target) return res.status(403).json({ error: "forbidden_target" })
     targetFolderName = target.name
   }
-  const updated = await prisma.file.update({ where: { id: file.id }, data: body })
+  const updated = await prisma.file.update({
+    where: { id: file.id },
+    // In the bin, nothing is left to wait for.
+    data: { ...body, ...(binning && { pending: null, pendingById: null }) },
+  })
 
   const logs: Promise<unknown>[] = []
   if (body.name !== undefined && body.name !== file.name)

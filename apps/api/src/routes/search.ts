@@ -2,7 +2,7 @@ import { Router } from "express"
 import { z } from "zod"
 import { prisma } from "../db/prisma.js"
 import { currentUser, requireAuth } from "../middleware/auth.js"
-import { getFolderWithAccess } from "../lib/access.js"
+import { getFolderWithAccess, visibleTo } from "../lib/access.js"
 import { fileCategory } from "../lib/fileType.js"
 
 export const searchRouter = Router()
@@ -87,7 +87,7 @@ searchRouter.get("/", async (req, res) => {
     const folder = await getFolderWithAccess(user.id, folderId, "read")
     if (!folder) return res.status(404).json({ error: "not_found" })
     const ids = await subtreeFolderIds(folder.id)
-    fileScopeWhere = { folderId: { in: ids } }
+    fileScopeWhere = { folderId: { in: ids }, ...(folder.ownerId === user.id ? {} : visibleTo(user.id)) }
     // Exclude the scope root itself — it's the search container, not a hit.
     folderScopeWhere = { id: { in: ids }, NOT: { id: folder.id } }
     scopeFolder = { id: folder.id, name: folder.name }

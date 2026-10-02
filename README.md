@@ -169,11 +169,15 @@ Vite proxies `/api` and `/socket.io` to the API.
 | `POST` | `/api/shares/resolve/:token` | public resolve (password body optional) |
 | `GET`  | `/api/shares/:token/download[/:fileId]` | public download |
 | `GET/POST/DELETE` | `/api/spaces` | create / list / delete |
-| `POST/DELETE` | `/api/spaces/:id/members[/:userId]` | add / remove |
+| `POST/PATCH/DELETE` | `/api/spaces/:id/members[/:userId]` | add / change `{ role? , canUpload?, canDelete? }` / remove |
+| `GET/POST` | `/api/spaces/:id/requests` | what members who have to ask are waiting on / answer `{ ids, approve }` |
 | `GET`  | `/api/devices/pair` | HTML page to mint a device token |
 | `GET/POST/DELETE` | `/api/devices[/:id]` | list / create / revoke device tokens |
 | `GET`  | `/api/sync/changes` | `?since=<ISO>` — delta feed for sync clients |
 | `POST` | `/api/sync/folder` | `{ path }` → folder id, creating missing segments |
+| `GET/POST` | `/api/sync/folders` | the synced folders, own and shared with you (`sharedBy`) / start a new one |
+| `GET/POST/DELETE` | `/api/sync/folders/:id/members[/:userId]` | who a synced folder is shared with / share by `{ email, canUpload?, canDelete? }`, or change those / stop |
+| `GET/POST` | `/api/sync/folders/:id/requests` | what members who have to ask are waiting on / answer `{ ids, approve }` |
 | `GET`  | `/api/sync/lan-key` | the account's key for LAN sync between its own computers; a new one each UTC day |
 
 ## Folder sync (`apps/sync`)
@@ -202,6 +206,39 @@ chunked endpoints.
 kept as `name (conflict from <device> <time>).ext` and both end up on every
 device. `/api/files/upload/init` takes an `expectedSha256` and answers `409` if
 the server moved on underneath, which is what triggers it.
+
+**Shared folders.** A synced folder can be shared with other accounts (Share…
+on it in Synced Folders → Sync with people). Each of them then finds it under
+"Keep a synced folder here…" in the desktop app and syncs it like one of their
+own: the daemon is the same, the server just resolves the folder against its
+owner's tree. A file stays its uploader's, and on their quota. Only the owner
+can rename, bin or share the folder itself, or delete for good.
+
+What a member may change is two settings, each Yes / Ask me first / No: one
+for adding and editing, one for deleting. Both No is read-only: the folder on
+their computer is a mirror, what they delete comes back and what they add
+stays local. With "Ask me first":
+
+- a file they add goes up but waits, unseen by everyone else, until the owner
+  agrees (Share… lists what's waiting); declined, it goes to their bin
+- an edit to an existing file doesn't land: their version is kept as a
+  conflict copy, which waits like any added file, and the original returns
+- a file they delete stays for everyone, and comes back to them, until the
+  owner agrees
+- renaming, moving and deleting folders need a plain Yes
+
+**A space's members have the same two settings** (Manage on the space), and
+the server decides with the same code (`memberMay` in `lib/access.ts`). The
+old roles are the coarse way to say it: a viewer is No to both, an editor Yes.
+The two things stay apart all the same: separate members (`SpaceMember`,
+`FolderMember`), separate routes, a space is never synced, and what "adding a
+file" means differs. In a space it is a link to a file in your own drive, so
+it is the link that waits for the owner, and a declined one is simply dropped.
+
+`/api/sync/changes` tells each client its settings (`can`), since a sync
+client can't be refused after the fact: the change is already on its disk.
+Two people editing one file is the same conflict as two devices.
+`src/routes/sync.share.test.sh` in `apps/api` runs all of it against a dev API.
 
 Environment: `DD_HOME` relocates the config/state dir (run several syncs on one
 machine), `DD_POLL_MS` changes the 5s poll interval, `DD_API` sets the server

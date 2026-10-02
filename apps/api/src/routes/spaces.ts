@@ -4,9 +4,11 @@ import fs from "node:fs"
 import path from "node:path"
 import multer from "multer"
 import { nanoid } from "nanoid"
+import type { MemberCan as MemberCanSetting, SpaceRole } from "@prisma/client"
 import { prisma } from "../db/prisma.js"
 import { currentUser, denyTempSession, requireAuth } from "../middleware/auth.js"
 import { notify } from "../lib/notify.js"
+import { spaceCan, visibleTo } from "../lib/access.js"
 import { storage, newStorageKey, newScratchPath, SCRATCH_ROOT } from "../storage/index.js"
 
 export const spacesRouter = Router()
@@ -34,6 +36,26 @@ const logoUpload = multer({
 // else is either a VIEWER (read-only) or an EDITOR (read + write). There is
 // no separate ADMIN member role.
 const MemberRole = z.enum(["VIEWER", "EDITOR"])
+// What a member may do is the two settings a shared synced folder's members
+// have too (lib/access.ts): adding and changing, and deleting, each NO, ASK
+// or YES. The roles are the coarse way to say it, and still how joining, an
+// invite link and "ask to upload" do: a viewer is NO to both, an editor YES.
+const MemberCan = z.enum(["NO", "ASK", "YES"])
+const MemberSettings = { role: MemberRole.optional(), canUpload: MemberCan.optional(), canDelete: MemberCan.optional() }
+
+// What to store for a request that names a role, the settings, or both (the
+// settings win). A setting neither names is left as it is; `role` follows
+// canUpload, so a member who may add, even by asking, counts as an editor.
+function memberData(b: { role?: "VIEWER" | "EDITOR"; canUpload?: "NO" | "ASK" | "YES"; canDelete?: "NO" | "ASK" | "YES" }) {
+  const fromRole = b.role && (b.role === "VIEWER" ? "NO" : "YES")
+  const canUpload = b.canUpload ?? fromRole
+  const canDelete = b.canDelete ?? fromRole
+  return {
+    canUpload,
+    canDelete,
+    ...(canUpload && { role: canUpload === "NO" ? ("VIEWER" as const) : ("EDITOR" as const) }),
+  }
+}
 
 // Settings/membership actions (rename, delete, invites, roster) are
 // owner-only — except system admins, who get the same override here as
@@ -50,7 +72,9 @@ function projectMembers(
     ownerId: string
     members: {
       userId: string
-      role: string
+      role: SpaceRole
+      canUpload: MemberCanSetting | null
+      canDelete: MemberCanSetting | null
       editorRequestedAt: Date | null
       user: {
         name: string
@@ -68,6 +92,8 @@ function projectMembers(
       // Any stale ADMIN rows are surfaced as EDITOR — the data model no
       // longer supports a separate admin role.
       role: m.role === "ADMIN" ? "EDITOR" : (m.role as "VIEWER" | "EDITOR"),
+      canUpload: spaceCan(m).upload,
+      canDelete: spaceCan(m).delete,
       name: m.user.name,
       email: m.user.email,
       avatarUrl: m.user.avatarUrl,
@@ -77,6 +103,8 @@ function projectMembers(
     members.unshift({
       userId: space.ownerId,
       role: "EDITOR",
+      canUpload: "YES",
+      canDelete: "YES",
       name: space.owner.name,
       email: space.owner.email,
       avatarUrl: space.owner.avatarUrl,
@@ -193,6 +221,8 @@ spacesRouter.get("/:id/overview", async (req, res) => {
       ? prisma.fileShortcut.findMany({
           where: {
             folderId: { in: folderIds },
+            // Not a link another member added that the owner hasn't agreed to.
+            ...(isOwner ? {} : visibleTo(user.id)),
             file: { isTrashed: false, isHidden: false },
           },
           include: { file: true },
@@ -423,9 +453,10 @@ spacesRouter.post("/:id/request-editor", async (req, res) => {
 
 spacesRouter.post("/:id/members", async (req, res) => {
   const user = currentUser(req)
-  const { email, role } = z
-    .object({ email: z.string().email(), role: MemberRole.default("EDITOR") })
-    .parse(req.body)
+  const { email, ...settings } = z.object({ email: z.string().email(), ...MemberSettings }).parse(req.body)
+  // Named neither way, a new member is an editor, as before.
+  const data = memberData(settings.role || settings.canUpload ? settings : { ...settings, role: "EDITOR" })
+  const role = data.role!
   const space = await prisma.space.findUnique({
     where: { id: req.params.id },
   })
@@ -441,8 +472,8 @@ spacesRouter.post("/:id/members", async (req, res) => {
   })
   const member = await prisma.spaceMember.upsert({
     where: { spaceId_userId: { spaceId: space.id, userId: target.id } },
-    update: { role },
-    create: { spaceId: space.id, userId: target.id, role },
+    update: data,
+    create: { spaceId: space.id, userId: target.id, ...data },
   })
   if (!existing) {
     void notify(target.id, {
@@ -463,7 +494,7 @@ spacesRouter.post("/:id/members", async (req, res) => {
 
 spacesRouter.patch("/:id/members/:userId", async (req, res) => {
   const user = currentUser(req)
-  const { role } = z.object({ role: MemberRole }).parse(req.body)
+  const data = memberData(z.object(MemberSettings).parse(req.body))
   const space = await prisma.space.findUnique({
     where: { id: req.params.id },
   })
@@ -472,19 +503,23 @@ spacesRouter.patch("/:id/members/:userId", async (req, res) => {
     return res.status(403).json({ error: "forbidden" })
   if (req.params.userId === space.ownerId)
     return res.status(400).json({ error: "cannot_modify_owner" })
-  const m = await prisma.spaceMember.update({
+  const had = await prisma.spaceMember.findUnique({
     where: { spaceId_userId: { spaceId: space.id, userId: req.params.userId } },
-    // Any role change (including approving an upload-access request via the
-    // dedicated button, which just calls this same endpoint) resolves a
-    // pending request, so it's always safe to clear it here.
-    data: { role, editorRequestedAt: null },
+  })
+  if (!had) return res.status(404).json({ error: "not_found" })
+  const m = await prisma.spaceMember.update({
+    where: { id: had.id },
+    // Any change of what they may do (including approving an upload-access
+    // request via the dedicated button, which just calls this same endpoint)
+    // resolves a pending request, so it's always safe to clear it here.
+    data: { ...data, editorRequestedAt: null },
   })
   void notify(req.params.userId, {
     type: "space_role_changed",
     title:
-      role === "EDITOR"
+      spaceCan(had).upload === "NO" && spaceCan(m).upload !== "NO"
         ? `You can now upload to "${space.name}"`
-        : `Your role in "${space.name}" changed to ${role}`,
+        : `What you can do in "${space.name}" changed`,
     link: `/drive/${space.rootFolderId}`,
   })
   res.json(m)
@@ -530,6 +565,88 @@ spacesRouter.delete("/:id/members/:userId", async (req, res) => {
     title: `You were removed from "${space.name}"`,
   })
   res.json({ ok: true })
+})
+
+// What waits on the owner: links that members who have to ask have added to
+// the space, or want removed (FileShortcut.pending), and files of the space
+// itself they want binned (File.pending). The same asking as in a shared
+// synced folder (routes/sync.ts), over what a space is made of.
+async function requestsIn(spaceId: string) {
+  const [links, files] = await Promise.all([
+    prisma.fileShortcut.findMany({
+      where: { pending: { not: null }, folder: { spaceId }, file: { isTrashed: false } },
+      select: { id: true, pending: true, pendingById: true, file: { select: { name: true, size: true } } },
+      orderBy: { createdAt: "asc" },
+    }),
+    prisma.file.findMany({
+      where: { pending: { not: null }, spaceId, isTrashed: false },
+      select: { id: true, name: true, size: true, pending: true, pendingById: true },
+      orderBy: { updatedAt: "asc" },
+    }),
+  ])
+  const rows = [
+    ...links.map((l) => ({ ...l, ...l.file, link: true })),
+    ...files.map((f) => ({ ...f, link: false })),
+  ]
+  const askers = await prisma.user.findMany({
+    where: { id: { in: rows.flatMap((r) => r.pendingById ?? []) } },
+    select: { id: true, name: true },
+  })
+  const names = new Map(askers.map((u) => [u.id, u.name]))
+  return rows.map((r) => ({
+    id: r.id,
+    link: r.link,
+    path: r.name,
+    size: Number(r.size),
+    kind: r.pending as "upload" | "delete",
+    byId: r.pendingById,
+    by: names.get(r.pendingById ?? "") ?? "Someone",
+  }))
+}
+
+spacesRouter.get("/:id/requests", async (req, res) => {
+  const user = currentUser(req)
+  const space = await prisma.space.findUnique({ where: { id: req.params.id } })
+  if (!space) return res.status(404).json({ error: "not_found" })
+  if (!canManageSpace(space, user)) return res.status(403).json({ error: "forbidden" })
+  res.json({ requests: await requestsIn(space.id) })
+})
+
+// The owner's answer to some of them. An added link is shown to everyone on
+// yes and dropped on no (the file stays where it is, in its uploader's
+// drive). On yes to a removal the link goes, or the space's own file is
+// binned; on no it stays as it was.
+spacesRouter.post("/:id/requests", async (req, res) => {
+  const user = currentUser(req)
+  const body = z
+    .object({ ids: z.array(z.string()).min(1).max(1000), approve: z.boolean() })
+    .safeParse(req.body)
+  if (!body.success) return res.status(400).json({ error: "invalid" })
+  const { approve } = body.data
+  const space = await prisma.space.findUnique({ where: { id: req.params.id } })
+  if (!space) return res.status(404).json({ error: "not_found" })
+  if (!canManageSpace(space, user)) return res.status(403).json({ error: "forbidden" })
+  // Through the same listing, so an id is only ever one waiting in this space.
+  const ids = new Set(body.data.ids)
+  const rows = (await requestsIn(space.id)).filter((r) => ids.has(r.id))
+  const of = (link: boolean, gone: boolean) =>
+    rows.filter((r) => r.link === link && ((r.kind === "upload") !== approve) === gone).map((r) => r.id)
+  const settled = { pending: null, pendingById: null }
+  await prisma.$transaction([
+    prisma.fileShortcut.deleteMany({ where: { id: { in: of(true, true) } } }),
+    prisma.fileShortcut.updateMany({ where: { id: { in: of(true, false) } }, data: settled }),
+    prisma.file.updateMany({ where: { id: { in: of(false, true) } }, data: { ...settled, isTrashed: true } }),
+    prisma.file.updateMany({ where: { id: { in: of(false, false) } }, data: settled }),
+  ])
+  const askers = new Map<string, number>()
+  for (const r of rows) if (r.byId) askers.set(r.byId, (askers.get(r.byId) ?? 0) + 1)
+  for (const [to, n] of askers)
+    void notify(to, {
+      type: "space_role_changed",
+      title: `${user.name} ${approve ? "agreed to" : "declined"} ${n} ${n === 1 ? "change" : "changes"} of yours in "${space.name}"`,
+      link: `/spaces/${space.id}`,
+    })
+  res.json({ ok: true, count: rows.length })
 })
 
 // Create an invite link (owner-only). expiresAt/maxUses are both optional —

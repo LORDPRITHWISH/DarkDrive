@@ -70,8 +70,8 @@ export type Desktop = {
   pauseUntil(until: number): Promise<void>
   /** Only sync between these times each day, or all day (null). */
   setSyncHours(hours: SyncHours | null): Promise<void>
-  /** Folders in Synced Folders this computer doesn't keep yet. */
-  availableFolders(): Promise<{ id: string; name: string }[]>
+  /** Folders in Synced Folders this computer doesn't keep yet. `sharedBy` is whose, on one someone else shared. */
+  availableFolders(): Promise<{ id: string; name: string; sharedBy?: string }[]>
   addLocalFolder(): Promise<void>
   addRemoteFolder(id: string): Promise<void>
   removeFolder(id: string): Promise<void>

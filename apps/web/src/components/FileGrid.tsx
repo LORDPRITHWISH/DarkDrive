@@ -123,7 +123,7 @@ export function FileGrid() {
   const nav = useNavigate()
   const [menu, setMenu] = useState<MenuPos | null>(null)
   const [share, setShare] = useState<
-    { type: "FILE" | "FOLDER"; id: string; name: string } | null
+    { type: "FILE" | "FOLDER"; id: string; name: string; parentId?: string | null } | null
   >(null)
   const [propertiesFolder, setPropertiesFolder] = useState<Folder | null>(null)
   const [propertiesFile, setPropertiesFile] = useState<FileItem | null>(null)
@@ -404,6 +404,7 @@ export function FileGrid() {
                     type: menu.type === "folder" ? "FOLDER" : "FILE",
                     id: menu.id,
                     name: menu.name,
+                    parentId: menuFolder?.parentId,
                   })
                   closeMenu()
                 }
@@ -441,6 +442,7 @@ export function FileGrid() {
           resourceType={share.type}
           resourceId={share.id}
           resourceName={share.name}
+          parentId={share.parentId}
         />
       )}
 

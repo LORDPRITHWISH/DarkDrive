@@ -202,6 +202,14 @@ type RemoteFile = {
 }
 type RemoteFolder = { id: string; path: string; deleted: boolean }
 
+// What this account may do in the folder, as the server last said: all YES in
+// a folder of its own, a member's settings in one shared with it. NO has to
+// be honoured here, since the server refusing a change already made on disk
+// would only fail every pass. ASK is the server's to sort out: it takes the
+// change and holds it for the folder's owner.
+type Can = "YES" | "ASK" | "NO"
+let can: { upload: Can; delete: Can } = { upload: "YES", delete: "YES" }
+
 const LAN_IDLE_MS = 5000
 
 /**
@@ -239,7 +247,7 @@ async function fromLan(sha: string, tmp: string): Promise<boolean> {
   return false
 }
 
-async function download(f: RemoteFile) {
+async function download(f: Pick<RemoteFile, "id" | "path" | "sha256">) {
   const abs = localPath(f.path)
   fs.mkdirSync(path.dirname(abs), { recursive: true })
   // Straight to a .dd-part and renamed on success, so a killed transfer never
@@ -280,10 +288,11 @@ function reprefix(from: string, to: string) {
 }
 
 async function pull() {
-  const data = await api<{ cursor: string; folders: RemoteFolder[]; files: RemoteFile[] }>(
+  const data = await api<{ cursor: string; can?: typeof can; folders: RemoteFolder[]; files: RemoteFile[] }>(
     "GET",
     `/api/sync/changes?since=${encodeURIComponent(state.cursor)}&root=${encodeURIComponent(cfg.remoteFolderId)}`
   )
+  if (data.can) can = data.can
 
   // Folders first: creating and moving directories before the files that go
   // in them means a renamed folder carries its children on disk for free.
@@ -456,11 +465,16 @@ async function push() {
   const missing = new Map<string, Entry>()
   for (const [rel, entry] of Object.entries(state.files))
     if (!disk.has(rel)) missing.set(rel, entry)
+  // Only with a free hand, though: a rename is otherwise a new file to ask
+  // about, and the old one to put back or ask about, like any other.
   const movedFrom = new Map<string, string[]>()
-  for (const [rel, entry] of missing)
-    movedFrom.set(entry.sha, [...(movedFrom.get(entry.sha) ?? []), rel])
+  if (can.upload === "YES")
+    for (const [rel, entry] of missing)
+      movedFrom.set(entry.sha, [...(movedFrom.get(entry.sha) ?? []), rel])
 
   for (const [rel, info] of disk) {
+    // Read-only here: what's new or changed on this computer stays on it.
+    if (can.upload === "NO") break
     const known = state.files[rel]
     // The whole point of tracking size+mtime: skip the hash entirely for the
     // overwhelming majority of files, which haven't changed.
@@ -488,9 +502,15 @@ async function push() {
 
   // Whatever is still missing after move detection really was deleted.
   for (const [rel, entry] of missing) {
-    await api("PATCH", `/api/files/${entry.id}`, { isTrashed: true })
+    // Not this account's to delete: it comes back.
+    if (can.delete === "NO") {
+      await download({ id: entry.id, path: rel, sha256: entry.sha })
+      continue
+    }
+    const { pending } = await api<{ pending?: string }>("PATCH", `/api/files/${entry.id}`, { isTrashed: true })
     delete state.files[rel]
-    console.log(`  ⌫ ${rel}`)
+    // Held for the folder's owner: the next pull brings it back until they agree.
+    console.log(pending === "delete" ? `  ? ${rel} (deleting it waits for the folder's owner)` : `  ⌫ ${rel}`)
   }
 
   // Deepest first, so a removed tree trashes leaves before their parents.
@@ -498,6 +518,11 @@ async function push() {
     .filter(([, rel]) => !dirs.has(rel))
     .sort((a, b) => b[1].split("/").length - a[1].split("/").length)
   for (const [id, rel] of goneFolders) {
+    // A folder is only binned with a free hand. Otherwise it stays, here too.
+    if (can.delete !== "YES") {
+      fs.mkdirSync(localPath(rel), { recursive: true })
+      continue
+    }
     await api("PATCH", `/api/folders/${id}`, { isTrashed: true })
     delete state.folders[id]
     console.log(`  ⌫ ${rel}/`)

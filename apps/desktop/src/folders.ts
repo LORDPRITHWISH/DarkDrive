@@ -14,7 +14,8 @@ import path from "node:path"
 import readline from "node:readline"
 import { apiCall, FOLDERS_DIR, writeSettings, type Settings, type SyncedFolder } from "./settings.js"
 
-type Remote = { id: string; name: string }
+// sharedBy: whose it is, on one someone else shared with this account.
+type Remote = { id: string; name: string; sharedBy?: string }
 /** How a folder's sync is doing. "paused" is no daemon at all. */
 export type Status = "syncing" | "synced" | "error" | "paused"
 // What a daemon reports (apps/sync, "parent").
@@ -166,7 +167,7 @@ export async function pause() {
 
 const listRemote = (s: Settings) => apiCall<Remote[]>(s, "GET", "/api/sync/folders")
 
-/** Folders in DarkDrive's Synced Folders that this computer doesn't sync yet. */
+/** Folders in DarkDrive's Synced Folders, the account's own or shared with it, that this computer doesn't sync yet. */
 export async function available(s: Settings): Promise<Remote[]> {
   return (await listRemote(s)).filter((r) => !s.folders.some((f) => f.id === r.id))
 }
@@ -208,7 +209,7 @@ export function addRemote(s: Settings, remote: Remote, parent: string) {
     throw new Error(`"${remote.name}" can't be used as a folder name on this computer.`)
   const dir = path.join(parent, remote.name)
   assertFree(s, dir)
-  return add(s, { ...remote, dir })
+  return add(s, { id: remote.id, name: remote.name, dir })
 }
 
 /** Stop syncing a folder. Its files stay where they are, here and on DarkDrive. */

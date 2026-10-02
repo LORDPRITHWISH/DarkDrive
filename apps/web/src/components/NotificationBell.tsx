@@ -27,6 +27,7 @@ function iconFor(type: NotificationType) {
     case "space_removed":
     case "space_access_requested":
     case "space_access_denied":
+    case "folder_share":
       return <UsersThreeIcon size={size} weight="fill" className="text-sky-500" />
     case "quota_upgrade_approved":
       return <CheckCircleIcon size={size} weight="fill" className="text-emerald-500" />

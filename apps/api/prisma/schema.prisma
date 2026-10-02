@@ -64,6 +64,7 @@ model User {
   activityLogs  ActivityLog[]
   deviceTokens  DeviceToken[]
   tempSessions  TempSession[]
+  sharedFolders FolderMember[]
   telegramSession TelegramSession?
   telegramBotLink TelegramBotLink?
 }
@@ -238,10 +239,43 @@ model Folder {
   shares       Share[]
   shortcuts    FileShortcut[] @relation("FolderShortcuts")
   activityLogs ActivityLog[]
+  members      FolderMember[]
 
   @@index([ownerId, parentId])
   @@index([spaceId, parentId])
   @@index([deletedAt])
+}
+
+// What a member may do about one kind of change: nothing, do it, or ask the
+// owner, who then says yes or no (File.pending, FileShortcut.pending). The
+// one permission layer of the two things that have members, a shared synced
+// folder (FolderMember) and a space (SpaceMember), which are otherwise kept
+// apart: each has its own members, and a space is never synced.
+enum MemberCan {
+  NO
+  ASK
+  YES
+}
+
+// Someone else who syncs one of a user's synced folders (a direct child of
+// their "Synced Folders"). A member reads everything under it, on the web and
+// from their own computers, and changes it as far as the two settings here
+// allow (NO and NO is read-only); none can delete for good or share it on.
+// What a member adds stays theirs (File.ownerId), and so on their quota.
+model FolderMember {
+  folderId  String
+  folder    Folder    @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Adding files and folders, and changing, renaming and moving them. ASK
+  // only stretches to adding files, which then wait unseen by everyone else.
+  canUpload MemberCan @default(YES)
+  // Binning. ASK only stretches to files, which stay until the owner agrees.
+  canDelete MemberCan @default(YES)
+  createdAt DateTime  @default(now())
+
+  @@id([folderId, userId])
+  @@index([userId])
 }
 
 model File {
@@ -296,6 +330,12 @@ model File {
   // everything not imported from Telegram; Postgres treats those NULLs as
   // distinct, so the constraint doesn't collide across ordinary uploads.
   telegramRef         String?
+  // Waiting on the owner of the shared synced folder it's in, for a member
+  // who has to ask (FolderMember): "upload" is a file `pendingById` added,
+  // which nobody else sees until the owner says yes; "delete" is one they
+  // want binned, which stays as it is until then. Null for everything else.
+  pending             String?
+  pendingById         String?
   isHidden            Boolean   @default(false)
   isTrashed           Boolean   @default(false)
   isStarred           Boolean   @default(false)
@@ -414,6 +454,15 @@ model SpaceMember {
   userId            String
   user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   role              SpaceRole @default(EDITOR)
+  // What the member may do: the same two settings as FolderMember, adding and
+  // changing, and deleting. Null on a row from before they existed and on one
+  // made by joining or an invite link, and then `role` says: VIEWER is NO to
+  // both, EDITOR YES. Whenever they are set `role` is kept in step (VIEWER
+  // when canUpload is NO), for the "ask to upload" flow that reads it.
+  // ponytail: two spellings of one thing, so old rows need no backfill under
+  // `db push`. Drop `role` once there are migrations to fill these in with.
+  canUpload         MemberCan?
+  canDelete         MemberCan?
   // Whether this member has pinned the space to their own sidebar. Only
   // meaningful for non-owner members — owners always see their own spaces.
   pinned            Boolean   @default(false)
@@ -462,6 +511,13 @@ model FileShortcut {
   file      File     @relation(fields: [fileId], references: [id], onDelete: Cascade)
   folderId  String
   folder    Folder   @relation("FolderShortcuts", fields: [folderId], references: [id], onDelete: Cascade)
+  // Waiting on the space's owner, for a member who has to ask (SpaceMember),
+  // like File.pending: "upload" is a link `pendingById` added, which nobody
+  // else sees until the owner says yes; "delete" is one they want removed,
+  // which stays until then. In a space it is the link that waits, since the
+  // file it points at is in its uploader's own drive.
+  pending     String?
+  pendingById String?
   createdAt DateTime @default(now())
 
   @@unique([fileId, folderId])

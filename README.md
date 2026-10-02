@@ -7,7 +7,7 @@ Self-hosted Drive clone — folders, files, sharing, collaborative spaces.
 - **DarkGallery web** (`apps/gallery`) — separate Vite + React app, its own look, same account and storage
 - **DarkGallery mobile** (`apps/gallery-mobile`) — Expo app that backs up the camera roll
 - **Desktop sync** (`apps/sync`) — zero-dependency Node daemon, two-way folder sync
-- **Desktop app** (`apps/desktop`) — Electron tray app that runs that daemon, starts at login and auto-updates from GitHub Releases. Dev: `pnpm --filter desktop... build && pnpm --filter desktop start`; installer for this OS: `pnpm --filter desktop dist`; ship: bump `version` in its package.json, push tag `v<version>`
+- **Desktop app** (`apps/desktop`) — Electron tray app that runs that daemon, starts at login and auto-updates from GitHub Releases. Dev: `pnpm --filter desktop... build && pnpm --filter desktop start`; installer for this OS: `pnpm --filter desktop dist`; ship: bump `version` in its package.json, push tag `v<version>`. Beyond the tray and sync it: answers `darkdrive://file|folder|share/<id>` links; adds right-click actions and sync-status emblems to GNOME Files (needs `python3-nautilus`; restart Files once with `nautilus -q`) and right-click actions to Explorer; pauses sync for a while or keeps it to set hours; has a drop zone window that uploads to My Drive; browses this computer's own files (Local files), marking what's already in DarkDrive and offering to sync what isn't; and fetches files from the account's other computers on the same network instead of the server when it can (LAN sync)
 - **Mobile** (`apps/mobile`) — Expo / React Native app, same sync engine
 - **Sync core** (`packages/sync-core`) — the conflict rules both clients share
 - **Shared UI** (`packages/ui`) — shadcn components
@@ -161,6 +161,7 @@ Vite proxies `/api` and `/socket.io` to the API.
 | `PATCH`| `/api/folders/:id` | rename / move / hide / trash / star |
 | `DELETE`| `/api/folders/:id` | permanent delete |
 | `POST` | `/api/files/upload` | multipart, field `files[]`, body `folderId` |
+| `GET`  | `/api/files/:id` | `{ id, name, folderId }` — what `darkdrive://file/<id>` links resolve through |
 | `GET`  | `/api/files/:id/download` | `?inline=1` |
 | `PATCH`| `/api/files/:id` | rename / move / hide / trash / star |
 | `DELETE`| `/api/files/:id` | permanent delete |
@@ -173,6 +174,7 @@ Vite proxies `/api` and `/socket.io` to the API.
 | `GET/POST/DELETE` | `/api/devices[/:id]` | list / create / revoke device tokens |
 | `GET`  | `/api/sync/changes` | `?since=<ISO>` — delta feed for sync clients |
 | `POST` | `/api/sync/folder` | `{ path }` → folder id, creating missing segments |
+| `GET`  | `/api/sync/lan-key` | the account's key for LAN sync between its own computers; a new one each UTC day |
 
 ## Folder sync (`apps/sync`)
 

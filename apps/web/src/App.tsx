@@ -28,6 +28,8 @@ import { ShareTargetPage } from "@/pages/ShareTarget"
 import { TempLoginPage } from "@/pages/TempLogin"
 import { PairPage } from "@/pages/Pair"
 import { SyncPage } from "@/pages/Sync"
+import { DropPage } from "@/pages/Drop"
+import { LocalPage } from "@/pages/Local"
 import { desktop } from "@/lib/desktop"
 import { UploadToaster } from "@/components/UploadToaster"
 import { Toaster } from "@/components/Toaster"
@@ -308,6 +310,22 @@ export function App() {
           element={
             <Protected>
               <SyncPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/local"
+          element={
+            <Protected>
+              <LocalPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/drop"
+          element={
+            <Protected>
+              <DropPage />
             </Protected>
           }
         />

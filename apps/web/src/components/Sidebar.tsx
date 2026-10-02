@@ -2,6 +2,7 @@ import { Link, useLocation } from "react-router-dom"
 import {
   ArrowsClockwiseIcon,
   DesktopIcon,
+  HardDrivesIcon,
   HouseIcon,
   FolderIcon,
   FolderOpenIcon,
@@ -219,6 +220,8 @@ export function Sidebar() {
         {/* A temporary login can't sync: the API gives it no device token. */}
         {desktop && !user?.tempSessionExpiresAt &&
           navItem("/sync", "This computer", <DesktopIcon size={18} />)}
+        {desktop && !user?.tempSessionExpiresAt &&
+          navItem("/local", "Local files", <HardDrivesIcon size={18} />)}
         {navItem("/spaces", "Spaces", <UsersThreeIcon size={18} />)}
         {navItem("/search", "Search", <MagnifyingGlassIcon size={18} />)}
         {navItem("/recent", "Recent", <ClockCounterClockwiseIcon size={18} />)}

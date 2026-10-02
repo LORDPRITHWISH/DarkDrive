@@ -23,6 +23,11 @@ import {
 import { desktop } from "@/lib/desktop"
 import { toast } from "@/store/toast"
 
+// In a browser on a computer, where the desktop app might be installed: it
+// answers darkdrive:// links (apps/desktop main.ts). If it isn't, the link
+// goes nowhere.
+const canHandOff = !desktop && window.matchMedia("(pointer: fine)").matches
+
 export type MenuPos = {
   x: number
   y: number
@@ -144,6 +149,17 @@ export function FileContextMenu({
           >
             <DesktopIcon size={16} />
             Show on this computer
+          </DropdownMenuItem>
+        )}
+        {canHandOff && !isShortcut && (
+          <DropdownMenuItem
+            onClick={() => {
+              window.location.href = `darkdrive://${menu.type}/${menu.id}`
+              onClose()
+            }}
+          >
+            <DesktopIcon size={16} />
+            Open in desktop app
           </DropdownMenuItem>
         )}
         {onDownload && (

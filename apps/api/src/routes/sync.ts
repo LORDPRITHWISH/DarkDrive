@@ -1,9 +1,11 @@
+import crypto from "node:crypto"
 import { Router } from "express"
 import type { User } from "@prisma/client"
 import { z } from "zod"
 import { prisma } from "../db/prisma.js"
 import { currentUser, requireAuth } from "../middleware/auth.js"
 import { assertUserRootFolderId, assertUserSyncRootId } from "../lib/access.js"
+import { env } from "../env.js"
 
 export const syncRouter = Router()
 syncRouter.use(requireAuth)
@@ -145,6 +147,19 @@ syncRouter.get("/changes", async (req, res) => {
   changedFolders.sort((a, b) => a.path.split("/").length - b.path.split("/").length)
 
   res.json({ cursor: cursor.toISOString(), folders: changedFolders, files: changedFiles })
+})
+
+// The secret this account's computers share for LAN sync (apps/desktop
+// lan.ts): with it they recognise each other on a network and encrypt what
+// they send one another, and nobody else there can. Derived rather than
+// stored, and a new one each UTC day, so a computer whose token was revoked
+// is locked out of the others' traffic by the next day. Clients ask again
+// hourly; two that straddle midnight just miss each other until they do.
+syncRouter.get("/lan-key", (req, res) => {
+  const day = Math.floor(Date.now() / 86_400_000)
+  res.json({
+    key: crypto.createHmac("sha256", env.SESSION_SECRET).update(`lan:${currentUser(req).id}:${day}`).digest("hex"),
+  })
 })
 
 // The synced folders, for the desktop app's "sync one here" picker.

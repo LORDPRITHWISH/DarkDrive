@@ -28,7 +28,8 @@ if (location.href.startsWith("darkdrive://app/"))
       ipcRenderer.on("desktop:changed", listener)
       return () => void ipcRenderer.removeListener("desktop:changed", listener)
     },
-    setSyncing: (on) => call("syncing", on),
+    pauseUntil: (until) => call("pause-until", until),
+    setSyncHours: (hours) => call("sync-hours", hours),
     availableFolders: () => call("folders:available"),
     addLocalFolder: () => call("folders:add-local"),
     addRemoteFolder: (id) => call("folders:add-remote", id),
@@ -36,4 +37,8 @@ if (location.href.startsWith("darkdrive://app/"))
     localPath: (type, id) => call("local-path", type, id),
     show: (type, id) => call("show", type, id),
     installUpdate: () => call("update:install"),
+    listLocal: (dir) => call("local:list", dir),
+    openLocal: (path) => call("local:open", path),
+    showLocal: (path) => call("local:show", path),
+    syncLocal: (dir) => call("local:sync", dir),
   } satisfies Desktop)

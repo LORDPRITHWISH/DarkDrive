@@ -618,7 +618,11 @@ bridge("show", (type: "file" | "folder", id: string) => {
 
 // This computer's own files, for the web app's /local page. These take paths
 // from the page, so local.ts is careful with each.
-bridge("local:list", (dir?: string) => local.list(readSettings(), dir))
+bridge("local:list", (dir?: string, hidden?: boolean) => local.list(readSettings(), dir, hidden))
+bridge("local:measure", (dir: string) => local.measure(dir))
+bridge("local:new-folder", (dir: string, name: string) => local.newFolder(dir, name))
+bridge("local:rename", (p: string, name: string) => local.rename(readSettings(), p, name))
+bridge("local:trash", (paths: string[]) => local.trash(readSettings(), paths))
 bridge("local:open", (p: string) => local.open(p))
 bridge("local:show", (p: string) => local.show(p))
 bridge("local:sync", (dir: string) => local.sync(readSettings(), dir))

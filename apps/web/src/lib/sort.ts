@@ -24,8 +24,11 @@ function withDir<T>(cmp: (a: T, b: T) => number, dir: "asc" | "desc") {
 export function sortFolders(folders: Folder[], sort: SortState): Folder[] {
   const list = folders.slice()
   const { key, dir } = sort
-  if (key === "size" || key === "type") {
-    // Neither applies to folders — fall back to name so the order is stable.
+  if (key === "size") {
+    // Only measured local folders have one; the rest tie, and go by name.
+    list.sort(withDir((a, b) => (a.size ?? -1) - (b.size ?? -1) || nameCompare(a.name, b.name), dir))
+  } else if (key === "type") {
+    // Doesn't apply to folders — fall back to name so the order is stable.
     list.sort(withDir((a, b) => nameCompare(a.name, b.name), dir))
   } else if (key === "modified") {
     list.sort(

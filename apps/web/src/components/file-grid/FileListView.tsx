@@ -6,6 +6,8 @@ import { FileThumb } from "./FileThumb"
 import { isInternalDrag, readItemDrag, type DragItem } from "./dnd"
 import { HoverName } from "@/components/HoverName"
 import { FolderGlyph } from "./FolderCard"
+import { Input } from "@workspace/ui/components/input"
+import { Progress } from "@workspace/ui/components/progress"
 import {
   Table,
   TableBody,
@@ -31,6 +33,19 @@ type Props = {
   // badge on rows the viewer owns. Undefined in personal Drive, where
   // everything is trivially the viewer's own.
   meId?: string
+  /** The row being renamed, retyped in place. */
+  rename?: {
+    id: string | null
+    value: string
+    onChange: (v: string) => void
+    onCommit: (type: ItemType, id: string) => void
+    onCancel: () => void
+  }
+  // For a host whose rows aren't DarkDrive's (pages/Local):
+  /** Shown after a row's name. */
+  mark?: (id: string) => React.ReactNode
+  /** What the sizes are a share of. With one, each size has a bar beside it. */
+  total?: number
 }
 
 export function FileListView({
@@ -44,8 +59,43 @@ export function FileListView({
   onDragStart,
   onMoveDrop,
   meId,
+  rename,
+  mark,
+  total,
 }: Props) {
   const [dropId, setDropId] = useState<string | null>(null)
+
+  // A row's name, or the box it's being retyped in.
+  const name = (type: ItemType, f: { id: string; name: string; isHidden: boolean }) =>
+    rename?.id === f.id ? (
+      <Input
+        className="h-7 rounded-md px-1 text-sm"
+        value={rename.value}
+        onChange={(e) => rename.onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") rename.onCommit(type, f.id)
+          if (e.key === "Escape") rename.onCancel()
+        }}
+        onBlur={() => rename.onCommit(type, f.id)}
+        autoFocus
+        onClick={(e) => e.stopPropagation()}
+        onDoubleClick={(e) => e.stopPropagation()}
+      />
+    ) : (
+      <HoverName as="span" name={f.name} className={`min-w-0 truncate ${f.isHidden ? "opacity-60 italic" : ""}`} />
+    )
+
+  const size = (n: number | null | undefined) =>
+    n == null ? (
+      "—"
+    ) : total ? (
+      <div className="flex items-center gap-3">
+        <Progress className="w-24" aria-label="Share of this folder" value={Math.min(100, (n / total) * 100)} />
+        {formatBytes(n)}
+      </div>
+    ) : (
+      formatBytes(n)
+    )
   return (
     <Table>
       <TableHeader>
@@ -91,11 +141,8 @@ export function FileListView({
             <TableCell className="p-0 py-2 pl-4">
               <div className="flex items-center gap-2">
                 <FolderGlyph folder={f} size={20} />
-                <HoverName
-                  as="span"
-                  name={f.name}
-                  className={`min-w-0 truncate ${f.isHidden ? "opacity-60 italic" : ""}`}
-                />
+                {name("folder", f)}
+                {mark?.(f.id)}
                 {f.isStarred && (
                   <StarIcon size={14} weight="fill" className="text-yellow-500" />
                 )}
@@ -107,7 +154,7 @@ export function FileListView({
               </div>
             </TableCell>
             <TableCell className="p-0 py-2">{formatDate(f.updatedAt)}</TableCell>
-            <TableCell className="p-0 py-2">—</TableCell>
+            <TableCell className="p-0 py-2">{size(f.size)}</TableCell>
             <TableCell className="p-0 py-2 pr-4 text-right">
               <button
                 onClick={(e) => onMenu(e, "folder", f.id, f.name)}
@@ -133,11 +180,8 @@ export function FileListView({
                 <span className="grid size-5 shrink-0 place-items-center overflow-hidden rounded">
                   <FileThumb file={f} iconSize={20} />
                 </span>
-                <HoverName
-                  as="span"
-                  name={f.name}
-                  className={`min-w-0 truncate ${f.isHidden ? "opacity-60 italic" : ""}`}
-                />
+                {name("file", f)}
+                {mark?.(f.id)}
                 {f.isStarred && (
                   <StarIcon size={14} weight="fill" className="text-yellow-500" />
                 )}
@@ -164,7 +208,7 @@ export function FileListView({
               </div>
             </TableCell>
             <TableCell className="p-0 py-2">{formatDate(f.updatedAt)}</TableCell>
-            <TableCell className="p-0 py-2">{formatBytes(f.size)}</TableCell>
+            <TableCell className="p-0 py-2">{size(f.size)}</TableCell>
             <TableCell className="p-0 py-2 pr-4 text-right">
               <button
                 onClick={(e) => onMenu(e, "file", f.id, f.name)}

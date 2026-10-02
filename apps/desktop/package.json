@@ -16,7 +16,7 @@
     "start": "pnpm build && env -u ELECTRON_RUN_AS_NODE electron .",
     "dist": "pnpm build && electron-builder --publish never",
     "typecheck": "tsc --noEmit",
-    "test": "tsx src/schedule.test.ts && tsx src/lan.test.ts"
+    "test": "tsx src/schedule.test.ts && tsx src/usage.test.ts && tsx src/lan.test.ts"
   },
   "engines": {
     "node": ">=20"

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import {
   ArrowsOutCardinalIcon,
@@ -13,6 +13,7 @@ import { useDrive, zoomToGrid } from "@/store/drive"
 import { useAuth } from "@/store/auth"
 import type { FileItem, Folder } from "@/lib/types"
 import { sortFiles, sortFolders } from "@/lib/sort"
+import { usePaged } from "@/lib/paged"
 import { triggerDownload } from "@/lib/download"
 import { ShareDialog } from "./ShareDialog"
 import { FilePreview } from "./FilePreview"
@@ -25,8 +26,6 @@ import { FileCard } from "./file-grid/FileCard"
 import { FileListView } from "./file-grid/FileListView"
 import { FileContextMenu, type MenuPos } from "./file-grid/FileContextMenu"
 import { startItemDrag, type DragItem } from "./file-grid/dnd"
-
-const PAGE_SIZE = 60
 
 export function FileGrid() {
   const {
@@ -66,26 +65,10 @@ export function FileGrid() {
   const sortedFiles = useMemo(() => sortFiles(files, sort), [files, sort])
   const { minWidth, iconSize } = useMemo(() => zoomToGrid(zoom), [zoom])
 
-  // Reveal items in pages instead of dumping the whole folder at once —
-  // more loads as the sentinel below scrolls into view.
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
-  useEffect(() => setVisibleCount(PAGE_SIZE), [currentFolderId])
   const totalCount = sortedFolders.length + sortedFiles.length
+  const { visibleCount, sentinelRef } = usePaged(totalCount, currentFolderId)
   const visibleFolders = sortedFolders.slice(0, visibleCount)
   const visibleFiles = sortedFiles.slice(0, Math.max(0, visibleCount - sortedFolders.length))
-  const sentinelRef = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    const el = sentinelRef.current
-    if (!el || visibleCount >= totalCount) return
-    const io = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) setVisibleCount((c) => Math.min(totalCount, c + PAGE_SIZE))
-      },
-      { rootMargin: "600px" }
-    )
-    io.observe(el)
-    return () => io.disconnect()
-  }, [visibleCount, totalCount])
   // Same order as what's on screen, so shift-click range-select spans what
   // the user actually sees regardless of grid vs list view.
   const orderedIds = useMemo(
@@ -357,6 +340,7 @@ export function FileGrid() {
           onDragStart={dragStart}
           onMoveDrop={handleMoveDrop}
           meId={meId}
+          rename={{ id: renaming, value: renameValue, onChange: setRenameValue, onCommit: doRename, onCancel: () => setRenaming(null) }}
         />
       )}
       {visibleCount < totalCount && (

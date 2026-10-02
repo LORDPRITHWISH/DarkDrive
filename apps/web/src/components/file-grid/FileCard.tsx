@@ -23,6 +23,7 @@ export function FileCard({
   onRenameCommit,
   onRenameCancel,
   mine,
+  corner,
 }: {
   file: FileItem
   selected: boolean
@@ -41,6 +42,8 @@ export function FileCard({
   // member's upload doesn't get the badge and doesn't get Share/Open
   // location in the context menu.
   mine?: boolean
+  // In place of the star, for what can't be starred: a file on this computer.
+  corner?: React.ReactNode
 }) {
   const [dragging, setDragging] = useState(false)
   return (
@@ -58,12 +61,16 @@ export function FileCard({
       onDoubleClick={onDoubleClick}
       onContextMenu={onContextMenu}
     >
-      <StarToggle
-        type="file"
-        id={file.id}
-        starred={file.isStarred}
-        className="absolute top-2 right-0 z-10 w-fit"
-      />
+      {corner === undefined ? (
+        <StarToggle
+          type="file"
+          id={file.id}
+          starred={file.isStarred}
+          className="absolute top-2 right-0 z-10 w-fit"
+        />
+      ) : (
+        corner
+      )}
       {(mine || file.isShortcut) && (
         <div className="absolute top-2 left-2 z-10 flex items-center gap-1">
           {mine && (
@@ -105,6 +112,7 @@ export function FileCard({
             onBlur={onRenameCommit}
             autoFocus
             onClick={(e) => e.stopPropagation()}
+            onDoubleClick={(e) => e.stopPropagation()}
           />
         ) : (
           <HoverName

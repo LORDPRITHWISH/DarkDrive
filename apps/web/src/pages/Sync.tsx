@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
-import { Navigate } from "react-router-dom"
+import { Navigate, useNavigate } from "react-router-dom"
 import {
   ArrowsClockwiseIcon,
   ClockIcon,
@@ -31,6 +31,7 @@ import { PopConfirm } from "@workspace/ui/components/popconfirm"
 import { Switch } from "@workspace/ui/components/switch"
 import { Sidebar } from "@/components/Sidebar"
 import { SidebarToggle } from "@/components/SidebarToggle"
+import { ComputerTabs } from "@/components/ComputerTabs"
 import { desktop, type DesktopState } from "@/lib/desktop"
 import { useAuth } from "@/store/auth"
 import { toast } from "@/store/toast"
@@ -43,13 +44,14 @@ const DEFAULT_HOURS = { from: "09:00", to: "18:00" }
 /** Midnight tonight. */
 const tomorrow = () => new Date(new Date().setHours(24, 0, 0, 0)).getTime()
 
-// What this computer keeps in sync: the desktop app's own page, linked from
-// the sidebar only there. Each folder here pairs a folder on disk with one in
+// What this computer keeps in sync: the Sync half of the desktop app's "This
+// computer" (pages/Local is the other), and where its tray menu lands. Each folder here pairs a folder on disk with one in
 // "Synced Folders", which is where the web shows them.
 export function SyncPage() {
   const [state, setState] = useState<DesktopState | null>(null)
   const [available, setAvailable] = useState<{ id: string; name: string }[] | null>(null)
   const temp = useAuth((s) => !!s.user?.tempSessionExpiresAt)
+  const nav = useNavigate()
 
   useEffect(() => {
     if (!desktop) return
@@ -76,6 +78,7 @@ export function SyncPage() {
         <header className="flex items-center justify-between gap-3 border-b px-4 py-3">
           <div className="flex min-w-0 items-center gap-3">
             <SidebarToggle />
+            <ComputerTabs />
             <div className="min-w-0">
               <div className="text-sm font-semibold">This computer</div>
               <div className="text-muted-foreground truncate text-xs">
@@ -157,8 +160,8 @@ export function SyncPage() {
                         <Button
                           size="icon-sm"
                           variant="ghost"
-                          title="Open folder"
-                          onClick={() => run(() => d.show("folder", f.id))}
+                          title="Browse this folder"
+                          onClick={() => nav(`/local?dir=${encodeURIComponent(f.dir)}`)}
                         >
                           <FolderOpenIcon size={14} />
                         </Button>

@@ -3,6 +3,7 @@ import { ArrowsClockwiseIcon, FolderIcon } from "@phosphor-icons/react"
 import { Input } from "@workspace/ui/components/input"
 import type { Folder } from "@/lib/types"
 import { apiUrl } from "@/lib/config"
+import { formatBytes } from "@/lib/format"
 import { StarToggle } from "./StarToggle"
 import { isInternalDrag, readItemDrag, type DragItem } from "./dnd"
 import { HoverName } from "@/components/HoverName"
@@ -62,6 +63,7 @@ export function FolderCard({
   onRenameCommit,
   onRenameCancel,
   mine,
+  corner,
 }: {
   folder: Folder
   selected: boolean
@@ -78,6 +80,8 @@ export function FolderCard({
   onRenameCancel: () => void
   // See FileCard — only set inside a space, true when the viewer owns it.
   mine?: boolean
+  // In place of the star, for what can't be starred: a file on this computer.
+  corner?: React.ReactNode
 }) {
   const [dragOver, setDragOver] = useState(false)
   const [dragging, setDragging] = useState(false)
@@ -116,12 +120,16 @@ export function FolderCard({
       onDoubleClick={onDoubleClick}
       onContextMenu={onContextMenu}
     >
-      <StarToggle
-        type="folder"
-        id={folder.id}
-        starred={folder.isStarred}
-        className="absolute top-2 right-2 z-10"
-      />
+      {corner === undefined ? (
+        <StarToggle
+          type="folder"
+          id={folder.id}
+          starred={folder.isStarred}
+          className="absolute top-2 right-2 z-10"
+        />
+      ) : (
+        corner
+      )}
       {mine && (
         <span
           className="bg-primary/15 text-primary absolute top-2 left-2 z-10 rounded-full px-1.5 py-0.5 text-[10px] font-semibold backdrop-blur"
@@ -155,6 +163,7 @@ export function FolderCard({
             onBlur={onRenameCommit}
             autoFocus
             onClick={(e) => e.stopPropagation()}
+            onDoubleClick={(e) => e.stopPropagation()}
           />
         ) : (
           <HoverName
@@ -162,6 +171,9 @@ export function FolderCard({
             name={folder.name}
             className="truncate text-center text-sm font-medium"
           />
+        )}
+        {folder.size != null && (
+          <div className="text-muted-foreground text-center text-xs">{formatBytes(folder.size)}</div>
         )}
       </div>
     </div>

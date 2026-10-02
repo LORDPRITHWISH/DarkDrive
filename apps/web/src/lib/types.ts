@@ -331,6 +331,8 @@ export type Folder = {
   isStarred: boolean
   createdAt: string
   updatedAt: string
+  // Only a folder on this computer has one, once it's been measured (pages/Local).
+  size?: number | null
 }
 
 export type FileItem = {

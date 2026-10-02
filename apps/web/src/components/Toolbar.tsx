@@ -16,6 +16,9 @@ import {
   LinkIcon,
   TelegramLogoIcon,
   GearSixIcon,
+  ArrowCounterClockwiseIcon,
+  MagnifyingGlassMinusIcon,
+  MagnifyingGlassPlusIcon,
 } from "@phosphor-icons/react"
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -27,7 +30,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu"
-import { useDrive, type SortKey } from "@/store/drive"
+import { useDrive, ZOOM_DEFAULT, ZOOM_MAX, ZOOM_MIN, type SortKey, type SortState } from "@/store/drive"
 import { NewFolderDialog } from "./NewFolderDialog"
 import { ImportUrlDialog } from "./ImportUrlDialog"
 import { LinkFilesDialog } from "./LinkFilesDialog"
@@ -49,8 +52,6 @@ export function Toolbar() {
   const [telegramOpen, setTelegramOpen] = useState(false)
   const [linkFilesOpen, setLinkFilesOpen] = useState(false)
   const {
-    view,
-    setView,
     showHidden,
     toggleHidden,
     createFolder,
@@ -156,81 +157,151 @@ export function Toolbar() {
           <MagnifyingGlassIcon size={16} />
         </Button>
         <div className="bg-border mx-1 hidden h-5 w-px md:block" />
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <Button
-                size="sm"
-                variant="ghost"
-                title={`Sort by ${SORT_LABELS[sort.key]} (${sort.dir})`}
-              >
-                <ArrowsDownUpIcon size={14} />
-                <span className="hidden md:inline">{SORT_LABELS[sort.key]}</span>
-                {sort.dir === "asc" ? (
-                  <SortAscendingIcon size={12} className="hidden opacity-70 md:inline" />
-                ) : (
-                  <SortDescendingIcon size={12} className="hidden opacity-70 md:inline" />
-                )}
-              </Button>
-            }
-          />
-          <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuLabel>Sort by</DropdownMenuLabel>
-            {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
-              <DropdownMenuCheckboxItem
-                key={k}
-                checked={sort.key === k}
-                onClick={() => setSort({ key: k, dir: sort.dir })}
-              >
-                {SORT_LABELS[k]}
-              </DropdownMenuCheckboxItem>
-            ))}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              closeOnClick={false}
-              className="justify-between"
-              onClick={() =>
-                setSort({ key: sort.key, dir: sort.dir === "asc" ? "desc" : "asc" })
-              }
-            >
-              <span className="flex items-center gap-1.5">
-                {sort.dir === "asc" ? (
-                  <SortAscendingIcon size={14} />
-                ) : (
-                  <SortDescendingIcon size={14} />
-                )}
-                {sort.dir === "asc" ? "Ascending" : "Descending"}
-              </span>
-              <span className="text-muted-foreground text-[11px]">click to flip</span>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <Button
-          size="sm"
-          variant={showHidden ? "default" : "ghost"}
-          onClick={toggleHidden}
-          title="Toggle hidden"
-        >
-          {showHidden ? <EyeIcon size={16} /> : <EyeSlashIcon size={16} />}
-        </Button>
-        <div className="bg-border mx-1 hidden h-5 w-px md:block" />
-        <Button
-          size="sm"
-          variant={view === "grid" ? "default" : "ghost"}
-          onClick={() => setView("grid")}
-          title="Grid view"
-        >
-          <SquaresFourIcon size={16} />
-        </Button>
-        <Button
-          size="sm"
-          variant={view === "list" ? "default" : "ghost"}
-          onClick={() => setView("list")}
-          title="List view"
-        >
-          <ListBulletsIcon size={16} />
-        </Button>
+        <ViewControls sort={sort} setSort={setSort} showHidden={showHidden} toggleHidden={toggleHidden} />
       </div>
+    </div>
+  )
+}
+
+/** Sort, show hidden, and grid or list: the right-hand end of a toolbar. Local files has one too. */
+export function ViewControls({
+  sort,
+  setSort,
+  showHidden,
+  toggleHidden,
+}: {
+  sort: SortState
+  setSort: (sort: SortState) => void
+  showHidden: boolean
+  toggleHidden: () => void
+}) {
+  const view = useDrive((s) => s.view)
+  const setView = useDrive((s) => s.setView)
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <Button
+              size="sm"
+              variant="ghost"
+              title={`Sort by ${SORT_LABELS[sort.key]} (${sort.dir})`}
+            >
+              <ArrowsDownUpIcon size={14} />
+              <span className="hidden md:inline">{SORT_LABELS[sort.key]}</span>
+              {sort.dir === "asc" ? (
+                <SortAscendingIcon size={12} className="hidden opacity-70 md:inline" />
+              ) : (
+                <SortDescendingIcon size={12} className="hidden opacity-70 md:inline" />
+              )}
+            </Button>
+          }
+        />
+        <DropdownMenuContent align="end" className="w-48">
+          <DropdownMenuLabel>Sort by</DropdownMenuLabel>
+          {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
+            <DropdownMenuCheckboxItem
+              key={k}
+              checked={sort.key === k}
+              onClick={() => setSort({ key: k, dir: sort.dir })}
+            >
+              {SORT_LABELS[k]}
+            </DropdownMenuCheckboxItem>
+          ))}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            closeOnClick={false}
+            className="justify-between"
+            onClick={() =>
+              setSort({ key: sort.key, dir: sort.dir === "asc" ? "desc" : "asc" })
+            }
+          >
+            <span className="flex items-center gap-1.5">
+              {sort.dir === "asc" ? (
+                <SortAscendingIcon size={14} />
+              ) : (
+                <SortDescendingIcon size={14} />
+              )}
+              {sort.dir === "asc" ? "Ascending" : "Descending"}
+            </span>
+            <span className="text-muted-foreground text-[11px]">click to flip</span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <Button
+        size="sm"
+        variant={showHidden ? "default" : "ghost"}
+        onClick={toggleHidden}
+        title="Toggle hidden"
+      >
+        {showHidden ? <EyeIcon size={16} /> : <EyeSlashIcon size={16} />}
+      </Button>
+      <div className="bg-border mx-1 hidden h-5 w-px md:block" />
+      <Button
+        size="sm"
+        variant={view === "grid" ? "default" : "ghost"}
+        onClick={() => setView("grid")}
+        title="Grid view"
+      >
+        <SquaresFourIcon size={16} />
+      </Button>
+      <Button
+        size="sm"
+        variant={view === "list" ? "default" : "ghost"}
+        onClick={() => setView("list")}
+        title="List view"
+      >
+        <ListBulletsIcon size={16} />
+      </Button>
+    </>
+  )
+}
+
+/** The grid's zoom slider, for a page header. Nothing in list view. */
+export function ZoomControl() {
+  const view = useDrive((s) => s.view)
+  const zoom = useDrive((s) => s.zoom)
+  const setZoom = useDrive((s) => s.setZoom)
+  if (view !== "grid") return null
+  return (
+    <div className="hidden items-center gap-2 sm:flex">
+      {zoom !== ZOOM_DEFAULT && (
+        <button
+          onClick={() => setZoom(ZOOM_DEFAULT)}
+          className="text-muted-foreground hover:text-foreground shrink-0 transition-colors"
+          title={`Reset zoom to ${ZOOM_DEFAULT}%`}
+        >
+          <ArrowCounterClockwiseIcon size={14} />
+        </button>
+      )}
+      <button
+        onClick={() => setZoom(Math.max(ZOOM_MIN, zoom - 10))}
+        disabled={zoom <= ZOOM_MIN}
+        className="text-muted-foreground hover:text-foreground disabled:opacity-30 shrink-0 transition-colors"
+        title="Zoom out"
+      >
+        <MagnifyingGlassMinusIcon size={16} />
+      </button>
+      <input
+        type="range"
+        min={ZOOM_MIN}
+        max={ZOOM_MAX}
+        value={zoom}
+        onChange={(e) => setZoom(Number(e.target.value))}
+        className="accent-primary h-1 w-32 cursor-pointer"
+        title={`Zoom ${zoom}%`}
+      />
+      <button
+        onClick={() => setZoom(Math.min(ZOOM_MAX, zoom + 10))}
+        disabled={zoom >= ZOOM_MAX}
+        className="text-muted-foreground hover:text-foreground disabled:opacity-30 shrink-0 transition-colors"
+        title="Zoom in"
+      >
+        <MagnifyingGlassPlusIcon size={16} />
+      </button>
+      <span className="text-muted-foreground w-[3.5ch] text-right text-xs leading-none tabular-nums">
+        {zoom}%
+      </span>
     </div>
   )
 }

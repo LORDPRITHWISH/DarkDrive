@@ -1453,6 +1453,15 @@ filesRouter.post("/:id/versions/:versionId/restore", async (req, res) => {
   res.json({ file: { ...updated, size: Number(updated.size) } })
 })
 
+// Where a file is, by id alone: what a darkdrive://file/<id> link resolves
+// through, to open the file in its folder (apps/desktop main.ts).
+filesRouter.get("/:id", async (req, res) => {
+  const user = currentUser(req)
+  const file = await getFileWithAccess(user.id, req.params.id, "read", { role: user.role })
+  if (!file) return res.status(404).json({ error: "not_found" })
+  res.json({ id: file.id, name: file.name, folderId: file.folderId })
+})
+
 filesRouter.patch("/:id", async (req, res) => {
   const user = currentUser(req)
   const body = z

@@ -24,7 +24,13 @@ export type SyncedFolder = { id: string; name: string; dir: string }
 // people (shares, invites) point there. deviceId is the token's row on the
 // server, so signing out can revoke it.
 export type Account = { apiUrl: string; webUrl: string; token: string; deviceId: string; device: string }
-export type Settings = Account & { folders: SyncedFolder[] }
+/** Local "HH:MM" times sync is allowed between; `to` before `from` runs overnight. */
+export type Hours = { from: string; to: string }
+// pausedUntil is a time in ms: 0 when sync isn't paused, FOREVER when it's
+// paused until someone resumes it. hours is null when sync may run all day.
+export type Settings = Account & { folders: SyncedFolder[]; pausedUntil: number; hours: Hours | null; dropZone: boolean }
+/** The largest time a Date holds, and a number JSON keeps (Infinity isn't). */
+export const FOREVER = 8.64e15
 
 function readJson(file: string): Partial<Settings> | undefined {
   try {
@@ -47,6 +53,9 @@ export function readSettings(): Settings {
     deviceId: saved.deviceId ?? "",
     device: saved.device ?? os.hostname(),
     folders: saved.folders ?? [],
+    pausedUntil: saved.pausedUntil ?? 0,
+    hours: saved.hours ?? null,
+    dropZone: saved.dropZone ?? false,
   }
 }
 
@@ -64,6 +73,9 @@ export function writeSettings(s: Settings) {
     deviceId: String(s.deviceId),
     device: String(s.device).trim() || os.hostname(),
     folders: s.folders,
+    pausedUntil: Math.min(Math.max(Number(s.pausedUntil) || 0, 0), FOREVER),
+    hours: s.hours,
+    dropZone: !!s.dropZone,
   }
   fs.mkdirSync(CONFIG_DIR, { recursive: true })
   fs.writeFileSync(SETTINGS_FILE, JSON.stringify(next, null, 2), { mode: 0o600 })

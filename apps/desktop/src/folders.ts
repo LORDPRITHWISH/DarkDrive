@@ -15,17 +15,106 @@ import readline from "node:readline"
 import { apiCall, FOLDERS_DIR, writeSettings, type Settings, type SyncedFolder } from "./settings.js"
 
 type Remote = { id: string; name: string }
+/** How a folder's sync is doing. "paused" is no daemon at all. */
+export type Status = "syncing" | "synced" | "error" | "paused"
+// What a daemon reports (apps/sync, "parent").
+type Report =
+  | { type: "bytes"; up: number; down: number }
+  | { type: "file"; dir: "up" | "down"; path: string; sha: string }
+  | { type: "conflict"; path: string; keptAs: string }
+  | { type: "pass"; ok: true }
+  | { type: "pass"; ok: false; error: string; status?: number; body: string }
+// What a daemon last synced: its state.json. Paths are relative, "/"-separated.
+type DaemonState = { files: Record<string, { id: string; sha: string }>; folders: Record<string, string> }
+
+// A dropped connection fails a pass every few seconds until it's back, and
+// usually is back; only one that stays down this many passes is worth telling
+// anyone about. The server saying no (a status) is worth it at once.
+const PASSES_BEFORE_FAILED = 12
 
 // esbuild bundles this into dist/main.cjs, next to the daemon's dist/sync.mjs.
 const DAEMON = path.join(__dirname, "sync.mjs")
 const daemons = new Map<string, UtilityProcess>()
+const statuses = new Map<string, Status>()
 let paused = false
+// Peers for LAN sync (lan.ts), passed on to every daemon as it is.
+let lan: unknown = null
 
-/** "line": a daemon printed something. "change": the folders, or which of them run, changed. */
-export const events = new EventEmitter<{ line: [string]; change: [] }>()
+/**
+ * "line": a daemon printed something. "change": the folders, or how they're
+ * doing, changed. "bytes": sent and received since the last one. "file": one
+ * went up or down (its path relative, its sha256). "done": a run of those
+ * ended, with how many. "failed": sync has stopped working, with the server's
+ * status and reply if it was the server saying no. "conflict": an edit here
+ * lost to one elsewhere, and was kept under this relative path.
+ */
+export const events = new EventEmitter<{
+  line: [string]
+  change: []
+  bytes: [number, number]
+  file: [SyncedFolder, "up" | "down", string, string]
+  done: [SyncedFolder, number]
+  failed: [SyncedFolder, string, number | undefined, string]
+  conflict: [SyncedFolder, string]
+}>()
 
 export const isRunning = () => daemons.size > 0
+export const statusOf = (id: string): Status => statuses.get(id) ?? "paused"
 const homeOf = (id: string) => path.join(FOLDERS_DIR, id)
+
+// Parsed once per change: listing a folder asks about every file in it.
+const states = new Map<string, { mtimeMs: number; state: DaemonState }>()
+
+function readState(id: string): DaemonState | null {
+  const file = path.join(homeOf(id), "state.json")
+  const mtimeMs = fs.statSync(file, { throwIfNoEntry: false })?.mtimeMs
+  if (mtimeMs === undefined) return null // not synced yet
+  const hit = states.get(id)
+  if (hit?.mtimeMs === mtimeMs) return hit.state
+  try {
+    const state: DaemonState = JSON.parse(fs.readFileSync(file, "utf8"))
+    states.set(id, { mtimeMs, state })
+    return state
+  } catch {
+    return null
+  }
+}
+
+/** What a daemon said, turned into the events above. */
+function listen(f: SyncedFolder, child: UtilityProcess) {
+  // Files moved since the last quiet pass, and how many of those the last
+  // pass had already seen: equal and non-zero means the run is over.
+  let moved = 0
+  let movedAtPass = 0
+  let failures = 0
+  const set = (to: Status) => {
+    if (statuses.get(f.id) === to) return
+    statuses.set(f.id, to)
+    events.emit("change")
+  }
+  set("syncing")
+  child.on("message", (m: Report) => {
+    if (m.type === "bytes") events.emit("bytes", m.up, m.down)
+    else if (m.type === "conflict") events.emit("conflict", f, m.keptAs)
+    else if (m.type === "file") {
+      moved++
+      set("syncing")
+      events.emit("file", f, m.dir, m.path, m.sha)
+    } else if (m.ok) {
+      failures = 0
+      if (moved && moved === movedAtPass) {
+        events.emit("done", f, moved)
+        moved = 0
+      }
+      movedAtPass = moved
+      set(moved ? "syncing" : "synced")
+    } else {
+      set("error")
+      if (++failures === (m.status ? 1 : PASSES_BEFORE_FAILED)) events.emit("failed", f, m.error, m.status, m.body)
+    }
+  })
+  child.once("spawn", () => child.postMessage({ type: "lan", lan }))
+}
 
 function start(s: Settings, f: SyncedFolder) {
   if (daemons.has(f.id)) return
@@ -40,11 +129,15 @@ function start(s: Settings, f: SyncedFolder) {
     env: { ...process.env, DD_HOME: home },
   })
   daemons.set(f.id, child)
+  listen(f, child)
   const say = (line: string) => events.emit("line", `[${f.name}] ${line}`)
   for (const stream of [child.stdout, child.stderr])
     if (stream) readline.createInterface({ input: stream }).on("line", say)
   child.on("exit", (code) => {
-    if (daemons.get(f.id) === child) daemons.delete(f.id)
+    if (daemons.get(f.id) === child) {
+      daemons.delete(f.id)
+      statuses.delete(f.id)
+    }
     say(`sync stopped${code ? ` (exit ${code})` : ""}`)
     events.emit("change")
   })
@@ -130,12 +223,8 @@ export function localPath(s: Settings, type: "file" | "folder", id: string): str
   for (const f of s.folders) {
     let rel: string | undefined = type === "folder" && f.id === id ? "" : undefined
     if (rel === undefined) {
-      let state: { files: Record<string, { id: string }>; folders: Record<string, string> }
-      try {
-        state = JSON.parse(fs.readFileSync(path.join(homeOf(f.id), "state.json"), "utf8"))
-      } catch {
-        continue // not synced yet
-      }
+      const state = readState(f.id)
+      if (!state) continue
       rel = type === "folder" ? state.folders[id] : Object.keys(state.files).find((r) => state.files[r].id === id)
     }
     if (rel === undefined) continue
@@ -143,6 +232,35 @@ export function localPath(s: Settings, type: "file" | "folder", id: string): str
     return fs.existsSync(abs) ? abs : null
   }
   return null
+}
+
+/**
+ * The other way round: the web app route that shows a path on this computer,
+ * a file open in its folder, or null if no synced folder has it (yet).
+ */
+export function routeOf(s: Settings, abs: string): string | null {
+  const f = s.folders.find((f) => abs === f.dir || abs.startsWith(f.dir + path.sep))
+  if (!f) return null
+  const rel = path.relative(f.dir, abs).split(path.sep).join("/")
+  if (!rel) return `/drive/${f.id}`
+  const state = readState(f.id)
+  if (!state) return null
+  const folderId = (r: string) => (r === "." ? f.id : Object.keys(state.folders).find((id) => state.folders[id] === r))
+  const file = state.files[rel]
+  const folder = folderId(file ? path.posix.dirname(rel) : rel)
+  return folder ? `/drive/${folder}${file ? `?file=${file.id}` : ""}` : null
+}
+
+/** Every file the daemons have synced, as [sha256, absolute path]: what LAN sync can serve. */
+export function* files(s: Settings): Generator<[string, string]> {
+  for (const f of s.folders)
+    for (const [rel, entry] of Object.entries(readState(f.id)?.files ?? {})) yield [entry.sha, path.join(f.dir, ...rel.split("/"))]
+}
+
+/** Hand the daemons the LAN peers to fetch from (null: none, use the server). */
+export function setLan(next: unknown) {
+  lan = next
+  for (const child of daemons.values()) child.postMessage({ type: "lan", lan })
 }
 
 /**

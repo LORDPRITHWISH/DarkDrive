@@ -3,9 +3,12 @@
 // The window is apps/web, built into this app and signed in with this
 // computer's device token (drive.ts). Syncing is the apps/sync daemon's job,
 // one copy per synced folder (folders.ts). This is the shell around both: the
-// tray, sign-in, updates, and the bridge the web app's desktop-only pages talk
-// to (drive-preload.cts). It keeps the settings the daemons read
-// (settings.ts), starts and stops them, and shows what they print. They run
+// tray, sign-in, updates, notifications, darkdrive:// links, the file
+// manager's right-click actions (filemanager.ts), and the bridge the web
+// app's desktop-only pages talk to (drive-preload.cts). It keeps the settings
+// the daemons read (settings.ts), starts and stops them to the pause and the
+// sync hours (schedule.ts), finds them LAN peers (lan.ts), and shows what
+// they print. They run
 // in utility processes rather than in here so the daemon's
 // process.exit()/top-level-await design stays as is, and a crash on either
 // side can't take the other down.
@@ -15,19 +18,30 @@
 // __dirname below despite the package being "type": "module".
 import { app, dialog, ipcMain, Menu, nativeImage, Notification, shell, Tray } from "electron"
 import { autoUpdater } from "electron-updater"
+import { spawn } from "node:child_process"
 import crypto from "node:crypto"
 import fs from "node:fs"
 import http from "node:http"
 import os from "node:os"
 import path from "node:path"
 import * as drive from "./drive.js"
+import * as fileManager from "./filemanager.js"
 import * as folders from "./folders.js"
-import { apiCall, httpUrl, readSettings, writeSettings, type Settings } from "./settings.js"
+import * as lan from "./lan.js"
+import * as local from "./local.js"
+import { inHours, isTime, tomorrow, wanted } from "./schedule.js"
+import { apiCall, FOREVER, httpUrl, readSettings, writeSettings, type Hours, type Settings, type SyncedFolder } from "./settings.js"
 
 const here = __dirname
 const LOG_LINES = 300
 const UPDATE_CHECK_MS = 4 * 60 * 60 * 1000
 const SIGN_IN_TIMEOUT_MS = 10 * 60 * 1000
+const HOUR_MS = 60 * 60 * 1000
+const SCHEDULE_CHECK_MS = 30 * 1000
+const NOTIFICATIONS_CHECK_MS = 60 * 1000
+const TRAY_TICK_MS = 3000
+const SPEED_WINDOW_MS = 5000
+const RECENT = 8
 
 // --------------------------------------------------------------- sign-in
 
@@ -126,8 +140,10 @@ async function saveAccount(patch: Partial<Settings>, fresh = false) {
     writeSettings(s)
   } finally {
     tempSession = ""
-    folders.resume(readSettings())
+    notifiedTo = null
+    applySchedule(true)
     drive.authorize(readSettings())
+    void lanSync?.refresh()
   }
 }
 
@@ -149,47 +165,307 @@ function addLine(line: string) {
   changed()
 }
 
-folders.events.on("line", addLine)
-folders.events.on("change", () => {
+/** Something the window, the tray or the file manager shows may have changed. */
+function refresh() {
   changed()
   refreshTray()
+  // A dev run would point the file manager at the bare electron binary.
+  if (app.isPackaged) {
+    const s = readSettings()
+    fileManager.publish(s, s.pausedUntil > Date.now(), folders.statusOf)
+  }
+}
+
+folders.events.on("line", addLine)
+folders.events.on("change", refresh)
+
+// --------------------------------------------------------- notifications
+
+// Held until they close: a notification nothing refers to can be collected
+// before it's clicked, and its click handler with it.
+const notes = new Set<Notification>()
+
+function note(title: string, body: string, onClick?: () => void) {
+  const n = new Notification({ title, body })
+  notes.add(n)
+  n.on("close", () => notes.delete(n))
+  if (onClick) n.on("click", onClick)
+  n.show()
+}
+
+const inFolder = (f: SyncedFolder, rel: string) => path.join(f.dir, ...rel.split("/"))
+
+folders.events.on("done", (f, n) =>
+  note("Sync complete", `${f.name}: ${n} ${n === 1 ? "file" : "files"} synced.`, () => shell.openPath(f.dir))
+)
+folders.events.on("conflict", (f, keptAs) =>
+  note(
+    "Sync conflict",
+    `${f.name}: a file changed here and somewhere else. Yours is kept as "${path.posix.basename(keptAs)}".`,
+    () => shell.showItemInFolder(inFolder(f, keptAs))
+  )
+)
+folders.events.on("failed", (f, error, status, body) => {
+  if (body.includes("quota_exceeded"))
+    note("DarkDrive storage is full", `${f.name} can't finish syncing until there's room.`, () => drive.open("/storage"))
+  else
+    note(
+      "Sync failed",
+      status ? `${f.name}: ${error}` : `${f.name}: can't reach DarkDrive. Sync carries on once it can.`,
+      () => drive.open("/sync")
+    )
 })
+
+// The server's own notifications (the web app's bell: an invitation to a
+// shared space, storage running out), shown natively too, since the window
+// that would toast them is usually closed.
+//
+// ponytail: asked for once a minute. Join the Socket.IO `user:` room from
+// here if a minute's delay starts to matter.
+type ServerNote = { title: string; body: string | null; link: string | null; readAt: string | null; createdAt: string }
+// The newest one seen, so each is shown once. null until the first look,
+// which only finds where "new" starts: what's already there isn't news.
+let notifiedTo: string | null = null
+
+async function checkNotifications() {
+  const s = readSettings()
+  if (!s.token) return
+  const { notifications } = await apiCall<{ notifications: ServerNote[] }>(s, "GET", "/api/notifications?limit=10")
+  const since = notifiedTo
+  notifiedTo = notifications[0]?.createdAt ?? since ?? ""
+  // The window, when it's being looked at, toasts them itself.
+  if (since === null || drive.focused()) return
+  for (const n of notifications.filter((n) => !n.readAt && n.createdAt > since).reverse())
+    note(n.title, n.body ?? "", () => drive.open(n.link?.startsWith("/") ? n.link : "/home"))
+}
+
+// -------------------------------------------------------------- activity
+
+// The last few files to go up or down, and how fast bytes are moving: the
+// tray's "Recent activity" and its speed line.
+const recent: { dir: "up" | "down"; abs: string }[] = []
+let traffic: { at: number; up: number; down: number }[] = []
+
+folders.events.on("file", (f, dir, rel, sha) => {
+  const abs = inFolder(f, rel)
+  recent.unshift({ dir, abs })
+  recent.length = Math.min(recent.length, RECENT)
+  lanSync?.add(sha, abs)
+})
+folders.events.on("bytes", (up, down) => traffic.push({ at: Date.now(), up, down }))
+
+/** Bytes a second each way, over the last few seconds. */
+function speed() {
+  traffic = traffic.filter((t) => t.at > Date.now() - SPEED_WINDOW_MS)
+  const per = (way: "up" | "down") => traffic.reduce((n, t) => n + t[way], 0) / (SPEED_WINDOW_MS / 1000)
+  return { up: per("up"), down: per("down") }
+}
+
+const rate = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)} MB/s` : `${Math.ceil(n / 1e3)} KB/s`)
+
+// -------------------------------------------------------------- schedule
+
+// Whether the daemons are meant to be running, as last applied.
+let scheduled: boolean | null = null
+
+/**
+ * Start or stop the daemons to match the pause and the sync hours
+ * (schedule.ts). On a timer, since both are about the time of day, and after
+ * either changes. `force` when something stopped the daemons behind its back.
+ */
+function applySchedule(force = false) {
+  const s = readSettings()
+  const on = wanted(s)
+  if (on === scheduled && !force) return
+  scheduled = on
+  if (on) folders.resume(s)
+  else void folders.pause()
+  refresh()
+}
+
+/** Pause sync until `until` (ms): 0 resumes it now, FOREVER waits to be resumed. */
+function pauseUntil(until: number) {
+  writeSettings({ ...readSettings(), pausedUntil: until })
+  applySchedule()
+  refresh()
+}
+
+/** How sync is doing, in a few words. */
+function status(s: Settings): string {
+  if (!s.token) return "Signed out"
+  if (!s.folders.length) return "Nothing synced yet"
+  if (s.pausedUntil >= FOREVER) return "Paused"
+  if (s.pausedUntil > Date.now()) {
+    const until = new Date(s.pausedUntil)
+    const today = until.getDate() === new Date().getDate()
+    return `Paused until ${today ? until.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "tomorrow"}`
+  }
+  if (s.hours && !inHours(s.hours, new Date())) return `Waiting until ${s.hours.from}`
+  const all = s.folders.map((f) => folders.statusOf(f.id))
+  return all.includes("error") ? "Sync problem" : all.includes("syncing") ? "Syncing" : "Up to date"
+}
 
 // ------------------------------------------------------------------ tray
 
 const icon = nativeImage.createFromPath(path.join(here, "../ui/icon.png"))
 let tray: Tray | null = null
+let trayShows = ""
+
+// The user closing the drop zone themselves turns it off. Quitting closes it
+// too, and that isn't them: it should be back next time.
+let quitting = false
+const dropZoneClosed = () => {
+  if (quitting) return
+  writeSettings({ ...readSettings(), dropZone: false })
+  refreshTray()
+}
+
+function setDropZone(on: boolean) {
+  writeSettings({ ...readSettings(), dropZone: on })
+  drive.dropZone(on, dropZoneClosed)
+  refreshTray()
+}
 
 function refreshTray() {
   if (!tray) return
-  const running = folders.isRunning()
-  const synced = readSettings().folders
-  tray.setToolTip(`DarkDrive ${app.getVersion()} — ${running ? "syncing" : "paused"}`)
+  const s = readSettings()
+  const title = `DarkDrive ${app.getVersion()} — ${status(s)}`
+  const { up, down } = speed()
   // Linux tray icons often never deliver clicks, so everything lives in the menu.
-  tray.setContextMenu(
-    Menu.buildFromTemplate([
-      { label: `DarkDrive ${app.getVersion()} — ${running ? "Syncing" : "Paused"}`, enabled: false },
-      ...(updateReady
-        ? [{ label: `Restart to update to ${updateReady}`, click: () => autoUpdater.quitAndInstall() }]
-        : []),
-      ...(synced.length
-        ? [
-            {
-              label: running ? "Pause sync" : "Resume sync",
-              click: () => (running ? folders.pause() : folders.resume(readSettings())),
-            },
-            {
-              label: "Open folder",
-              submenu: synced.map((f) => ({ label: f.name, click: () => shell.openPath(f.dir) })),
-            },
-          ]
-        : []),
-      { label: "Open DarkDrive", click: () => drive.open() },
-      { label: "Sync settings…", click: () => drive.open("/sync") },
-      { type: "separator" },
-      { label: "Quit", click: () => app.quit() },
-    ])
-  )
+  const template: Electron.MenuItemConstructorOptions[] = [
+    { label: title, enabled: false },
+    ...(up || down ? [{ label: `↑ ${rate(up)}   ↓ ${rate(down)}`, enabled: false }] : []),
+    ...(updateReady
+      ? [{ label: `Restart to update to ${updateReady}`, click: () => autoUpdater.quitAndInstall() }]
+      : []),
+    ...(s.folders.length
+      ? [
+          s.pausedUntil > Date.now()
+            ? { label: "Resume all", click: () => pauseUntil(0) }
+            : {
+                label: "Pause all",
+                submenu: [
+                  { label: "For 1 hour", click: () => pauseUntil(Date.now() + HOUR_MS) },
+                  { label: "Until tomorrow", click: () => pauseUntil(tomorrow()) },
+                  { label: "Until I resume", click: () => pauseUntil(FOREVER) },
+                ],
+              },
+          {
+            label: "Open folder",
+            submenu: s.folders.map((f) => ({ label: f.name, click: () => shell.openPath(f.dir) })),
+          },
+        ]
+      : []),
+    ...(recent.length
+      ? [
+          {
+            label: "Recent activity",
+            submenu: recent.map((r) => ({
+              label: `${r.dir === "up" ? "↑" : "↓"} ${path.basename(r.abs)}`,
+              click: () => shell.showItemInFolder(r.abs),
+            })),
+          },
+        ]
+      : []),
+    { label: "Open DarkDrive", click: () => drive.open() },
+    { label: "Sync settings…", click: () => drive.open("/sync") },
+    // It uploads as whoever is signed in, so there has to be someone.
+    { label: "Drop zone", type: "checkbox", checked: s.dropZone, enabled: !!s.token, click: () => setDropZone(!readSettings().dropZone) },
+    { type: "separator" },
+    { label: "Quit", click: () => app.quit() },
+  ]
+  // Only when it would read differently: this also runs on a timer (the
+  // speed, a pause running out), and a menu replaced while open closes.
+  const shows = JSON.stringify(template)
+  if (shows === trayShows) return
+  trayShows = shows
+  tray.setToolTip(title)
+  tray.setContextMenu(Menu.buildFromTemplate(template))
+}
+
+// ----------------------------------------------------------- links & args
+// What a copy of the app can be started with: a darkdrive:// link (a browser
+// handing over to the app), or an action from the file manager's right-click
+// menu (filemanager.ts). With the app already running, that copy passes its
+// arguments to this one ("second-instance", below) and quits.
+
+/**
+ * darkdrive://file/<id>, darkdrive://folder/<id>, darkdrive://share/<token>.
+ * Anyone can write one, so all a link can do is show something: it picks a
+ * page of the web app, by an id that's checked to be only an id.
+ */
+async function openLink(link: string) {
+  let u: URL
+  try {
+    u = new URL(link)
+  } catch {
+    return drive.open()
+  }
+  const id = /^\/([\w-]+)\/?$/.exec(u.pathname)?.[1]
+  if (id && u.host === "folder") return drive.open(`/drive/${id}`)
+  if (id && u.host === "share") return drive.open(`/s/${id}`)
+  if (id && u.host === "file") {
+    // The web app shows a file in its folder, which the link doesn't say.
+    const file = await apiCall<{ folderId: string }>(readSettings(), "GET", `/api/files/${id}`).catch(() => null)
+    if (file) return drive.open(`/drive/${file.folderId}?file=${id}`)
+    note("Couldn't open that link", "The file isn't in your DarkDrive, or DarkDrive can't be reached.")
+  }
+  drive.open()
+}
+
+// One at a time: adding a folder reads the settings, asks the server, then
+// writes them, and Explorer starts a copy of the app per selected folder.
+let syncing: Promise<unknown> = Promise.resolve()
+
+function syncFolder(dir: string) {
+  syncing = syncing.then(async () => {
+    const s = readSettings()
+    if (!s.token) return void drive.open()
+    try {
+      if (!fs.statSync(dir).isDirectory()) throw new Error("Only folders can be synced.")
+      await folders.addLocal(s, dir)
+      note("Syncing with DarkDrive", dir, () => drive.open("/sync"))
+    } catch (e) {
+      note("Couldn't sync that folder", (e as Error).message)
+    }
+  })
+}
+
+function openLocal(p: string) {
+  const route = folders.routeOf(readSettings(), p)
+  if (route) drive.open(route)
+  else note("Not in DarkDrive yet", `"${path.basename(p)}" isn't in a synced folder, or hasn't synced yet.`)
+}
+
+/** Act on what a copy of the app was started with. False if that was nothing in particular. */
+function handle(argv: string[]): boolean {
+  const link = argv.find((a) => a.startsWith("darkdrive://"))
+  // A link, and only a link: whatever else is on its command line may have
+  // been put there by whoever wrote it (CVE-2018-1000006), and the actions
+  // below are for the file manager alone.
+  if (link) {
+    void openLink(link)
+    return true
+  }
+  const at = argv.findIndex((a) => a.startsWith("--dd-"))
+  if (at < 0) return false
+  const paths = argv.slice(at + 1).filter((a) => path.isAbsolute(a))
+  if (argv[at] === "--dd-sync") paths.forEach(syncFolder)
+  else if (argv[at] === "--dd-open" && paths[0]) openLocal(paths[0])
+  else if (argv[at] === "--dd-toggle") pauseUntil(readSettings().pausedUntil > Date.now() ? 0 : FOREVER)
+  return true
+}
+
+// ------------------------------------------------------------------- lan
+
+// Set once the app is ready. Finds this account's other computers on the
+// network and serves them synced files; the daemons fetch from the peers it
+// finds (folders.setLan).
+let lanSync: ReturnType<typeof lan.start> | null = null
+
+const lanKey = async () => {
+  const s = readSettings()
+  return s.token ? (await apiCall<{ key: string }>(s, "GET", "/api/sync/lan-key")).key : null
 }
 
 // ---------------------------------------------------- updates & autostart
@@ -246,8 +522,12 @@ ipcMain.on("desktop:config", (e) => {
 })
 
 bridge("state", () => {
-  const { apiUrl, webUrl, device, folders: list } = readSettings()
-  return { apiUrl, webUrl, device, folders: list, syncing: folders.isRunning(), log, version: app.getVersion(), updateReady, signInUrl }
+  const s = readSettings()
+  const { apiUrl, webUrl, device, folders: list, pausedUntil, hours } = s
+  return {
+    apiUrl, webUrl, device, folders: list, pausedUntil, hours, log, updateReady, signInUrl,
+    syncing: folders.isRunning(), status: status(s), version: app.getVersion(),
+  }
 })
 
 bridge("sign-in", async () => {
@@ -293,7 +573,14 @@ bridge("save-server", async (a: { apiUrl: string; webUrl: string; device: string
   if (moved) await revoke(old)
 })
 
-bridge("syncing", (on: boolean) => (on ? folders.resume(readSettings()) : folders.pause()))
+// Infinity is "until I resume": writeSettings caps it at FOREVER.
+bridge("pause-until", (until: number) => pauseUntil(Number(until) || 0))
+bridge("sync-hours", (h: Hours | null) => {
+  if (h && !(isTime(h.from) && isTime(h.to))) throw new Error("Those aren't times.")
+  writeSettings({ ...readSettings(), hours: h && { from: h.from, to: h.to } })
+  applySchedule()
+  refresh()
+})
 bridge("update:install", () => autoUpdater.quitAndInstall())
 
 async function pickDir(title: string): Promise<string | null> {
@@ -324,30 +611,65 @@ bridge("show", (type: "file" | "folder", id: string) => {
   else shell.showItemInFolder(p)
 })
 
+// This computer's own files, for the web app's /local page. These take paths
+// from the page, so local.ts is careful with each.
+bridge("local:list", (dir?: string) => local.list(readSettings(), dir))
+bridge("local:open", (p: string) => local.open(p))
+bridge("local:show", (p: string) => local.show(p))
+bridge("local:sync", (dir: string) => local.sync(readSettings(), dir))
+
 // ------------------------------------------------------------------ main
 
 // Two copies would run two daemons over each state file.
-if (!app.requestSingleInstanceLock()) app.quit()
+// A second copy hands this one its own argv: the one Electron passes along
+// has been through Chromium, which reorders and adds to it.
+if (!app.requestSingleInstanceLock({ argv: process.argv })) app.quit()
 else {
-  app.on("second-instance", () => drive.open())
+  app.on("second-instance", (_e, argv, _cwd, data) => {
+    if (!handle((data as { argv?: string[] } | null)?.argv ?? argv)) drive.open()
+  })
   // Closing the window leaves sync running in the tray; Quit is in its menu.
   app.on("window-all-closed", () => {})
-  app.on("before-quit", () => void folders.pause())
+  app.on("before-quit", () => {
+    quitting = true
+    void folders.pause()
+  })
   app.whenReady().then(() => {
     tray = new Tray(icon.resize({ width: 22, height: 22 }))
     tray.on("click", () => drive.open())
     refreshTray()
     drive.setup()
     drive.authorize(readSettings())
-    folders.resume(readSettings())
+    applySchedule()
+    setInterval(applySchedule, SCHEDULE_CHECK_MS)
+    setInterval(refreshTray, TRAY_TICK_MS)
+    const look = () => void checkNotifications().catch(() => {})
+    look()
+    setInterval(look, NOTIFICATIONS_CHECK_MS)
+    lanSync = lan.start({ key: lanKey, files: () => folders.files(readSettings()), onChange: folders.setLan })
     // Dev runs would register the bare electron binary, and have nothing to update.
     if (app.isPackaged) {
       registerAutostart()
+      // Windows' right-click actions are the installer's (build/installer.nsh).
+      app.setAsDefaultProtocolClient("darkdrive")
+      try {
+        if (fileManager.install())
+          note(
+            "DarkDrive was added to Files",
+            "Click to restart Files, so its right-click actions and sync emblems show up. Open Files windows will close.",
+            () => spawn("nautilus", ["-q"], { stdio: "ignore" }).on("error", () => {})
+          )
+      } catch (e) {
+        addLine(`[desktop] couldn't set up the file manager: ${(e as Error).message}`)
+      }
       checkForUpdates()
       setInterval(checkForUpdates, UPDATE_CHECK_MS)
     }
+    const s = readSettings()
+    if (s.dropZone && s.token) drive.dropZone(true, dropZoneClosed)
+    // A link or a right-click action is what this launch is for. Otherwise
     // --hidden is for launching at login: straight to the tray, unless
     // there's no sign-in yet to sync with.
-    if (!readSettings().token || !process.argv.includes("--hidden")) drive.open()
+    if (!handle(process.argv) && (!s.token || !process.argv.includes("--hidden"))) drive.open()
   })
 }

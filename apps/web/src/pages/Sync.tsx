@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { Navigate } from "react-router-dom"
 import {
   ArrowsClockwiseIcon,
+  ClockIcon,
   FolderIcon,
   FolderOpenIcon,
   PauseIcon,
@@ -19,7 +20,15 @@ import {
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@workspace/ui/components/dropdown-menu"
+import { Input } from "@workspace/ui/components/input"
 import { PopConfirm } from "@workspace/ui/components/popconfirm"
+import { Switch } from "@workspace/ui/components/switch"
 import { Sidebar } from "@/components/Sidebar"
 import { SidebarToggle } from "@/components/SidebarToggle"
 import { desktop, type DesktopState } from "@/lib/desktop"
@@ -28,6 +37,11 @@ import { toast } from "@/store/toast"
 
 const run = (fn: () => Promise<unknown>) =>
   void fn().catch((e: Error) => toast.error(e.message))
+
+const HOUR_MS = 60 * 60 * 1000
+const DEFAULT_HOURS = { from: "09:00", to: "18:00" }
+/** Midnight tonight. */
+const tomorrow = () => new Date(new Date().setHours(24, 0, 0, 0)).getTime()
 
 // What this computer keeps in sync: the desktop app's own page, linked from
 // the sidebar only there. Each folder here pairs a folder on disk with one in
@@ -71,13 +85,35 @@ export function SyncPage() {
           </div>
           {state && state.folders.length > 0 && (
             <div className="flex items-center gap-2">
-              <Badge variant={state.syncing ? "default" : "muted"}>
-                {state.syncing ? "Syncing" : "Paused"}
-              </Badge>
-              <Button size="sm" variant="outline" onClick={() => run(() => d.setSyncing(!state.syncing))}>
-                {state.syncing ? <PauseIcon size={14} /> : <PlayIcon size={14} />}
-                {state.syncing ? "Pause" : "Resume"}
-              </Button>
+              <Badge variant={state.syncing ? "default" : "muted"}>{state.status}</Badge>
+              {state.pausedUntil > Date.now() ? (
+                <Button size="sm" variant="outline" onClick={() => run(() => d.pauseUntil(0))}>
+                  <PlayIcon size={14} />
+                  Resume
+                </Button>
+              ) : (
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={
+                      <Button size="sm" variant="outline">
+                        <PauseIcon size={14} />
+                        Pause
+                      </Button>
+                    }
+                  />
+                  <DropdownMenuContent align="end" className="w-44">
+                    <DropdownMenuItem onClick={() => run(() => d.pauseUntil(Date.now() + HOUR_MS))}>
+                      For 1 hour
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => run(() => d.pauseUntil(tomorrow()))}>
+                      Until tomorrow
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => run(() => d.pauseUntil(Infinity))}>
+                      Until I resume
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
             </div>
           )}
         </header>
@@ -175,6 +211,47 @@ export function SyncPage() {
                 )}
               </CardContent>
             </Card>
+
+            {state && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <ClockIcon size={16} weight="bold" />
+                    Sync hours
+                  </CardTitle>
+                  <CardDescription>
+                    Only sync between these times each day. Outside them sync waits, and
+                    catches up when they come round.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex-row flex-wrap items-center gap-3">
+                  <Switch
+                    aria-label="Only sync during certain hours"
+                    checked={!!state.hours}
+                    onCheckedChange={(on) => run(() => d.setSyncHours(on ? DEFAULT_HOURS : null))}
+                  />
+                  {state.hours ? (
+                    (["from", "to"] as const).map((end) => (
+                      <label key={end} className="flex items-center gap-2 text-sm">
+                        {end}
+                        <Input
+                          type="time"
+                          className="w-28"
+                          value={state.hours![end]}
+                          // Empty while a field is being cleared to retype it.
+                          onChange={(e) =>
+                            e.target.value &&
+                            run(() => d.setSyncHours({ ...state.hours!, [end]: e.target.value }))
+                          }
+                        />
+                      </label>
+                    ))
+                  ) : (
+                    <span className="text-muted-foreground text-sm">Sync at any time</span>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             <Card>
               <CardHeader>

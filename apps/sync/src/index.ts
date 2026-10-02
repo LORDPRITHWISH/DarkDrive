@@ -83,6 +83,33 @@ function saveState() {
   fs.renameSync(tmp, STATE_FILE)
 }
 
+// ---------------------------------------------------------------- parent
+// The desktop app runs this in an Electron utility process and talks to it
+// here: what moved goes up (its notifications, tray and file-manager emblems),
+// LAN peers come down. A CLI run has no parentPort, and all of this is a no-op.
+
+type Parent = { postMessage(m: unknown): void; on(e: "message", fn: (e: { data: any }) => void): void }
+const parent = (process as { parentPort?: Parent }).parentPort
+const report = (m: Record<string, unknown>) => parent?.postMessage(m)
+
+// Bytes since the last tick, for the tray's speed line.
+// ponytail: uploads count per chunk (25MB), so a slow uplink reads as bursts;
+// stream the chunk body if the tray needs a smooth number.
+const moved = { up: 0, down: 0 }
+if (parent)
+  setInterval(() => {
+    if (!moved.up && !moved.down) return
+    report({ type: "bytes", ...moved })
+    moved.up = moved.down = 0
+  }, 1000).unref()
+
+// Other DarkDrive computers on this network signed in to the same account
+// (apps/desktop lan.ts finds them). hosts are "ip:port".
+let lan: { hosts: string[]; tagKey: string; encKey: string } | null = null
+parent?.on("message", ({ data }) => {
+  if (data?.type === "lan") lan = data.lan
+})
+
 // ------------------------------------------------------------------- api
 
 async function api<T = any>(method: string, route: string, body?: unknown): Promise<T> {
@@ -163,6 +190,7 @@ function moveAside(rel: string): string {
   fs.renameSync(localPath(rel), localPath(to))
   delete state.files[rel]
   console.log(`  ! conflict: kept your copy as ${to}`)
+  report({ type: "conflict", path: rel, keptAs: to })
   return to
 }
 
@@ -174,17 +202,59 @@ type RemoteFile = {
 }
 type RemoteFolder = { id: string; path: string; deleted: boolean }
 
+const LAN_IDLE_MS = 5000
+
+/**
+ * Fetch a file's bytes into `tmp` from a computer on this network instead of
+ * the server. The peer is asked by an HMAC of the hash, which only this
+ * account's computers can make, and answers encrypted. Nothing it sends is
+ * trusted: the bytes count only if they hash to what the server said.
+ */
+async function fromLan(sha: string, tmp: string): Promise<boolean> {
+  if (!lan) return false
+  const tag = crypto.createHmac("sha256", Buffer.from(lan.tagKey, "hex")).update(sha).digest("hex")
+  for (const host of lan.hosts) {
+    const ac = new AbortController()
+    // An idle timeout, not a total one: a big file may take minutes.
+    const idle = setTimeout(() => ac.abort(), LAN_IDLE_MS)
+    try {
+      const res = await fetch(`http://${host}/blob/${tag}`, { signal: ac.signal })
+      if (!res.ok || !res.body) continue
+      const iv = Buffer.from(res.headers.get("x-iv") ?? "", "hex")
+      const plain = crypto.createDecipheriv("aes-256-ctr", Buffer.from(lan.encKey, "hex"), iv)
+      const hash = crypto.createHash("sha256")
+      plain.on("data", (c: Buffer) => {
+        idle.refresh()
+        moved.down += c.length
+        hash.update(c)
+      })
+      await pipeline(Readable.fromWeb(res.body as any), plain, fs.createWriteStream(tmp))
+      if (hash.digest("hex") === sha) return true
+    } catch {
+      // Gone, slow or wrong: the next peer, then the server.
+    } finally {
+      clearTimeout(idle)
+    }
+  }
+  return false
+}
+
 async function download(f: RemoteFile) {
   const abs = localPath(f.path)
   fs.mkdirSync(path.dirname(abs), { recursive: true })
-  const res = await fetch(`${cfg.apiUrl}/api/files/${f.id}/download`, {
-    headers: { Authorization: `Bearer ${cfg.token}` },
-  })
-  if (!res.ok || !res.body) throw new Error(`download ${f.path} -> ${res.status}`)
   // Straight to a .dd-part and renamed on success, so a killed transfer never
   // leaves a truncated file for the next push to upload as "an edit".
   const tmp = abs + PART_SUFFIX
-  await pipeline(Readable.fromWeb(res.body as any), fs.createWriteStream(tmp))
+  const viaLan = f.sha256 !== null && (await fromLan(f.sha256, tmp))
+  if (!viaLan) {
+    const res = await fetch(`${cfg.apiUrl}/api/files/${f.id}/download`, {
+      headers: { Authorization: `Bearer ${cfg.token}` },
+    })
+    if (!res.ok || !res.body) throw new Error(`download ${f.path} -> ${res.status}`)
+    const body = Readable.fromWeb(res.body as any)
+    body.on("data", (c: Buffer) => (moved.down += c.length))
+    await pipeline(body, fs.createWriteStream(tmp))
+  }
   fs.renameSync(tmp, abs)
   const st = fs.statSync(abs)
   state.files[f.path] = {
@@ -193,7 +263,8 @@ async function download(f: RemoteFile) {
     size: st.size,
     mtimeMs: st.mtimeMs,
   }
-  console.log(`  ↓ ${f.path}`)
+  console.log(`  ↓ ${f.path}${viaLan ? " (from this network)" : ""}`)
+  report({ type: "file", dir: "down", path: f.path, sha: state.files[f.path].sha })
 }
 
 /** Re-key state under a folder that moved, so its children stay tracked. */
@@ -344,6 +415,7 @@ async function upload(rel: string, info: DiskFile, sha: string, replace?: Entry)
         body: form,
       })
       if (!res.ok) throw new Error(`chunk ${i} of ${rel} -> ${res.status}`)
+      moved.up += buf.length
     }
     const done = await api<{ file: { id: string } }>(
       "POST",
@@ -352,6 +424,7 @@ async function upload(rel: string, info: DiskFile, sha: string, replace?: Entry)
     )
     state.files[rel] = { id: done.file.id, sha, size: info.size, mtimeMs: info.mtimeMs }
     console.log(`  ↑ ${rel}`)
+    report({ type: "file", dir: "up", path: rel, sha })
   } catch (e: any) {
     if (e.status === 409) return void moveAside(rel)
     await api("DELETE", `/api/files/upload/${init.uploadId}`).catch(() => {})
@@ -452,7 +525,9 @@ do {
   try {
     await pull()
     await push()
+    report({ type: "pass", ok: true })
   } catch (e: any) {
+    report({ type: "pass", ok: false, error: e.message, status: e.status, body: e.body ?? "" })
     // Transient failures (server restart, laptop lid) must not kill the
     // daemon — the next tick re-reconciles from the same state file.
     console.error(`[darkdrive] ${e.message}${e.body ? ` ${e.body}` : ""}`)

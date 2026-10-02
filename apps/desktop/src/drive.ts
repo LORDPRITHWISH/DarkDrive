@@ -30,6 +30,8 @@ protocol.registerSchemesAsPrivileged([
 const icon = nativeImage.createFromPath(path.join(__dirname, "../ui/icon.png"))
 const drive = () => session.fromPartition("persist:drive")
 let win: BrowserWindow | null = null
+let drop: BrowserWindow | null = null
+const DROP_URL = new URL("/drop", APP_URL).toString()
 
 // API routes all live under /api/. Compared as strings: Node's URL doesn't
 // know darkdrive: is a standard scheme, and gives its URLs no origin.
@@ -131,7 +133,11 @@ export function authorize(s: Settings, tempSession = "") {
   })
   // Reloaded rather than told: the page reads the API's address once, at start.
   win?.loadURL(APP_URL)
+  drop?.loadURL(DROP_URL)
 }
+
+/** Whether the user is looking at the app right now. */
+export const focused = () => !!win?.isFocused()
 
 /** Tell the open window something changed (the bridge's onChange). */
 export function send(channel: string) {
@@ -161,4 +167,39 @@ export function open(route?: string) {
   win = w
   w.on("closed", () => (win = null))
   w.loadURL(new URL(route ?? "/", APP_URL).toString())
+}
+
+/**
+ * The drop zone: a small window that stays on top and uploads whatever is
+ * dropped on it, without the drive being open. It's the web app's /drop
+ * page, so the uploading is the web app's own. `onClose` is for the user
+ * closing it themselves, not for turning it off here.
+ *
+ * A window rather than the tray icon: only macOS tells an app about files
+ * dropped on its tray icon.
+ */
+export function dropZone(on: boolean, onClose: () => void) {
+  if (!on) return void drop?.destroy() // no "close" event, so no onClose
+  if (drop) return void drop.show()
+  const w = new BrowserWindow({
+    // Wide enough for the web app's upload toaster, which is where progress shows.
+    width: 360,
+    height: 260,
+    title: "Drop to DarkDrive",
+    icon,
+    backgroundColor: "#0a0a0a",
+    // ponytail: GNOME on Wayland ignores this for ordinary windows; there the
+    // title bar's own "Always on Top" does it.
+    alwaysOnTop: true,
+    resizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    autoHideMenuBar: true,
+    webPreferences: { session: drive(), preload: path.join(__dirname, "drive-preload.cjs") },
+  })
+  drop = w
+  w.on("close", onClose)
+  w.on("closed", () => (drop = null))
+  w.loadURL(DROP_URL)
 }

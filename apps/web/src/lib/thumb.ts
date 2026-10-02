@@ -2,7 +2,9 @@
 // Used by the grid/list to decide whether to attempt loading a thumbnail before
 // falling back to a type icon — keeps us from firing 404-bound requests for
 // files the pipeline can never render (text, archives, audio, …).
-export function thumbnailable(file: { mimeType: string; name: string }): boolean {
+export function thumbnailable(file: { mimeType: string; name: string; thumbnailState?: string | null }): boolean {
+  // The server's word that it can't make one. A file on this computer says the same (pages/Local).
+  if (file.thumbnailState === "unsupported") return false
   const m = file.mimeType.toLowerCase()
   const e = (file.name.match(/\.[^.]+$/)?.[0] ?? "").toLowerCase()
   if (m.startsWith("image/") || /\.(jpe?g|png|gif|webp|bmp|tiff?|heic|heif|avif|ico|svg)$/.test(e))

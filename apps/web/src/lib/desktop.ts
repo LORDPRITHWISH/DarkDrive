@@ -13,7 +13,8 @@ export type LocalEntry = {
   name: string
   path: string
   dir: boolean
-  size: number
+  /** A file's length; for a folder, the room it takes on disk, or null until it's been measured. */
+  size: number | null
   /** ms */
   modified: number
   route: string | null
@@ -25,8 +26,12 @@ export type LocalListing = {
   parents: { name: string; dir: string }[]
   /** Shortcuts: home, Documents, Downloads…, and the synced folders. */
   places: { name: string; dir: string }[]
-  /** Folders first, then by name. Hidden files are left out. */
+  /** Folders first, then by name. Hidden files are left out unless asked for. */
   entries: LocalEntry[]
+  /** The room `dir` takes on disk, or null until it's been measured. */
+  size: number | null
+  /** The disk `dir` is on, in bytes, if it says. */
+  disk: { total: number; free: number } | null
 }
 
 export type DesktopState = {
@@ -76,7 +81,15 @@ export type Desktop = {
   show(type: "file" | "folder", id: string): Promise<void>
   installUpdate(): Promise<void>
   /** What's in a folder on this computer; the home folder when none is given. */
-  listLocal(dir?: string): Promise<LocalListing>
+  listLocal(dir?: string, hidden?: boolean): Promise<LocalListing>
+  /** Work out how big a folder and every folder in it is. Slow on a big one; listLocal has the sizes afterwards. */
+  measureLocal(dir: string): Promise<void>
+  /** Answers the new folder's path. */
+  newLocalFolder(dir: string, name: string): Promise<string>
+  /** A new name in the same folder. Refused if something there has it already. */
+  renameLocal(path: string, name: string): Promise<void>
+  /** Move things to the bin, after the desktop app asks once to be sure. Answers whether they went. */
+  trashLocal(paths: string[]): Promise<boolean>
   /** Open a file with the app it belongs to. One that would run is shown in the file manager instead. */
   openLocal(path: string): Promise<void>
   showLocal(path: string): Promise<void>

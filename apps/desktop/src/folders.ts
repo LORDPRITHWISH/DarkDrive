@@ -176,6 +176,9 @@ export async function available(s: Settings): Promise<Remote[]> {
 const fold = (p: string) => (process.platform === "win32" ? p.toLowerCase() : p)
 const within = (a: string, b: string) => fold(a) === fold(b) || fold(a).startsWith(fold(b) + path.sep)
 
+/** The synced folder that `p` is, or has inside it: moving `p` would take it out from under its daemon. */
+export const syncedIn = (s: Settings, p: string) => s.folders.find((f) => within(f.dir, p))
+
 // Two daemons over one tree would upload the shared files twice, into two
 // different DarkDrive folders, and then both push every edit to them.
 function assertFree(s: Settings, dir: string) {

@@ -61,6 +61,8 @@ type Props = {
   onDelete?: () => void
   onRemoveShortcut?: () => void
   onAddToSpace?: () => void
+  /** The host's own entries, after the ones that open things. */
+  children?: React.ReactNode
 }
 
 export function FileContextMenu({
@@ -80,6 +82,7 @@ export function FileContextMenu({
   onDelete,
   onRemoveShortcut,
   onAddToSpace,
+  children,
 }: Props) {
   const isShortcut = !!menu.shortcutId
   // In the desktop app, whether this item is in a folder synced here. Asked
@@ -162,6 +165,7 @@ export function FileContextMenu({
             Open in desktop app
           </DropdownMenuItem>
         )}
+        {children}
         {onDownload && (
           <DropdownMenuItem onClick={onDownload}>
             <DownloadIcon size={16} />

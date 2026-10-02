@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import BorderBeam from "@/components/magicui/BorderBeam"
 import { ScrollArea } from "@workspace/ui/components/scroll-area"
-import { ArrowCounterClockwiseIcon, MagnifyingGlassMinusIcon, MagnifyingGlassPlusIcon, UploadSimpleIcon } from "@phosphor-icons/react"
+import { UploadSimpleIcon } from "@phosphor-icons/react"
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
-import { useDrive, zoomToGrid, ZOOM_MIN, ZOOM_MAX, ZOOM_DEFAULT } from "@/store/drive"
+import { useDrive, zoomToGrid } from "@/store/drive"
 import { Sidebar } from "@/components/Sidebar"
 import { SidebarToggle } from "@/components/SidebarToggle"
 import { HeaderActions } from "@/components/HeaderActions"
-import { Toolbar } from "@/components/Toolbar"
+import { Toolbar, ZoomControl } from "@/components/Toolbar"
 import { Breadcrumbs } from "@/components/Breadcrumbs"
 import { FileGrid } from "@/components/FileGrid"
 import { NavButtons } from "@/components/NavButtons"
@@ -56,7 +56,6 @@ export function DrivePage() {
     trashItems,
     view,
     zoom,
-    setZoom,
   } = useDrive()
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [showDropOverlay, setShowDropOverlay] = useState(false)
@@ -264,47 +263,7 @@ export function DrivePage() {
                 shared space
               </Link>
             )}
-            {view === "grid" && (
-              <div className="hidden items-center gap-2 sm:flex">
-                {zoom !== ZOOM_DEFAULT && (
-                  <button
-                    onClick={() => setZoom(ZOOM_DEFAULT)}
-                    className="text-muted-foreground hover:text-foreground shrink-0 transition-colors"
-                    title={`Reset zoom to ${ZOOM_DEFAULT}%`}
-                  >
-                    <ArrowCounterClockwiseIcon size={14} />
-                  </button>
-                )}
-                <button
-                  onClick={() => setZoom(Math.max(ZOOM_MIN, zoom - 10))}
-                  disabled={zoom <= ZOOM_MIN}
-                  className="text-muted-foreground hover:text-foreground disabled:opacity-30 shrink-0 transition-colors"
-                  title="Zoom out"
-                >
-                  <MagnifyingGlassMinusIcon size={16} />
-                </button>
-                <input
-                  type="range"
-                  min={ZOOM_MIN}
-                  max={ZOOM_MAX}
-                  value={zoom}
-                  onChange={(e) => setZoom(Number(e.target.value))}
-                  className="accent-primary h-1 w-32 cursor-pointer"
-                  title={`Zoom ${zoom}%`}
-                />
-                <button
-                  onClick={() => setZoom(Math.min(ZOOM_MAX, zoom + 10))}
-                  disabled={zoom >= ZOOM_MAX}
-                  className="text-muted-foreground hover:text-foreground disabled:opacity-30 shrink-0 transition-colors"
-                  title="Zoom in"
-                >
-                  <MagnifyingGlassPlusIcon size={16} />
-                </button>
-                <span className="text-muted-foreground w-[3.5ch] text-right text-xs leading-none tabular-nums">
-                  {zoom}%
-                </span>
-              </div>
-            )}
+            <ZoomControl />
             <div className="flex items-center gap-1">
               <HeaderActions onReload={() => folderId && loadFolder(folderId)} />
             </div>

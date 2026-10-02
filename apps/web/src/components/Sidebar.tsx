@@ -1,8 +1,8 @@
 import { Link, useLocation } from "react-router-dom"
 import {
   ArrowsClockwiseIcon,
+  CaretDownIcon,
   DesktopIcon,
-  HardDrivesIcon,
   HouseIcon,
   FolderIcon,
   FolderOpenIcon,
@@ -58,6 +58,8 @@ export function Sidebar() {
   const desktopCollapsed = useSidebar((s) => s.collapsed)
   const mobileOpen = useSidebar((s) => s.mobileOpen)
   const setMobileOpen = useSidebar((s) => s.setMobileOpen)
+  const moreOpen = useSidebar((s) => s.moreOpen)
+  const toggleMore = useSidebar((s) => s.toggleMore)
   const loc = useLocation()
 
   const [isMobile, setIsMobile] = useState(
@@ -95,12 +97,21 @@ export function Sidebar() {
         ? "bg-accent text-accent-foreground"
         : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
     }`
-  const navItem = (to: string, label: string, icon: React.ReactNode) => (
-    <Link to={to} title={collapsed ? label : undefined} className={navClass(loc.pathname === to)}>
+  const navItem = (to: string, label: string, icon: React.ReactNode, active = loc.pathname === to) => (
+    <Link to={to} title={collapsed ? label : undefined} className={navClass(active)}>
       {icon}
       {!collapsed && <span>{label}</span>}
     </Link>
   )
+  // A group's name. With the sidebar down to icons there's no room for words, so a rule stands in.
+  const heading = (label: string) =>
+    collapsed ? (
+      <div className="bg-border mx-2 my-2 h-px" />
+    ) : (
+      <div className="text-muted-foreground mt-3 mb-1 px-2 text-xs font-medium tracking-wider uppercase">{label}</div>
+    )
+  // Open if it's been opened, or if the page being shown is one of its own.
+  const showMore = moreOpen || ["/uploads", "/storage", "/bin", "/admin"].includes(loc.pathname)
 
   return (
     <>
@@ -196,9 +207,16 @@ export function Sidebar() {
           />
         </div>
 
-      {/* Nav */}
+      {/* Nav, in three groups: what looks across everything, where files
+          live, and the housekeeping, which stays folded away until wanted.
+          Profile isn't here: the user row at the bottom opens it. */}
       <nav className="flex flex-col gap-0.5">
         {navItem("/home", "Home", <HouseIcon size={18} />)}
+        {navItem("/search", "Search", <MagnifyingGlassIcon size={18} />)}
+        {navItem("/recent", "Recent", <ClockCounterClockwiseIcon size={18} />)}
+        {navItem("/starred", "Starred", <StarIcon size={18} />)}
+
+        {heading("Places")}
         {user &&
           navItem(
             `/drive/${user.rootFolderId}`,
@@ -217,21 +235,32 @@ export function Sidebar() {
             "Synced Folders",
             <ArrowsClockwiseIcon size={18} />
           )}
-        {/* A temporary login can't sync: the API gives it no device token. */}
+        {/* Its files and its sync settings, as two tabs (ComputerTabs). A
+            temporary login gets neither: the API gives it no device token. */}
         {desktop && !user?.tempSessionExpiresAt &&
-          navItem("/sync", "This computer", <DesktopIcon size={18} />)}
-        {desktop && !user?.tempSessionExpiresAt &&
-          navItem("/local", "Local files", <HardDrivesIcon size={18} />)}
+          navItem("/local", "This computer", <DesktopIcon size={18} />, ["/local", "/sync"].includes(loc.pathname))}
         {navItem("/spaces", "Spaces", <UsersThreeIcon size={18} />)}
-        {navItem("/search", "Search", <MagnifyingGlassIcon size={18} />)}
-        {navItem("/recent", "Recent", <ClockCounterClockwiseIcon size={18} />)}
-        {navItem("/uploads", "Uploads", <UploadSimpleIcon size={18} />)}
-        {navItem("/starred", "Starred", <StarIcon size={18} />)}
-        {navItem("/storage", "Storage", <ChartDonutIcon size={18} />)}
-        {navItem("/bin", "Bin", <TrashIcon size={18} />)}
-        {user?.role === "ADMIN" &&
-          navItem("/admin", "Admin", <ShieldCheckIcon size={18} />)}
-        {navItem("/profile", "Profile", <UserCircleIcon size={18} />)}
+
+        <button
+          onClick={toggleMore}
+          aria-expanded={showMore}
+          title={collapsed ? "More" : undefined}
+          className={`text-muted-foreground hover:text-foreground mt-3 mb-1 flex items-center rounded-md px-2 py-1 text-xs font-medium tracking-wider uppercase ${
+            collapsed ? "justify-center" : "justify-between"
+          }`}
+        >
+          {!collapsed && "More"}
+          <CaretDownIcon size={12} className={`transition-transform ${showMore ? "" : "-rotate-90"}`} />
+        </button>
+        {showMore && (
+          <>
+            {navItem("/uploads", "Uploads", <UploadSimpleIcon size={18} />)}
+            {navItem("/storage", "Storage", <ChartDonutIcon size={18} />)}
+            {navItem("/bin", "Bin", <TrashIcon size={18} />)}
+            {user?.role === "ADMIN" &&
+              navItem("/admin", "Admin", <ShieldCheckIcon size={18} />)}
+          </>
+        )}
       </nav>
 
       {/* Pinned spaces — the "/spaces" nav item above is the full gateway;

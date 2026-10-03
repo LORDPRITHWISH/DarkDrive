@@ -7,6 +7,8 @@ type ScrollAreaProps = ScrollAreaPrimitive.Root.Props & {
   viewportProps?: Omit<ScrollAreaPrimitive.Viewport.Props, "className"> & {
     className?: string
   }
+  /** Let content grow wider than the viewport — for what's read in two dimensions: a wide table, a zoomed page, unwrapped text. */
+  horizontal?: boolean
 }
 
 // Root and viewport are sized with flex rather than `size-full`, so a root
@@ -16,6 +18,7 @@ function ScrollArea({
   className,
   children,
   viewportProps,
+  horizontal,
   ...props
 }: ScrollAreaProps) {
   return (
@@ -32,7 +35,12 @@ function ScrollArea({
           viewportProps?.className
         )}
       >
-        <ScrollAreaPrimitive.Content>{children}</ScrollAreaPrimitive.Content>
+        {/* Base UI gives Content `min-width: fit-content`, so one unwrappable
+            child (any `truncate`d name) widens the whole area into a sideways
+            scroll instead of ellipsizing. Only `horizontal` areas want that. */}
+        <ScrollAreaPrimitive.Content style={horizontal ? undefined : { minWidth: 0 }}>
+          {children}
+        </ScrollAreaPrimitive.Content>
       </ScrollAreaPrimitive.Viewport>
       <ScrollBar />
       <ScrollBar orientation="horizontal" />

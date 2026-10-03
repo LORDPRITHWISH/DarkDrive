@@ -184,7 +184,7 @@ export function TelegramDialog({ open, onClose }: { open: boolean; onClose: () =
         <div className="space-y-5">
           {/* --- account link: bulk-import old media from Saved Messages --- */}
           <section className="space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-x-2">
               <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 Your account
               </h3>
@@ -201,9 +201,9 @@ export function TelegramDialog({ open, onClose }: { open: boolean; onClose: () =
                 </p>
                 {progress && (
                   <div className="space-y-1 rounded-md border p-2">
-                    <div className="flex justify-between text-[11px] text-muted-foreground">
-                      <span className="truncate">{progress.current?.name ?? "Working…"}</span>
-                      <span>
+                    <div className="flex justify-between gap-2 text-[11px] text-muted-foreground">
+                      <span className="min-w-0 truncate">{progress.current?.name ?? "Working…"}</span>
+                      <span className="shrink-0">
                         {progress.imported} in
                         {progress.alreadyImported > 0 && ` · ${progress.alreadyImported} already`}
                         {progress.failed > 0 && ` · ${progress.failed} failed`}
@@ -246,6 +246,7 @@ export function TelegramDialog({ open, onClose }: { open: boolean; onClose: () =
               <>
                 <Input
                   placeholder="+15551234567"
+                  aria-label="Phone number"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && void sendCode()}
@@ -263,6 +264,7 @@ export function TelegramDialog({ open, onClose }: { open: boolean; onClose: () =
               <>
                 <Input
                   placeholder="Code from Telegram"
+                  aria-label="Code from Telegram"
                   value={code}
                   onChange={(e) => setCode(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && void verify({ code: code.trim() })}
@@ -286,6 +288,7 @@ export function TelegramDialog({ open, onClose }: { open: boolean; onClose: () =
                 <Input
                   type="password"
                   placeholder="Telegram 2FA password"
+                  aria-label="Telegram 2FA password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && void verify({ password })}
@@ -341,10 +344,11 @@ export function TelegramDialog({ open, onClose }: { open: boolean; onClose: () =
                   expires in 10 minutes.
                 </p>
                 <div className="flex gap-2">
-                  <Input readOnly value={deepLink} className="text-[11px]" />
+                  <Input readOnly value={deepLink} aria-label="Link code" className="min-w-0 text-[11px]" />
                   <Button
                     size="sm"
                     variant="outline"
+                    aria-label="Copy link"
                     onClick={() => {
                       void navigator.clipboard?.writeText(deepLink)
                       toast.success("Copied.")

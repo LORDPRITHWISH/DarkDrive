@@ -3,7 +3,7 @@ import { ScrollArea } from "@workspace/ui/components/scroll-area"
 
 function Table({ className, ...props }: React.ComponentProps<"table">) {
   return (
-    <ScrollArea data-slot="table-container" className="w-full">
+    <ScrollArea data-slot="table-container" className="w-full" horizontal>
       <table
         data-slot="table"
         className={cn("w-full caption-bottom text-sm", className)}

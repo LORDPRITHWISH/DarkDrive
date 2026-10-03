@@ -198,6 +198,7 @@ export function FilePropertiesDialog({
                     <button
                       onClick={() => commitTags(tags.filter((x) => x !== t))}
                       title={`Remove "${t}"`}
+                      aria-label={`Remove tag ${t}`}
                       className="hover:bg-foreground/10 rounded-full p-0.5"
                     >
                       <XIcon size={10} weight="bold" />
@@ -215,6 +216,7 @@ export function FilePropertiesDialog({
                   }}
                   onBlur={addTag}
                   placeholder="Add tag…"
+                  aria-label="Add tag"
                   className="h-6 w-24 rounded-full px-2.5 text-xs"
                 />
               </div>
@@ -237,7 +239,7 @@ export function FilePropertiesDialog({
           </TabsContent>
 
           <TabsContent value="versions" className="p-5">
-            <div className="mb-4 flex items-center justify-between gap-3">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
               <div className="text-muted-foreground text-xs font-medium uppercase tracking-wider">
                 Version history
               </div>
@@ -375,6 +377,7 @@ function VersionRow({
             <a
               href={downloadHref}
               title="Download this version"
+              aria-label="Download this version"
               className="hover:bg-accent text-muted-foreground rounded-md p-1.5"
             >
               <DownloadSimpleIcon size={14} weight="bold" />
@@ -384,6 +387,7 @@ function VersionRow({
             onClick={onRestore}
             disabled={restoring}
             title="Restore this version"
+            aria-label="Restore this version"
             className="hover:bg-accent text-muted-foreground rounded-md p-1.5 disabled:opacity-50"
           >
             <ClockCounterClockwiseIcon size={14} weight="bold" />

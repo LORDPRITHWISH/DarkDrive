@@ -619,6 +619,8 @@ export function PdfViewer({
 
       <ScrollArea
         className="min-h-0 flex-1"
+        // A zoomed page is wider than the viewer and has to stay reachable.
+        horizontal
         // Padding stays on the viewport: the ResizeObserver above reads its
         // contentRect width to size pages, and it's the IntersectionObserver root.
         viewportProps={{

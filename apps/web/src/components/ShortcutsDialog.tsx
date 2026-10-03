@@ -8,6 +8,8 @@ const SHORTCUTS: { keys: string[]; label: string }[] = [
   { keys: ["Ctrl/⌘", "A"], label: "Select all" },
   { keys: ["Enter"], label: "Open folder / preview file" },
   { keys: ["Del"], label: "Move selection to bin" },
+  { keys: ["T"], label: "Cinema mode, in a preview" },
+  { keys: ["+", "−", "0"], label: "Zoom an image in, out, back to fit" },
   { keys: ["Esc"], label: "Close dialog / clear selection" },
   { keys: ["?"], label: "Show this cheatsheet" },
 ]

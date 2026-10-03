@@ -97,6 +97,7 @@ export function UpgradeRequestDialog({
               <li key={s.label}>
                 <button
                   onClick={() => setSelected(s.bytes)}
+                  aria-pressed={chosen}
                   className={`flex w-full items-center justify-between rounded-md border px-3 py-2 text-left transition-colors ${
                     chosen
                       ? "border-primary bg-accent"

@@ -185,37 +185,36 @@ function FolderTree({
       <div key={id}>
         <div
           className={`flex items-center gap-1 rounded px-1.5 py-1 ${
-            isForbidden
-              ? "text-muted-foreground/60 cursor-not-allowed"
-              : "hover:bg-accent/60 cursor-pointer"
+            isForbidden ? "text-muted-foreground/60" : "hover:bg-accent/60"
           } ${isSelected ? "bg-accent text-accent-foreground" : ""}`}
           style={{ paddingLeft: depth * 14 + 6 }}
-          onClick={() => {
-            if (!isForbidden) onSelect(id)
-          }}
         >
+          {hasKids ? (
+            <button
+              className="shrink-0 rounded p-0.5 hover:bg-black/10"
+              aria-label={`${isOpen ? "Collapse" : "Expand"} ${name}`}
+              aria-expanded={isOpen}
+              onClick={() => onToggle(id)}
+            >
+              {isOpen ? <CaretDownIcon size={12} /> : <CaretRightIcon size={12} />}
+            </button>
+          ) : (
+            <span className="h-4 w-4 shrink-0" />
+          )}
+          {/* A button, not a clickable row, so a folder can be picked from the keyboard. */}
           <button
-            className="shrink-0 rounded p-0.5 hover:bg-black/10"
-            onClick={(e) => {
-              e.stopPropagation()
-              if (hasKids) onToggle(id)
-            }}
+            className="flex min-w-0 flex-1 items-center gap-1 text-left disabled:cursor-not-allowed"
+            disabled={isForbidden}
+            aria-current={isSelected ? "true" : undefined}
+            title={name}
+            onClick={() => onSelect(id)}
           >
-            {hasKids ? (
-              isOpen ? (
-                <CaretDownIcon size={12} />
-              ) : (
-                <CaretRightIcon size={12} />
-              )
-            ) : (
-              <span className="inline-block h-3 w-3" />
+            <FolderIcon size={16} weight="fill" className="text-primary shrink-0" />
+            <span className="truncate">{name}</span>
+            {isCurrent && (
+              <span className="text-muted-foreground ml-auto shrink-0 text-xs">current</span>
             )}
           </button>
-          <FolderIcon size={16} weight="fill" className="text-primary shrink-0" />
-          <span className="truncate">{name}</span>
-          {isCurrent && (
-            <span className="text-muted-foreground ml-auto text-xs">current</span>
-          )}
         </div>
         {isOpen &&
           kids.map((k) =>

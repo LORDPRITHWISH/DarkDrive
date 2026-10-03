@@ -91,7 +91,7 @@ export function RecycleBinMoveDialog({ open, item, users, onClose, onSubmit }: P
       onClose={onClose}
       size="2xl"
       className="h-[560px]"
-      bodyClassName="flex"
+      bodyClassName="flex flex-col sm:flex-row"
       scrollBody={false}
       title="Move to…"
       description={<HoverName as="span" name={item.name} className="block truncate" />}
@@ -107,7 +107,7 @@ export function RecycleBinMoveDialog({ open, item, users, onClose, onSubmit }: P
       }
     >
       {/* User picker */}
-      <div className="flex w-56 shrink-0 flex-col border-r">
+      <div className="flex max-h-44 shrink-0 flex-col border-b sm:max-h-none sm:w-56 sm:border-r sm:border-b-0">
         <div className="relative border-b p-2">
           <MagnifyingGlassIcon
             size={14}
@@ -117,6 +117,7 @@ export function RecycleBinMoveDialog({ open, item, users, onClose, onSubmit }: P
             autoFocus
             className="h-auto py-1.5 pr-2 pl-7 text-xs"
             placeholder="Find a user…"
+            aria-label="Find a user"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -152,7 +153,7 @@ export function RecycleBinMoveDialog({ open, item, users, onClose, onSubmit }: P
       </div>
 
       {/* Folder tree */}
-      <ScrollArea className="min-w-0 flex-1">
+      <ScrollArea className="min-h-0 min-w-0 flex-1">
         <div className="p-2 text-sm">
           {err && <div className="text-destructive mb-2 px-2">{err}</div>}
           {!userId ? (
@@ -219,31 +220,33 @@ function FolderTree({
     return (
       <div key={id}>
         <div
-          className={`hover:bg-accent/60 flex cursor-pointer items-center gap-1 rounded px-1.5 py-1 ${
+          className={`hover:bg-accent/60 flex items-center gap-1 rounded px-1.5 py-1 ${
             isSelected ? "bg-accent text-accent-foreground" : ""
           }`}
           style={{ paddingLeft: depth * 14 + 6 }}
-          onClick={() => onSelect(id)}
         >
+          {hasKids ? (
+            <button
+              className="shrink-0 rounded p-0.5 hover:bg-black/10"
+              aria-label={`${isOpen ? "Collapse" : "Expand"} ${name}`}
+              aria-expanded={isOpen}
+              onClick={() => onToggle(id)}
+            >
+              {isOpen ? <CaretDownIcon size={12} /> : <CaretRightIcon size={12} />}
+            </button>
+          ) : (
+            <span className="h-4 w-4 shrink-0" />
+          )}
+          {/* A button, not a clickable row, so a folder can be picked from the keyboard. */}
           <button
-            className="shrink-0 rounded p-0.5 hover:bg-black/10"
-            onClick={(e) => {
-              e.stopPropagation()
-              if (hasKids) onToggle(id)
-            }}
+            className="flex min-w-0 flex-1 items-center gap-1 text-left"
+            aria-current={isSelected ? "true" : undefined}
+            title={name}
+            onClick={() => onSelect(id)}
           >
-            {hasKids ? (
-              isOpen ? (
-                <CaretDownIcon size={12} />
-              ) : (
-                <CaretRightIcon size={12} />
-              )
-            ) : (
-              <span className="inline-block h-3 w-3" />
-            )}
+            <FolderIcon size={16} weight="fill" className="text-primary shrink-0" />
+            <span className="truncate">{name}</span>
           </button>
-          <FolderIcon size={16} weight="fill" className="text-primary shrink-0" />
-          <HoverName as="span" name={name} className="min-w-0 truncate" />
         </div>
         {isOpen && kids.map((k) => render(k.id, k.name, depth + 1))}
       </div>

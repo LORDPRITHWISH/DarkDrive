@@ -298,9 +298,10 @@ foldersRouter.patch("/:id", async (req, res) => {
 })
 
 // Mirror a folder tree into a target folder, creating shortcuts for every
-// file found along the way. Used by "Add to space" for folders: the source
-// tree stays in the uploader's drive; a parallel folder structure with
-// file-shortcuts appears in the target (typically a shared space).
+// file found along the way. Used by "Add to space" and the space's "Link
+// files" for folders: the source tree stays in the uploader's drive; a
+// parallel folder structure with file-shortcuts, the folder itself at the
+// top, appears in the target (typically a shared space).
 foldersRouter.post("/:id/mirror", async (req, res) => {
   const user = currentUser(req)
   const { targetFolderId } = z
@@ -313,8 +314,32 @@ foldersRouter.post("/:id/mirror", async (req, res) => {
   // Block the obvious cycle: can't mirror a folder into itself or a descendant.
   if (source.id === target.id || (await isDescendant(source.id, target.id)))
     return res.status(400).json({ error: "cycle" })
+  // Already sitting right there: its mirror would be found as itself below.
+  if (source.parentId === target.id) return res.status(400).json({ error: "already_there" })
 
   const targetSpaceId = target.spaceId
+
+  // Found by name before it is made, so linking the same folder again tops up
+  // the one that's there with what's new instead of leaving a second copy of
+  // the whole tree next to it (the walk isn't one transaction: a retry after
+  // a half-done run has to be safe).
+  async function mirrorOf(src: { name: string; color: string | null }, destId: string) {
+    const there = await prisma.folder.findFirst({
+      where: { parentId: destId, name: src.name, isTrashed: false },
+      select: { id: true },
+    })
+    if (there) return there.id
+    const made = await prisma.folder.create({
+      data: {
+        name: src.name,
+        color: src.color,
+        parentId: destId,
+        ownerId: user.id,
+        spaceId: targetSpaceId,
+      },
+    })
+    return made.id
+  }
 
   async function walk(sourceId: string, destId: string) {
     const [files, subFolders] = await Promise.all([
@@ -326,27 +351,15 @@ foldersRouter.post("/:id/mirror", async (req, res) => {
         where: { parentId: sourceId, isTrashed: false, isHidden: false },
       }),
     ])
-    for (const f of files) {
-      await prisma.fileShortcut.upsert({
-        where: { fileId_folderId: { fileId: f.id, folderId: destId } },
-        update: {},
-        create: { fileId: f.id, folderId: destId },
-      })
-    }
-    for (const sub of subFolders) {
-      const mirror = await prisma.folder.create({
-        data: {
-          name: sub.name,
-          color: sub.color,
-          parentId: destId,
-          ownerId: user.id,
-          spaceId: targetSpaceId,
-        },
-      })
-      await walk(sub.id, mirror.id)
-    }
+    // One insert per folder, not one per file: a whole folder can be thousands.
+    await prisma.fileShortcut.createMany({
+      data: files.map((f) => ({ fileId: f.id, folderId: destId })),
+      skipDuplicates: true,
+    })
+    for (const sub of subFolders) await walk(sub.id, await mirrorOf(sub, destId))
   }
-  await walk(source.id, target.id)
+  // The folder itself goes in, not only what's in it.
+  await walk(source.id, await mirrorOf(source, target.id))
   res.status(201).json({ ok: true })
 })
 

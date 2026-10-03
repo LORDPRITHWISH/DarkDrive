@@ -295,7 +295,7 @@ export function SpaceManageDialog({
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="flex max-h-[85vh] w-full max-w-lg flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
+      <DialogContent className="flex w-lg flex-col gap-0 overflow-hidden p-0">
         {/* Hero header — space logo tints the background with the chosen color */}
         <div
           className="relative border-b p-5"
@@ -314,9 +314,9 @@ export function SpaceManageDialog({
               className="ring-background shrink-0 shadow-lg ring-2"
             />
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 sm:flex-nowrap">
                 <DialogTitle
-                  className="truncate text-xl font-bold tracking-tight"
+                  className="min-w-0 basis-full truncate text-xl font-bold tracking-tight sm:basis-auto"
                   title={space.name}
                 >
                   {space.name}
@@ -341,8 +341,8 @@ export function SpaceManageDialog({
                 )}
               </div>
               <DialogDescription className="mt-1 flex items-center gap-1.5 text-xs">
-                <UsersThreeIcon size={12} />
-                <span>
+                <UsersThreeIcon size={12} className="shrink-0" />
+                <span className="shrink-0">
                   {space.members.length} member
                   {space.members.length === 1 ? "" : "s"}
                 </span>
@@ -355,335 +355,341 @@ export function SpaceManageDialog({
           </div>
         </div>
 
-        {iAmOwner && (
-          <div className="border-b p-4">
-            <div className="flex items-center gap-3">
-              <div className="bg-primary/10 text-primary grid h-10 w-10 shrink-0 place-items-center rounded-xl">
-                <GlobeIcon size={18} weight="fill" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-semibold">Public space</div>
-                <div className="text-muted-foreground text-xs">
-                  Any DarkDrive user can view. Only editors can modify.
+        {/* Everything between the header and the footer scrolls as one. With
+            only the member list scrolling, a short window squeezed it to
+            nothing and clipped the sections above it. */}
+        <ScrollArea className="min-h-0 flex-1">
+          {iAmOwner && (
+            <div className="border-b p-4">
+              <div className="flex items-center gap-3">
+                <div className="bg-primary/10 text-primary grid h-10 w-10 shrink-0 place-items-center rounded-xl">
+                  <GlobeIcon size={18} weight="fill" />
                 </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold">Public space</div>
+                  <div className="text-muted-foreground text-xs">
+                    Any DarkDrive user can view. Only editors can modify.
+                  </div>
+                </div>
+                <Switch
+                  checked={space.isPublic}
+                  onCheckedChange={(v) => void updateSpace(space.id, { isPublic: v })}
+                />
               </div>
-              <Switch
-                checked={space.isPublic}
-                onCheckedChange={(v) => void updateSpace(space.id, { isPublic: v })}
-              />
             </div>
-          </div>
-        )}
+          )}
 
-        {iAmOwner && (
-          <div className="border-b p-4">
-            <div className="text-muted-foreground mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider">
-              <LinkSimpleIcon size={12} />
-              Invite link
-            </div>
-            <div className="text-muted-foreground mb-2 text-xs">
-              Grants view-only access. People can request upload access once
-              they've joined.
-            </div>
-            <div className="flex items-stretch gap-2">
-              <DateTimePicker
-                className="w-40 rounded-xl text-sm"
-                value={inviteExpires}
-                onChange={setInviteExpires}
-                title="Expires (blank = never)"
-              />
-              <Input
-                type="number"
-                min={1}
-                placeholder="No limit"
-                className="w-24 rounded-xl text-sm"
-                value={inviteMaxUses}
-                onChange={(e) => setInviteMaxUses(e.target.value)}
-                title="Max uses (blank = unlimited)"
-              />
-              <Button onClick={createInvite} disabled={inviteBusy} className="rounded-xl">
-                {inviteBusy ? "…" : "Create"}
-              </Button>
-            </div>
+          {iAmOwner && (
+            <div className="border-b p-4">
+              <div className="text-muted-foreground mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider">
+                <LinkSimpleIcon size={12} />
+                Invite link
+              </div>
+              <div className="text-muted-foreground mb-2 text-xs">
+                Grants view-only access. People can request upload access once
+                they've joined.
+              </div>
+              <div className="flex flex-wrap items-stretch gap-2">
+                <DateTimePicker
+                  className="w-40 rounded-xl text-sm"
+                  value={inviteExpires}
+                  onChange={setInviteExpires}
+                  title="Expires (blank = never)"
+                />
+                <Input
+                  type="number"
+                  min={1}
+                  placeholder="No limit"
+                  className="w-24 rounded-xl text-sm"
+                  value={inviteMaxUses}
+                  onChange={(e) => setInviteMaxUses(e.target.value)}
+                  title="Max uses (blank = unlimited)"
+                  aria-label="Max uses"
+                />
+                <Button onClick={createInvite} disabled={inviteBusy} className="rounded-xl">
+                  {inviteBusy ? "…" : "Create"}
+                </Button>
+              </div>
 
-            {invites.length > 0 && (
-              <ul className="mt-2 flex flex-col gap-1.5">
-                {invites.map((inv) => {
-                  const url = `${WEB_ORIGIN}/invite/${inv.token}`
-                  const expired = inv.expiresAt && new Date(inv.expiresAt) < new Date()
-                  const exhausted = inv.maxUses != null && inv.useCount >= inv.maxUses
-                  const dead = expired || exhausted
+              {invites.length > 0 && (
+                <ul className="mt-2 flex flex-col gap-1.5">
+                  {invites.map((inv) => {
+                    const url = `${WEB_ORIGIN}/invite/${inv.token}`
+                    const expired = inv.expiresAt && new Date(inv.expiresAt) < new Date()
+                    const exhausted = inv.maxUses != null && inv.useCount >= inv.maxUses
+                    const dead = expired || exhausted
+                    return (
+                      <li
+                        key={inv.id}
+                        className={`bg-accent/40 flex flex-wrap items-center gap-2 rounded-md p-2 ${dead ? "opacity-50" : ""}`}
+                      >
+                        <Input
+                          readOnly
+                          value={url}
+                          aria-label="Invite link"
+                          className="h-7 min-w-full flex-1 rounded font-mono text-xs sm:min-w-0"
+                        />
+                        <span className="text-muted-foreground flex-1 text-xs sm:flex-none">
+                          {[
+                            inv.maxUses != null && `${inv.useCount}/${inv.maxUses} used`,
+                            inv.expiresAt &&
+                              (expired
+                                ? "expired"
+                                : `expires ${new Date(inv.expiresAt).toLocaleDateString()}`),
+                          ]
+                            .filter(Boolean)
+                            .join(" · ") || "no limits"}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => navigator.clipboard.writeText(url)}
+                          title="Copy"
+                          aria-label="Copy invite link"
+                        >
+                          <CopyIcon size={14} />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          className="text-muted-foreground hover:text-destructive"
+                          onClick={() => void revokeInvite(inv.id)}
+                          title="Revoke"
+                          aria-label="Revoke invite link"
+                        >
+                          <TrashIcon size={14} />
+                        </Button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </div>
+          )}
+
+          {iAmOwner && (
+            <div className="border-b p-4">
+              <div className="text-muted-foreground mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider">
+                <UserPlusIcon size={12} />
+                Add people
+              </div>
+              <div className="flex items-stretch gap-2">
+                <div ref={inputWrapRef} className="relative flex-1">
+                  <Input
+                    className="w-full rounded-xl"
+                    placeholder="Search by name or email…"
+                    aria-label="Name or email to invite"
+                    type="email"
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value)
+                      setShowSuggestions(true)
+                      setHighlight(0)
+                    }}
+                    onFocus={() => setShowSuggestions(true)}
+                    onKeyDown={(e) => {
+                      if (showSuggestions && suggestions.length > 0) {
+                        if (e.key === "ArrowDown") {
+                          e.preventDefault()
+                          setHighlight((h) => (h + 1) % suggestions.length)
+                          return
+                        }
+                        if (e.key === "ArrowUp") {
+                          e.preventDefault()
+                          setHighlight(
+                            (h) => (h - 1 + suggestions.length) % suggestions.length
+                          )
+                          return
+                        }
+                        if (e.key === "Tab") {
+                          const pick = suggestions[highlight]
+                          if (pick) {
+                            e.preventDefault()
+                            pickContact(pick)
+                          }
+                          return
+                        }
+                        if (e.key === "Enter") {
+                          const pick = suggestions[highlight]
+                          if (pick && email.trim() !== pick.email) {
+                            e.preventDefault()
+                            pickContact(pick)
+                            return
+                          }
+                        }
+                        if (e.key === "Escape") {
+                          setShowSuggestions(false)
+                          return
+                        }
+                      }
+                      if (e.key === "Enter") void invite()
+                    }}
+                  />
+                  {showSuggestions && suggestions.length > 0 && (
+                    <ScrollArea className="bg-popover animate-in fade-in slide-in-from-top-1 absolute top-full left-0 z-10 mt-1 max-h-60 w-full rounded-xl border text-sm shadow-xl duration-150">
+                    <ul className="p-1" role="listbox">
+                      {suggestions.map((c, i) => (
+                        <li
+                          key={c.id}
+                          role="option"
+                          aria-selected={i === highlight}
+                          onMouseEnter={() => setHighlight(i)}
+                          onMouseDown={(e) => {
+                            e.preventDefault()
+                            pickContact(c)
+                          }}
+                          className={`flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors ${
+                            i === highlight ? "bg-accent" : ""
+                          }`}
+                        >
+                          <Avatar className="ring-background h-7 w-7 ring-2">
+                            {c.avatarUrl && <AvatarImage src={c.avatarUrl} alt="" />}
+                            <AvatarFallback className="text-[11px] font-semibold">
+                              {initials(c.name)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-xs font-semibold">
+                              {c.name}
+                            </div>
+                            <div className="text-muted-foreground truncate text-[11px]">
+                              {c.email}
+                            </div>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                    </ScrollArea>
+                  )}
+                </div>
+                <Button
+                  onClick={invite}
+                  disabled={!email.trim() || busy}
+                  className="rounded-xl"
+                >
+                  <UserPlusIcon size={14} weight="bold" />
+                  {busy ? "…" : "Invite"}
+                </Button>
+              </div>
+              {/* What they may do: "Ask me first" holds what they add, or want
+                  deleted, until the owner agrees. Both "No" only looks. */}
+              <CanSelects className="mt-2" value={can} onChange={(patch) => setCan({ ...can, ...patch })} />
+              {err && (
+                <div className="text-destructive mt-2 text-xs font-medium">
+                  {err}
+                </div>
+              )}
+            </div>
+          )}
+
+          {iAmOwner && requests.length > 0 && (
+            <div className="border-b p-4">
+              <Requests requests={requests} onAnswer={(ids, approve) => void answer(ids, approve)} />
+            </div>
+          )}
+
+            <div className="p-2">
+              <div className="text-muted-foreground mb-1 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider">
+                Members
+              </div>
+              <ul className="flex flex-col gap-0.5">
+                {space.members.map((m) => {
+                  const isOwner = m.userId === space.ownerId
+                  const isSelf = m.userId === me?.id
                   return (
                     <li
-                      key={inv.id}
-                      className={`bg-accent/40 flex items-center gap-2 rounded-md p-2 ${dead ? "opacity-50" : ""}`}
+                      key={m.userId}
+                      className="group/member hover:bg-accent/60 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl p-2 transition-colors"
                     >
-                      <Input
-                        readOnly
-                        value={url}
-                        className="h-7 flex-1 rounded font-mono text-xs"
-                      />
-                      <span className="text-muted-foreground shrink-0 text-xs">
-                        {[
-                          inv.maxUses != null && `${inv.useCount}/${inv.maxUses} used`,
-                          inv.expiresAt &&
-                            (expired
-                              ? "expired"
-                              : `expires ${new Date(inv.expiresAt).toLocaleDateString()}`),
-                        ]
-                          .filter(Boolean)
-                          .join(" · ") || "no limits"}
-                      </span>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() => navigator.clipboard.writeText(url)}
-                        title="Copy"
-                        aria-label="Copy invite link"
-                      >
-                        <CopyIcon size={14} />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        className="text-muted-foreground hover:text-destructive"
-                        onClick={() => void revokeInvite(inv.id)}
-                        title="Revoke"
-                        aria-label="Revoke invite link"
-                      >
-                        <TrashIcon size={14} />
-                      </Button>
+                      <Avatar className="ring-background h-9 w-9 ring-2">
+                        {m.avatarUrl && <AvatarImage src={m.avatarUrl} alt="" />}
+                        <AvatarFallback className="text-sm font-semibold">
+                          {initials(m.name)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className="truncate text-sm font-semibold"
+                            title={m.name}
+                          >
+                            {m.name}
+                          </span>
+                          {isOwner && (
+                            <Badge className="bg-primary/15 text-primary shrink-0 gap-1 border-transparent text-[10px] font-bold uppercase tracking-wider">
+                              <ShieldCheckIcon size={10} weight="fill" />
+                              Owner
+                            </Badge>
+                          )}
+                          {isSelf && !isOwner && (
+                            <Badge variant="muted" className="shrink-0 text-[10px] font-medium">
+                              you
+                            </Badge>
+                          )}
+                          {m.editorRequestedAt && (
+                            <Badge className="bg-amber-500/15 text-amber-600 shrink-0 border-transparent text-[10px] font-bold uppercase tracking-wider dark:text-amber-400">
+                              Wants to upload
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="text-muted-foreground truncate text-xs">
+                          {m.email}
+                        </div>
+                      </div>
+                      {iAmOwner && m.editorRequestedAt && (
+                        <div className="flex shrink-0 items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => void updateMemberRole(space.id, m.userId, { role: "EDITOR" })}
+                            className="text-emerald-600 hover:bg-emerald-500/15 dark:text-emerald-400"
+                            title="Approve upload access"
+                            aria-label={`Approve ${m.name}`}
+                          >
+                            <CheckIcon size={14} weight="bold" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => void denyEditorRequest(space.id, m.userId)}
+                            className="text-muted-foreground hover:text-destructive"
+                            title="Deny upload access"
+                            aria-label={`Deny ${m.name}`}
+                          >
+                            <XIcon size={14} weight="bold" />
+                          </Button>
+                        </div>
+                      )}
+                      {isOwner && (
+                        <span className="text-muted-foreground mr-1 text-xs font-medium">
+                          Admin
+                        </span>
+                      )}
+                      {iAmOwner && !isOwner && (
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          className="text-muted-foreground hover:text-destructive opacity-0 transition-all group-hover/member:opacity-100 focus-visible:opacity-100"
+                          onClick={() => void removeMember(space.id, m.userId)}
+                          title="Remove"
+                          aria-label={`Remove ${m.name}`}
+                        >
+                          <TrashIcon size={14} />
+                        </Button>
+                      )}
+                      {!isOwner && (
+                        <CanSelects
+                          className="basis-full pl-12"
+                          value={m}
+                          disabled={!iAmOwner}
+                          onChange={(patch) => void updateMemberRole(space.id, m.userId, patch)}
+                        />
+                      )}
                     </li>
                   )
                 })}
               </ul>
-            )}
-          </div>
-        )}
-
-        {iAmOwner && (
-          <div className="border-b p-4">
-            <div className="text-muted-foreground mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider">
-              <UserPlusIcon size={12} />
-              Add people
             </div>
-            <div className="flex items-stretch gap-2">
-              <div ref={inputWrapRef} className="relative flex-1">
-                <Input
-                  className="w-full rounded-xl"
-                  placeholder="Search by name or email…"
-                  type="email"
-                  value={email}
-                  onChange={(e) => {
-                    setEmail(e.target.value)
-                    setShowSuggestions(true)
-                    setHighlight(0)
-                  }}
-                  onFocus={() => setShowSuggestions(true)}
-                  onKeyDown={(e) => {
-                    if (showSuggestions && suggestions.length > 0) {
-                      if (e.key === "ArrowDown") {
-                        e.preventDefault()
-                        setHighlight((h) => (h + 1) % suggestions.length)
-                        return
-                      }
-                      if (e.key === "ArrowUp") {
-                        e.preventDefault()
-                        setHighlight(
-                          (h) => (h - 1 + suggestions.length) % suggestions.length
-                        )
-                        return
-                      }
-                      if (e.key === "Tab") {
-                        const pick = suggestions[highlight]
-                        if (pick) {
-                          e.preventDefault()
-                          pickContact(pick)
-                        }
-                        return
-                      }
-                      if (e.key === "Enter") {
-                        const pick = suggestions[highlight]
-                        if (pick && email.trim() !== pick.email) {
-                          e.preventDefault()
-                          pickContact(pick)
-                          return
-                        }
-                      }
-                      if (e.key === "Escape") {
-                        setShowSuggestions(false)
-                        return
-                      }
-                    }
-                    if (e.key === "Enter") void invite()
-                  }}
-                />
-                {showSuggestions && suggestions.length > 0 && (
-                  <ScrollArea className="bg-popover animate-in fade-in slide-in-from-top-1 absolute top-full left-0 z-10 mt-1 max-h-60 w-full rounded-xl border text-sm shadow-xl duration-150">
-                  <ul className="p-1" role="listbox">
-                    {suggestions.map((c, i) => (
-                      <li
-                        key={c.id}
-                        role="option"
-                        aria-selected={i === highlight}
-                        onMouseEnter={() => setHighlight(i)}
-                        onMouseDown={(e) => {
-                          e.preventDefault()
-                          pickContact(c)
-                        }}
-                        className={`flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors ${
-                          i === highlight ? "bg-accent" : ""
-                        }`}
-                      >
-                        <Avatar className="ring-background h-7 w-7 ring-2">
-                          {c.avatarUrl && <AvatarImage src={c.avatarUrl} alt="" />}
-                          <AvatarFallback className="text-[11px] font-semibold">
-                            {initials(c.name)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-xs font-semibold">
-                            {c.name}
-                          </div>
-                          <div className="text-muted-foreground truncate text-[11px]">
-                            {c.email}
-                          </div>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                  </ScrollArea>
-                )}
-              </div>
-              <Button
-                onClick={invite}
-                disabled={!email.trim() || busy}
-                className="rounded-xl"
-              >
-                <UserPlusIcon size={14} weight="bold" />
-                {busy ? "…" : "Invite"}
-              </Button>
-            </div>
-            {/* What they may do: "Ask me first" holds what they add, or want
-                deleted, until the owner agrees. Both "No" only looks. */}
-            <CanSelects className="mt-2" value={can} onChange={(patch) => setCan({ ...can, ...patch })} />
-            {err && (
-              <div className="text-destructive mt-2 text-xs font-medium">
-                {err}
-              </div>
-            )}
-          </div>
-        )}
-
-        {iAmOwner && requests.length > 0 && (
-          <div className="border-b p-4">
-            <Requests requests={requests} onAnswer={(ids, approve) => void answer(ids, approve)} />
-          </div>
-        )}
-
-        <ScrollArea className="min-h-0 flex-1">
-          <div className="p-2">
-            <div className="text-muted-foreground mb-1 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider">
-              Members
-            </div>
-            <ul className="flex flex-col gap-0.5">
-              {space.members.map((m) => {
-                const isOwner = m.userId === space.ownerId
-                const isSelf = m.userId === me?.id
-                return (
-                  <li
-                    key={m.userId}
-                    className="group/member hover:bg-accent/60 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl p-2 transition-colors"
-                  >
-                    <Avatar className="ring-background h-9 w-9 ring-2">
-                      {m.avatarUrl && <AvatarImage src={m.avatarUrl} alt="" />}
-                      <AvatarFallback className="text-sm font-semibold">
-                        {initials(m.name)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <span
-                          className="truncate text-sm font-semibold"
-                          title={m.name}
-                        >
-                          {m.name}
-                        </span>
-                        {isOwner && (
-                          <Badge className="bg-primary/15 text-primary shrink-0 gap-1 border-transparent text-[10px] font-bold uppercase tracking-wider">
-                            <ShieldCheckIcon size={10} weight="fill" />
-                            Owner
-                          </Badge>
-                        )}
-                        {isSelf && !isOwner && (
-                          <Badge variant="muted" className="shrink-0 text-[10px] font-medium">
-                            you
-                          </Badge>
-                        )}
-                        {m.editorRequestedAt && (
-                          <Badge className="bg-amber-500/15 text-amber-600 shrink-0 border-transparent text-[10px] font-bold uppercase tracking-wider dark:text-amber-400">
-                            Wants to upload
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="text-muted-foreground truncate text-xs">
-                        {m.email}
-                      </div>
-                    </div>
-                    {iAmOwner && m.editorRequestedAt && (
-                      <div className="flex shrink-0 items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={() => void updateMemberRole(space.id, m.userId, { role: "EDITOR" })}
-                          className="text-emerald-600 hover:bg-emerald-500/15 dark:text-emerald-400"
-                          title="Approve upload access"
-                          aria-label={`Approve ${m.name}`}
-                        >
-                          <CheckIcon size={14} weight="bold" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={() => void denyEditorRequest(space.id, m.userId)}
-                          className="text-muted-foreground hover:text-destructive"
-                          title="Deny upload access"
-                          aria-label={`Deny ${m.name}`}
-                        >
-                          <XIcon size={14} weight="bold" />
-                        </Button>
-                      </div>
-                    )}
-                    {isOwner && (
-                      <span className="text-muted-foreground mr-1 text-xs font-medium">
-                        Admin
-                      </span>
-                    )}
-                    {iAmOwner && !isOwner && (
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        className="text-muted-foreground hover:text-destructive opacity-0 transition-all group-hover/member:opacity-100 focus-visible:opacity-100"
-                        onClick={() => void removeMember(space.id, m.userId)}
-                        title="Remove"
-                        aria-label={`Remove ${m.name}`}
-                      >
-                        <TrashIcon size={14} />
-                      </Button>
-                    )}
-                    {!isOwner && (
-                      <CanSelects
-                        className="basis-full pl-12"
-                        value={m}
-                        disabled={!iAmOwner}
-                        onChange={(patch) => void updateMemberRole(space.id, m.userId, patch)}
-                      />
-                    )}
-                  </li>
-                )
-              })}
-            </ul>
-          </div>
         </ScrollArea>
 
         {iAmOwner && (

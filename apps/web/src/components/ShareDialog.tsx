@@ -224,7 +224,7 @@ export function ShareDialog({ open, onClose, resourceType, resourceId, resourceN
         <p className="text-muted-foreground mt-0.5 mb-3 text-xs">
           Anyone with the link can open it without signing in.
         </p>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid gap-2 sm:grid-cols-2">
           <label className="text-sm">
             <div className="text-muted-foreground mb-1 text-xs">Permission</div>
             <Select
@@ -277,6 +277,7 @@ export function ShareDialog({ open, onClose, resourceType, resourceId, resourceN
                   <Input
                     readOnly
                     value={url}
+                    aria-label="Share link"
                     className="h-7 min-w-full flex-1 rounded font-mono text-xs sm:min-w-0"
                   />
                   <span className="text-muted-foreground flex-1 text-xs sm:flex-none">

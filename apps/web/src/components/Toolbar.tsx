@@ -64,11 +64,18 @@ export function Toolbar() {
     refresh,
   } = useDrive()
 
+  // Labels follow the toolbar's own width (a container query), not the
+  // window's: with the sidebar open the two differ by a few hundred pixels.
+  // They show once every button fits on one row with its label (measured:
+  // ~970px, or ~1200px with the two extra buttons a space folder gets).
+  const label = folder?.spaceId ? "hidden @7xl:inline" : "hidden @5xl:inline"
+
   return (
-    <div className="flex flex-1 items-center gap-2">
-      <Button size="sm" onClick={() => fileInput.current?.click()}>
+    // If even the icons don't fit, the row wraps rather than widening the page.
+    <div className="@container flex min-w-0 flex-1 flex-wrap items-center gap-2">
+      <Button size="sm" aria-label="Upload" title="Upload" onClick={() => fileInput.current?.click()}>
         <UploadIcon size={16} />
-        <span className="hidden md:inline">Upload</span>
+        <span className={label}>Upload</span>
       </Button>
       <input
         ref={fileInput}
@@ -80,9 +87,9 @@ export function Toolbar() {
           e.target.value = ""
         }}
       />
-      <Button size="sm" variant="outline" onClick={() => folderInput.current?.click()}>
+      <Button size="sm" variant="outline" aria-label="Upload folder" title="Upload folder" onClick={() => folderInput.current?.click()}>
         <FolderOpenIcon size={16} />
-        <span className="hidden md:inline">Upload folder</span>
+        <span className={label}>Upload folder</span>
       </Button>
       <input
         ref={folderInput}
@@ -97,34 +104,34 @@ export function Toolbar() {
           e.target.value = ""
         }}
       />
-      <Button size="sm" variant="outline" onClick={() => setNewFolderOpen(true)}>
+      <Button size="sm" variant="outline" aria-label="New folder" title="New folder" onClick={() => setNewFolderOpen(true)}>
         <FolderPlusIcon size={16} />
-        <span className="hidden md:inline">New folder</span>
+        <span className={label}>New folder</span>
       </Button>
       <NewFolderDialog
         open={newFolderOpen}
         onClose={() => setNewFolderOpen(false)}
         onSubmit={(name, color, thumbnail) => createFolder(name, color, thumbnail)}
       />
-      <Button size="sm" variant="outline" onClick={() => setImportUrlOpen(true)}>
+      <Button size="sm" variant="outline" aria-label="Import from URL" title="Import from URL" onClick={() => setImportUrlOpen(true)}>
         <LinkSimpleIcon size={16} />
-        <span className="hidden md:inline">Import from URL</span>
+        <span className={label}>Import from URL</span>
       </Button>
       <ImportUrlDialog
         open={importUrlOpen}
         onClose={() => setImportUrlOpen(false)}
         onSubmit={(url, name) => importUrl(url, name)}
       />
-      <Button size="sm" variant="outline" onClick={() => setTelegramOpen(true)}>
+      <Button size="sm" variant="outline" aria-label="Telegram" title="Telegram" onClick={() => setTelegramOpen(true)}>
         <TelegramLogoIcon size={16} />
-        <span className="hidden md:inline">Telegram</span>
+        <span className={label}>Telegram</span>
       </Button>
       <TelegramDialog open={telegramOpen} onClose={() => setTelegramOpen(false)} />
       {folder?.spaceId && currentFolderId && (
         <>
-          <Button size="sm" variant="outline" onClick={() => setLinkFilesOpen(true)}>
+          <Button size="sm" variant="outline" aria-label="Link" title="Link" onClick={() => setLinkFilesOpen(true)}>
             <LinkIcon size={16} />
-            <span className="hidden md:inline">Link</span>
+            <span className={label}>Link</span>
           </Button>
           <LinkFilesDialog
             open={linkFilesOpen}
@@ -138,9 +145,10 @@ export function Toolbar() {
             variant="outline"
             onClick={() => nav(`/spaces/${folder.spaceId}`)}
             title="Manage members, name, and settings for this space"
+            aria-label="Manage space"
           >
             <GearSixIcon size={16} />
-            <span className="hidden md:inline">Manage space</span>
+            <span className={label}>Manage space</span>
           </Button>
         </>
       )}
@@ -153,17 +161,19 @@ export function Toolbar() {
             nav(currentFolderId ? `/search?folderId=${currentFolderId}` : "/search")
           }
           title="Search in this folder"
+          aria-label="Search in this folder"
         >
           <MagnifyingGlassIcon size={16} />
         </Button>
-        <div className="bg-border mx-1 hidden h-5 w-px md:block" />
+        <div className="bg-border mx-1 hidden h-5 w-px @2xl:block" />
         <ViewControls sort={sort} setSort={setSort} showHidden={showHidden} toggleHidden={toggleHidden} />
       </div>
     </div>
   )
 }
 
-/** Sort, show hidden, and grid or list: the right-hand end of a toolbar. Local files has one too. */
+/** Sort, show hidden, and grid or list: the right-hand end of a toolbar. Local files has one too.
+ * Its labels size from the toolbar around it, which has to be an `@container`. */
 export function ViewControls({
   sort,
   setSort,
@@ -188,11 +198,11 @@ export function ViewControls({
               title={`Sort by ${SORT_LABELS[sort.key]} (${sort.dir})`}
             >
               <ArrowsDownUpIcon size={14} />
-              <span className="hidden md:inline">{SORT_LABELS[sort.key]}</span>
+              <span className="hidden @2xl:inline">{SORT_LABELS[sort.key]}</span>
               {sort.dir === "asc" ? (
-                <SortAscendingIcon size={12} className="hidden opacity-70 md:inline" />
+                <SortAscendingIcon size={12} className="hidden opacity-70 @2xl:inline" />
               ) : (
-                <SortDescendingIcon size={12} className="hidden opacity-70 md:inline" />
+                <SortDescendingIcon size={12} className="hidden opacity-70 @2xl:inline" />
               )}
             </Button>
           }
@@ -236,7 +246,7 @@ export function ViewControls({
       >
         {showHidden ? <EyeIcon size={16} /> : <EyeSlashIcon size={16} />}
       </Button>
-      <div className="bg-border mx-1 hidden h-5 w-px md:block" />
+      <div className="bg-border mx-1 hidden h-5 w-px @2xl:block" />
       <Button
         size="sm"
         variant={view === "grid" ? "default" : "ghost"}

@@ -43,6 +43,7 @@ import {
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu"
 import { Popover, PopoverContent, PopoverTrigger } from "@workspace/ui/components/popover"
+import { ScrollArea } from "@workspace/ui/components/scroll-area"
 import { ThemeToggle } from "@/components/ThemeToggle"
 import { MobileTabBar } from "@/components/MobileTabBar"
 
@@ -207,138 +208,144 @@ export function Sidebar() {
           />
         </div>
 
-      {/* Nav, in three groups: what looks across everything, where files
-          live, and the housekeeping, which stays folded away until wanted.
-          Profile isn't here: the user row at the bottom opens it. */}
-      <nav className="flex flex-col gap-0.5">
-        {navItem("/home", "Home", <HouseIcon size={18} />)}
-        {navItem("/search", "Search", <MagnifyingGlassIcon size={18} />)}
-        {navItem("/recent", "Recent", <ClockCounterClockwiseIcon size={18} />)}
-        {navItem("/starred", "Starred", <StarIcon size={18} />)}
+      {/* The part that grows — more pinned spaces, a shorter window — scrolls
+          in place, so the sidebar never makes the whole page scroll. */}
+      <ScrollArea className="-mx-3 min-h-0 flex-1">
+        <div className="flex flex-col gap-4 px-3">
+          {/* Nav, in three groups: what looks across everything, where files
+              live, and the housekeeping, which stays folded away until wanted.
+              Profile isn't here: the user row at the bottom opens it. */}
+          <nav className="flex flex-col gap-0.5">
+            {navItem("/home", "Home", <HouseIcon size={18} />)}
+            {navItem("/search", "Search", <MagnifyingGlassIcon size={18} />)}
+            {navItem("/recent", "Recent", <ClockCounterClockwiseIcon size={18} />)}
+            {navItem("/starred", "Starred", <StarIcon size={18} />)}
 
-        {heading("Places")}
-        {user &&
-          navItem(
-            `/drive/${user.rootFolderId}`,
-            "My Drive",
-            <FolderIcon size={18} />
-          )}
-        {user &&
-          navItem(
-            `/drive/${user.photosRootFolderId}`,
-            "My Photos",
-            <ImagesIcon size={18} />
-          )}
-        {user &&
-          navItem(
-            `/drive/${user.syncRootFolderId}`,
-            "Synced Folders",
-            <ArrowsClockwiseIcon size={18} />
-          )}
-        {/* Its files and its sync settings, as two tabs (ComputerTabs). A
-            temporary login gets neither: the API gives it no device token. */}
-        {desktop && !user?.tempSessionExpiresAt &&
-          navItem("/local", "This computer", <DesktopIcon size={18} />, ["/local", "/sync"].includes(loc.pathname))}
-        {navItem("/spaces", "Spaces", <UsersThreeIcon size={18} />)}
+            {heading("Places")}
+            {user &&
+              navItem(
+                `/drive/${user.rootFolderId}`,
+                "My Drive",
+                <FolderIcon size={18} />
+              )}
+            {user &&
+              navItem(
+                `/drive/${user.photosRootFolderId}`,
+                "My Photos",
+                <ImagesIcon size={18} />
+              )}
+            {user &&
+              navItem(
+                `/drive/${user.syncRootFolderId}`,
+                "Synced Folders",
+                <ArrowsClockwiseIcon size={18} />
+              )}
+            {/* Its files and its sync settings, as two tabs (ComputerTabs). A
+                temporary login gets neither: the API gives it no device token. */}
+            {desktop && !user?.tempSessionExpiresAt &&
+              navItem("/local", "This computer", <DesktopIcon size={18} />, ["/local", "/sync"].includes(loc.pathname))}
+            {navItem("/spaces", "Spaces", <UsersThreeIcon size={18} />)}
 
-        <button
-          onClick={toggleMore}
-          aria-expanded={showMore}
-          title={collapsed ? "More" : undefined}
-          className={`text-muted-foreground hover:text-foreground mt-3 mb-1 flex items-center rounded-md px-2 py-1 text-xs font-medium tracking-wider uppercase ${
-            collapsed ? "justify-center" : "justify-between"
-          }`}
-        >
-          {!collapsed && "More"}
-          <CaretDownIcon size={12} className={`transition-transform ${showMore ? "" : "-rotate-90"}`} />
-        </button>
-        {showMore && (
-          <>
-            {navItem("/uploads", "Uploads", <UploadSimpleIcon size={18} />)}
-            {navItem("/storage", "Storage", <ChartDonutIcon size={18} />)}
-            {navItem("/bin", "Bin", <TrashIcon size={18} />)}
-            {user?.role === "ADMIN" &&
-              navItem("/admin", "Admin", <ShieldCheckIcon size={18} />)}
-          </>
-        )}
-      </nav>
+            <button
+              onClick={toggleMore}
+              aria-expanded={showMore}
+              title={collapsed ? "More" : undefined}
+              className={`text-muted-foreground hover:text-foreground mt-3 mb-1 flex items-center rounded-md px-2 py-1 text-xs font-medium tracking-wider uppercase ${
+                collapsed ? "justify-center" : "justify-between"
+              }`}
+            >
+              {!collapsed && "More"}
+              <CaretDownIcon size={12} className={`transition-transform ${showMore ? "" : "-rotate-90"}`} />
+            </button>
+            {showMore && (
+              <>
+                {navItem("/uploads", "Uploads", <UploadSimpleIcon size={18} />)}
+                {navItem("/storage", "Storage", <ChartDonutIcon size={18} />)}
+                {navItem("/bin", "Bin", <TrashIcon size={18} />)}
+                {user?.role === "ADMIN" &&
+                  navItem("/admin", "Admin", <ShieldCheckIcon size={18} />)}
+              </>
+            )}
+          </nav>
 
-      {/* Pinned spaces — the "/spaces" nav item above is the full gateway;
-          this is just quick access to the ones pinned from there. */}
-      <div className="mt-2">
-        <div
-          className={`flex items-center px-2 ${
-            collapsed ? "justify-center" : "justify-between"
-          }`}
-        >
-          {!collapsed && (
-            <div className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
-              Pinned
+          {/* Pinned spaces — the "/spaces" nav item above is the full gateway;
+              this is just quick access to the ones pinned from there. */}
+          <div className="mt-2">
+            <div
+              className={`flex items-center px-2 ${
+                collapsed ? "justify-center" : "justify-between"
+              }`}
+            >
+              {!collapsed && (
+                <div className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
+                  Pinned
+                </div>
+              )}
+              <button
+                className="rounded-md p-1 hover:bg-accent text-muted-foreground hover:text-foreground"
+                onClick={() => setCreatingSpace(true)}
+                title="New space"
+              >
+                <PlusIcon size={14} />
+              </button>
             </div>
-          )}
-          <button
-            className="rounded-md p-1 hover:bg-accent text-muted-foreground hover:text-foreground"
-            onClick={() => setCreatingSpace(true)}
-            title="New space"
-          >
-            <PlusIcon size={14} />
-          </button>
-        </div>
 
-        <div className="mt-1 flex flex-col">
-          {spaces
-            .filter((s) => s.pinned)
-            .map((s) =>
-            collapsed ? (
-              <Link
-                key={s.id}
-                to={`/drive/${s.rootFolderId}`}
-                title={s.name}
-                className="flex justify-center rounded-md py-1.5 hover:bg-accent/60"
-              >
-                <SpaceLogo space={s} size={20} />
-              </Link>
-            ) : (
-              <div
-                key={s.id}
-                className="group/space flex items-center rounded-md hover:bg-accent/60"
-              >
-                <Link
-                  to={`/drive/${s.rootFolderId}`}
-                  className="flex min-w-0 flex-1 items-center gap-2 truncate px-2 py-1.5 text-sm text-muted-foreground hover:text-foreground"
-                  title={s.name}
-                >
-                  <SpaceLogo space={s} size={20} className="shrink-0" />
-                  <span className="truncate">{s.name}</span>
-                  <span className="text-xs text-muted-foreground">
-                    ({s.members.length})
-                  </span>
-                  {s.isPublic && (
-                    <GlobeIcon
-                      size={12}
-                      weight="fill"
-                      className="text-primary ml-auto shrink-0"
-                      aria-label="Public space"
-                    />
-                  )}
-                </Link>
-                <button
-                  onClick={(e) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    void togglePinSpace(s.id, false)
-                  }}
-                  className="mr-1 rounded p-1 text-muted-foreground opacity-0 group-hover/space:opacity-100 hover:bg-accent hover:text-foreground focus:opacity-100"
-                  title="Unpin from sidebar"
-                  aria-label="Unpin from sidebar"
-                >
-                  <PushPinSlashIcon size={14} />
-                </button>
-              </div>
-            )
-          )}
+            <div className="mt-1 flex flex-col">
+              {spaces
+                .filter((s) => s.pinned)
+                .map((s) =>
+                collapsed ? (
+                  <Link
+                    key={s.id}
+                    to={`/drive/${s.rootFolderId}`}
+                    title={s.name}
+                    className="flex justify-center rounded-md py-1.5 hover:bg-accent/60"
+                  >
+                    <SpaceLogo space={s} size={20} />
+                  </Link>
+                ) : (
+                  <div
+                    key={s.id}
+                    className="group/space flex items-center rounded-md hover:bg-accent/60"
+                  >
+                    <Link
+                      to={`/drive/${s.rootFolderId}`}
+                      className="flex min-w-0 flex-1 items-center gap-2 truncate px-2 py-1.5 text-sm text-muted-foreground hover:text-foreground"
+                      title={s.name}
+                    >
+                      <SpaceLogo space={s} size={20} className="shrink-0" />
+                      <span className="truncate">{s.name}</span>
+                      <span className="text-xs text-muted-foreground">
+                        ({s.members.length})
+                      </span>
+                      {s.isPublic && (
+                        <GlobeIcon
+                          size={12}
+                          weight="fill"
+                          className="text-primary ml-auto shrink-0"
+                          aria-label="Public space"
+                        />
+                      )}
+                    </Link>
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        void togglePinSpace(s.id, false)
+                      }}
+                      className="mr-1 rounded p-1 text-muted-foreground opacity-0 group-hover/space:opacity-100 hover:bg-accent hover:text-foreground focus:opacity-100"
+                      title="Unpin from sidebar"
+                      aria-label="Unpin from sidebar"
+                    >
+                      <PushPinSlashIcon size={14} />
+                    </button>
+                  </div>
+                )
+              )}
+            </div>
+          </div>
         </div>
-      </div>
+      </ScrollArea>
 
       {/* Storage quota */}
       {quota && !collapsed && (

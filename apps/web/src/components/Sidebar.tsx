@@ -90,13 +90,14 @@ export function Sidebar() {
       : 0
   const nearLimit = pct >= 80
 
+  // The active item also gets a bar on the sidebar's own edge (-left-3 is the aside's padding).
   const navClass = (active: boolean) =>
-    `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors [&_svg]:shrink-0 md:gap-2 md:rounded-md md:py-2 ${
+    `relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors [&_svg]:shrink-0 md:gap-2.5 md:rounded-md md:py-2 ${
       collapsed ? "justify-center px-2" : ""
     } ${
       active
-        ? "bg-accent text-accent-foreground"
-        : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+        ? "bg-accent text-primary-bright before:bg-primary-bright font-medium before:absolute before:inset-y-1.5 before:-left-3 before:w-[3px] before:rounded-r-full"
+        : "text-muted-foreground hover:bg-accent/60 hover:text-primary"
     }`
   const navItem = (to: string, label: string, icon: React.ReactNode, active = loc.pathname === to) => (
     <Link to={to} title={collapsed ? label : undefined} className={navClass(active)}>
@@ -104,13 +105,6 @@ export function Sidebar() {
       {!collapsed && <span>{label}</span>}
     </Link>
   )
-  // A group's name. With the sidebar down to icons there's no room for words, so a rule stands in.
-  const heading = (label: string) =>
-    collapsed ? (
-      <div className="bg-border mx-2 my-2 h-px" />
-    ) : (
-      <div className="text-muted-foreground mt-3 mb-1 px-2 text-xs font-medium tracking-wider uppercase">{label}</div>
-    )
   // Open if it's been opened, or if the page being shown is one of its own.
   const showMore = moreOpen || ["/uploads", "/storage", "/bin", "/admin"].includes(loc.pathname)
 
@@ -208,69 +202,73 @@ export function Sidebar() {
           />
         </div>
 
-      {/* The part that grows — more pinned spaces, a shorter window — scrolls
-          in place, so the sidebar never makes the whole page scroll. */}
-      <ScrollArea className="-mx-3 min-h-0 flex-1">
-        <div className="flex flex-col gap-4 px-3">
-          {/* Nav, in three groups: what looks across everything, where files
-              live, and the housekeeping, which stays folded away until wanted.
-              Profile isn't here: the user row at the bottom opens it. */}
-          <nav className="flex flex-col gap-0.5">
-            {navItem("/home", "Home", <HouseIcon size={18} />)}
-            {navItem("/search", "Search", <MagnifyingGlassIcon size={18} />)}
-            {navItem("/recent", "Recent", <ClockCounterClockwiseIcon size={18} />)}
-            {navItem("/starred", "Starred", <StarIcon size={18} />)}
+        {/* Kept in reach: these never scroll away, whatever is pinned below.
+            Profile isn't here: the user row at the bottom opens it. */}
+        <nav className="flex flex-col gap-0.5">
+          {navItem("/home", "Home", <HouseIcon size={18} />)}
+          {user && navItem(`/drive/${user.rootFolderId}`, "My Drive", <FolderIcon size={18} />)}
+          {navItem("/search", "Search", <MagnifyingGlassIcon size={18} />)}
+          {navItem("/recent", "Recent", <ClockCounterClockwiseIcon size={18} />)}
+          {navItem("/starred", "Starred", <StarIcon size={18} />)}
+        </nav>
 
-            {heading("Places")}
-            {user &&
-              navItem(
-                `/drive/${user.rootFolderId}`,
-                "My Drive",
-                <FolderIcon size={18} />
+        {/* What's left of the height, shared by the rest of the nav (3 rows) and
+            the pinned spaces (2 rows), each scrolling in place. A row stops
+            growing once its content fits, so a side that needs less gives the
+            space up; only when both overflow do the five equal rows make 3:2. */}
+        <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[repeat(5,minmax(0,max-content))] border-t">
+          <ScrollArea className="row-span-3 -mx-3 min-h-0">
+            <nav className="flex flex-col gap-0.5 px-3 pt-3 pb-3">
+              {!collapsed && (
+                <div className="text-muted-foreground mb-1 px-2 text-xs font-medium tracking-wider uppercase">
+                  Places
+                </div>
               )}
-            {user &&
-              navItem(
-                `/drive/${user.photosRootFolderId}`,
-                "My Photos",
-                <ImagesIcon size={18} />
-              )}
-            {user &&
-              navItem(
-                `/drive/${user.syncRootFolderId}`,
-                "Synced Folders",
-                <ArrowsClockwiseIcon size={18} />
-              )}
-            {/* Its files and its sync settings, as two tabs (ComputerTabs). A
-                temporary login gets neither: the API gives it no device token. */}
-            {desktop && !user?.tempSessionExpiresAt &&
-              navItem("/local", "This computer", <DesktopIcon size={18} />, ["/local", "/sync"].includes(loc.pathname))}
-            {navItem("/spaces", "Spaces", <UsersThreeIcon size={18} />)}
+              {user &&
+                navItem(
+                  `/drive/${user.photosRootFolderId}`,
+                  "My Photos",
+                  <ImagesIcon size={18} />
+                )}
+              {user &&
+                navItem(
+                  `/drive/${user.syncRootFolderId}`,
+                  "Synced Folders",
+                  <ArrowsClockwiseIcon size={18} />
+                )}
+              {/* Its files and its sync settings, as two tabs (ComputerTabs). A
+                  temporary login gets neither: the API gives it no device token. */}
+              {desktop && !user?.tempSessionExpiresAt &&
+                navItem("/local", "This computer", <DesktopIcon size={18} />, ["/local", "/sync"].includes(loc.pathname))}
+              {navItem("/spaces", "Spaces", <UsersThreeIcon size={18} />)}
 
-            <button
-              onClick={toggleMore}
-              aria-expanded={showMore}
-              title={collapsed ? "More" : undefined}
-              className={`text-muted-foreground hover:text-foreground mt-3 mb-1 flex items-center rounded-md px-2 py-1 text-xs font-medium tracking-wider uppercase ${
-                collapsed ? "justify-center" : "justify-between"
-              }`}
-            >
-              {!collapsed && "More"}
-              <CaretDownIcon size={12} className={`transition-transform ${showMore ? "" : "-rotate-90"}`} />
-            </button>
-            {showMore && (
-              <>
-                {navItem("/uploads", "Uploads", <UploadSimpleIcon size={18} />)}
-                {navItem("/storage", "Storage", <ChartDonutIcon size={18} />)}
-                {navItem("/bin", "Bin", <TrashIcon size={18} />)}
-                {user?.role === "ADMIN" &&
-                  navItem("/admin", "Admin", <ShieldCheckIcon size={18} />)}
-              </>
-            )}
-          </nav>
+              {/* The housekeeping, which stays folded away until wanted. */}
+              <button
+                onClick={toggleMore}
+                aria-expanded={showMore}
+                title={collapsed ? "More" : undefined}
+                className={`text-muted-foreground hover:text-foreground mt-3 mb-1 flex items-center rounded-md px-2 py-1 text-xs font-medium tracking-wider uppercase ${
+                  collapsed ? "justify-center" : "justify-between"
+                }`}
+              >
+                {!collapsed && "More"}
+                <CaretDownIcon size={12} className={`transition-transform ${showMore ? "" : "-rotate-90"}`} />
+              </button>
+              {showMore && (
+                <>
+                  {navItem("/uploads", "Uploads", <UploadSimpleIcon size={18} />)}
+                  {navItem("/storage", "Storage", <ChartDonutIcon size={18} />)}
+                  {navItem("/bin", "Bin", <TrashIcon size={18} />)}
+                  {user?.role === "ADMIN" &&
+                    navItem("/admin", "Admin", <ShieldCheckIcon size={18} />)}
+                </>
+              )}
+            </nav>
+          </ScrollArea>
 
           {/* Pinned spaces — the "/spaces" nav item above is the full gateway;
               this is just quick access to the ones pinned from there. */}
-          <div className="mt-2">
+          <div className="row-span-2 flex min-h-0 flex-col border-t pt-3">
             <div
               className={`flex items-center px-2 ${
                 collapsed ? "justify-center" : "justify-between"
@@ -290,62 +288,63 @@ export function Sidebar() {
               </button>
             </div>
 
-            <div className="mt-1 flex flex-col">
-              {spaces
-                .filter((s) => s.pinned)
-                .map((s) =>
-                collapsed ? (
-                  <Link
-                    key={s.id}
-                    to={`/drive/${s.rootFolderId}`}
-                    title={s.name}
-                    className="flex justify-center rounded-md py-1.5 hover:bg-accent/60"
-                  >
-                    <SpaceLogo space={s} size={20} />
-                  </Link>
-                ) : (
-                  <div
-                    key={s.id}
-                    className="group/space flex items-center rounded-md hover:bg-accent/60"
-                  >
+            <ScrollArea className="-mx-3 mt-1 min-h-0">
+              <div className="flex flex-col px-3">
+                {spaces
+                  .filter((s) => s.pinned)
+                  .map((s) =>
+                  collapsed ? (
                     <Link
+                      key={s.id}
                       to={`/drive/${s.rootFolderId}`}
-                      className="flex min-w-0 flex-1 items-center gap-2 truncate px-2 py-1.5 text-sm text-muted-foreground hover:text-foreground"
                       title={s.name}
+                      className="flex justify-center rounded-md py-1.5 hover:bg-accent/60"
                     >
-                      <SpaceLogo space={s} size={20} className="shrink-0" />
-                      <span className="truncate">{s.name}</span>
-                      <span className="text-xs text-muted-foreground">
-                        ({s.members.length})
-                      </span>
-                      {s.isPublic && (
-                        <GlobeIcon
-                          size={12}
-                          weight="fill"
-                          className="text-primary ml-auto shrink-0"
-                          aria-label="Public space"
-                        />
-                      )}
+                      <SpaceLogo space={s} size={20} />
                     </Link>
-                    <button
-                      onClick={(e) => {
-                        e.preventDefault()
-                        e.stopPropagation()
-                        void togglePinSpace(s.id, false)
-                      }}
-                      className="mr-1 rounded p-1 text-muted-foreground opacity-0 group-hover/space:opacity-100 hover:bg-accent hover:text-foreground focus:opacity-100"
-                      title="Unpin from sidebar"
-                      aria-label="Unpin from sidebar"
+                  ) : (
+                    <div
+                      key={s.id}
+                      className="group/space flex items-center rounded-md hover:bg-accent/60"
                     >
-                      <PushPinSlashIcon size={14} />
-                    </button>
-                  </div>
-                )
-              )}
-            </div>
+                      <Link
+                        to={`/drive/${s.rootFolderId}`}
+                        className="flex min-w-0 flex-1 items-center gap-2 truncate px-2 py-1.5 text-sm text-muted-foreground hover:text-primary"
+                        title={s.name}
+                      >
+                        <SpaceLogo space={s} size={20} className="shrink-0" />
+                        <span className="truncate">{s.name}</span>
+                        <span className="text-xs text-muted-foreground">
+                          ({s.members.length})
+                        </span>
+                        {s.isPublic && (
+                          <GlobeIcon
+                            size={12}
+                            weight="fill"
+                            className="text-primary ml-auto shrink-0"
+                            aria-label="Public space"
+                          />
+                        )}
+                      </Link>
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          void togglePinSpace(s.id, false)
+                        }}
+                        className="mr-1 rounded p-1 text-muted-foreground opacity-0 group-hover/space:opacity-100 hover:bg-accent hover:text-foreground focus:opacity-100"
+                        title="Unpin from sidebar"
+                        aria-label="Unpin from sidebar"
+                      >
+                        <PushPinSlashIcon size={14} />
+                      </button>
+                    </div>
+                  )
+                )}
+              </div>
+            </ScrollArea>
           </div>
         </div>
-      </ScrollArea>
 
       {/* Storage quota */}
       {quota && !collapsed && (

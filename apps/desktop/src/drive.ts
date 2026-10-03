@@ -162,9 +162,19 @@ export function open(route?: string) {
     icon,
     backgroundColor: "#070b0e",
     autoHideMenuBar: true,
+    // No title bar of the system's: each page's <header> is one (globals.css,
+    // .wco), with just the window buttons drawn over its end, as tall as it is.
+    titleBarStyle: "hidden",
+    titleBarOverlay: { color: "#00000000", symbolColor: "#f2f7f9", height: 53 },
     webPreferences: { session: drive(), preload: path.join(__dirname, "drive-preload.cjs") },
   })
   win = w
+  // The buttons have no background, so they take the theme's ink: the page
+  // says which theme it's in with <meta name="theme-color"> (theme-provider).
+  w.webContents.on("did-change-theme-color", (_e, color) => {
+    const dark = !color || parseInt(color.slice(1, 3), 16) < 128
+    w.setTitleBarOverlay({ color: "#00000000", symbolColor: dark ? "#f2f7f9" : "#070b0e" })
+  })
   w.on("closed", () => (win = null))
   w.loadURL(new URL(route ?? "/", APP_URL).toString())
 }

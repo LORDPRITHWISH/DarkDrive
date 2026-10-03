@@ -382,17 +382,21 @@
   }
 }
 
-/* Window Controls Overlay (installed app on Windows/Linux): the browser hands
-   us the title bar strip and only reserves the min/max/close buttons. Every
-   page that gets one wraps its top row in <header>, so — same trick as <main>
-   above — one rule turns them all into a real draggable title bar. */
-@media (display-mode: window-controls-overlay) {
+/* Window Controls Overlay (installed app on Windows/Linux, and the desktop
+   app): the window hands us the title bar strip and only reserves the
+   min/max/close buttons. Every page that gets one wraps its top row in
+   <header>, so — same trick as <main> above — one rule turns them all into a
+   real draggable title bar. .wco is set by apps/web main.tsx: the
+   display-mode media query would do, but the desktop app never matches it. */
+.wco {
   header {
     app-region: drag;
     -webkit-app-region: drag;
-    padding-left: env(titlebar-area-x, 0px);
+    /* Windows/Linux keep the buttons on the right: the page's own gutter stays. */
+    padding-left: max(1rem, env(titlebar-area-x, 0px));
+    /* The window buttons' width, and a gap so ours don't read as part of them. */
     padding-right: calc(
-      100vw - env(titlebar-area-width, 100vw) - env(titlebar-area-x, 0px)
+      100vw - env(titlebar-area-width, 100vw) - env(titlebar-area-x, 0px) + 1rem
     );
   }
   /* Anything clickable has to opt back out, or dragging eats the click. */
@@ -403,5 +407,15 @@
   header [role="button"] {
     app-region: no-drag;
     -webkit-app-region: no-drag;
+  }
+  /* A page with no header (sign-in, a loading screen) still needs somewhere
+     to hold the window by. */
+  body:not(:has(header))::before {
+    content: "";
+    position: fixed;
+    inset: 0 0 auto;
+    height: env(titlebar-area-height, 0px);
+    app-region: drag;
+    -webkit-app-region: drag;
   }
 }

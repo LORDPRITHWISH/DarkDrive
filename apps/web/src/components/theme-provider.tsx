@@ -105,6 +105,11 @@ export function ThemeProvider({
 
     root.classList.remove("light", "dark")
     root.classList.add(theme)
+    // What draws around the page (an installed app's window buttons, the
+    // desktop app's, a phone's status bar) follows the theme through this.
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute("content", getComputedStyle(root).getPropertyValue("--background").trim())
 
     if (restoreTransitions) {
       restoreTransitions()

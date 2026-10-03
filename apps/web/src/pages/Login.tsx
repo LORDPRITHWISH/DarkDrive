@@ -463,8 +463,8 @@ export function LoginPage() {
           <div className="text-muted-foreground mt-5 flex items-center justify-between text-xs">
             <span className="flex items-center gap-2">
               <span className="relative inline-flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-60" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-60" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
               </span>
               API online
             </span>

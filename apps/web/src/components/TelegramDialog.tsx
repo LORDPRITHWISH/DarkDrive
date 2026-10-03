@@ -189,7 +189,7 @@ export function TelegramDialog({ open, onClose }: { open: boolean; onClose: () =
                 Your account
               </h3>
               {status.linked && (
-                <span className="text-[11px] text-emerald-500">Linked {status.phone}</span>
+                <span className="text-[11px] text-success">Linked {status.phone}</span>
               )}
             </div>
 
@@ -307,7 +307,7 @@ export function TelegramDialog({ open, onClose }: { open: boolean; onClose: () =
               <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 Bot
               </h3>
-              {status.bot.linked && <span className="text-[11px] text-emerald-500">Linked</span>}
+              {status.bot.linked && <span className="text-[11px] text-success">Linked</span>}
             </div>
 
             {!status.bot.username ? (

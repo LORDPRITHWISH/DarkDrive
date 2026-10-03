@@ -30,7 +30,7 @@ function iconFor(type: NotificationType) {
     case "folder_share":
       return <UsersThreeIcon size={size} weight="fill" className="text-sky-500" />
     case "quota_upgrade_approved":
-      return <CheckCircleIcon size={size} weight="fill" className="text-emerald-500" />
+      return <CheckCircleIcon size={size} weight="fill" className="text-success" />
     case "quota_upgrade_denied":
       return <XCircleIcon size={size} weight="fill" className="text-muted-foreground" />
     case "quota_near_limit":

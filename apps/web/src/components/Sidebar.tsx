@@ -125,7 +125,7 @@ export function Sidebar() {
       <aside
         className={`fixed inset-y-0 left-0 z-50 md:relative md:z-auto ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
-        } md:translate-x-0 flex h-screen shrink-0 flex-col gap-4 border-r bg-card p-3 transition-transform duration-200 md:transition-all w-[85vw] max-w-xs md:max-w-none ${
+        } md:translate-x-0 flex h-screen shrink-0 flex-col gap-4 border-r bg-sidebar p-3 transition-transform duration-200 md:transition-all w-[85vw] max-w-xs md:max-w-none ${
           desktopCollapsed ? "md:w-14" : "md:w-64"
         }`}
       >

@@ -27,6 +27,8 @@ import {
   TableHeader,
   TableRow,
 } from "@workspace/ui/components/table"
+import { Badge } from "@workspace/ui/components/badge"
+import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { formatBytes, formatDate } from "@/lib/format"
 import { DarkPlayer } from "./player"
 import { AudioPlayer } from "@/components/AudioPlayer"
@@ -46,8 +48,10 @@ const COMPACT_QUERY = "(max-width: 1023px), (max-height: 559px)"
 const PAGER_BUTTON =
   "rounded-md p-1.5 hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
 
-const CINEMA_BUTTON =
-  "rounded-full bg-black/60 p-2 text-white backdrop-blur-sm hover:bg-black/80"
+// Controls that sit on the picture: dark glass with a lit top edge, so they
+// read on a bright frame and a dark one alike.
+const GLASS_BUTTON =
+  "grid size-9 place-items-center rounded-full bg-black/45 text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.12)] ring-1 ring-white/15 backdrop-blur-md transition hover:bg-black/65 active:scale-95"
 
 // What cinema mode is for: things you watch or look at, not read.
 function canCinema(mimeType: string) {
@@ -252,6 +256,15 @@ export function FilePreview({
     [items, onNavigate, file]
   )
 
+  // Stable per file: the PDF viewer reports its focus mode from an effect
+  // keyed on this callback, so a new one every render had the two components
+  // re-rendering each other for as long as a PDF was open.
+  const fileId = file?.id ?? null
+  const handlePdfFocusModeChange = useCallback(
+    (focused: boolean) => setPdfFocusState({ fileId, focused }),
+    [fileId]
+  )
+
   if (!file) return null
 
   const videoFile = file.mimeType.startsWith("video/")
@@ -367,136 +380,130 @@ export function FilePreview({
     setOfficeProviderState({ fileId: file.id, provider })
   }
 
-  const handlePdfFocusModeChange = (focused: boolean) => {
-    setPdfFocusState({ fileId: file.id, focused })
-  }
+  // What the file is, at a glance, under its name. A flag shows only when
+  // it's set: three rows of "No" told nobody anything.
+  const ext = /\.([a-z0-9]{1,5})$/i.exec(file.name)?.[1].toUpperCase()
+  const meta = (
+    <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground tabular-nums">
+      {[ext, formatBytes(file.size)].filter(Boolean).join(" · ")}
+      {file.isStarred && <Badge variant="muted">Starred</Badge>}
+      {file.isHidden && <Badge variant="muted">Hidden</Badge>}
+      {file.isTrashed && <Badge variant="destructive">In bin</Badge>}
+    </div>
+  )
 
-  const propertiesContent = (
-    <>
-      <a
-        href={dlHref}
-        className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
-      >
-        <DownloadIcon size={14} /> Download
-      </a>
+  const download = (
+    <a href={dlHref} className={buttonVariants({ size: "lg", className: "w-full" })}>
+      <DownloadIcon weight="bold" /> Download
+    </a>
+  )
+
+  // A track menu appears only when there's a track to choose; otherwise the
+  // row just says what's playing.
+  const details = (
+    <div className="flex flex-col gap-4">
       {officeFile && (
-        <div className="mt-3 border-t pt-3">
-          <div className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Preview Provider
-          </div>
-          <OfficeProviderSwitch
-            provider={officeProvider}
-            onChange={handleOfficeProviderChange}
+        <Section title="Preview">
+          <Info
+            label="Viewer"
+            value={
+              <OfficeProviderSwitch
+                provider={officeProvider}
+                onChange={handleOfficeProviderChange}
+              />
+            }
           />
-        </div>
+        </Section>
       )}
       {videoFile && (
-        <div className="mt-3 border-t pt-3">
-          <div className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Playback
-          </div>
-          <div className="grid gap-2">
-            <div className="grid gap-1 text-sm">
-              <span className="text-muted-foreground text-xs">Audio</span>
-              <Select
-                items={audioItems}
-                value={audioIndex}
-                disabled={audioTracks.length < 2}
-                onValueChange={(v) => selectAudio(v as number | null)}
-              >
-                <SelectTrigger size="sm" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {audioItems.map((a) => (
-                    <SelectItem key={a.value ?? "default"} value={a.value}>
-                      {a.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-1 text-sm">
-              <span className="text-muted-foreground text-xs">Subtitles</span>
-              <Select
-                items={subtitleItems}
-                value={subtitleIndex}
-                disabled={subtitleTracks.length === 0}
-                onValueChange={(v) => selectSubtitle(v as number | null)}
-              >
-                <SelectTrigger size="sm" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {subtitleItems.map((t) => (
-                    <SelectItem key={t.value ?? "off"} value={t.value}>
-                      {t.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </div>
+        <Section title="Playback">
+          <Info
+            label="Audio"
+            value={
+              audioTracks.length < 2 ? (
+                audioItems[0].label
+              ) : (
+                <Select
+                  items={audioItems}
+                  value={audioIndex}
+                  onValueChange={(v) => selectAudio(v as number | null)}
+                >
+                  <SelectTrigger size="sm" className="w-full" aria-label="Audio track">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {audioItems.map((a) => (
+                      <SelectItem key={a.value ?? "default"} value={a.value}>
+                        {a.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )
+            }
+          />
+          <Info
+            label="Subtitles"
+            value={
+              subtitleTracks.length === 0 ? (
+                subtitleItems[0].label
+              ) : (
+                <Select
+                  items={subtitleItems}
+                  value={subtitleIndex}
+                  onValueChange={(v) => selectSubtitle(v as number | null)}
+                >
+                  <SelectTrigger size="sm" className="w-full" aria-label="Subtitles">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {subtitleItems.map((t) => (
+                      <SelectItem key={t.value ?? "off"} value={t.value}>
+                        {t.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )
+            }
+          />
+        </Section>
       )}
-      <div className="mt-3 border-t pt-3">
-        <div className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          Properties
-        </div>
-        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 text-sm">
-          <Info label="Type" value={file.mimeType || "—"} />
-          <Info label="Size" value={formatBytes(file.size)} />
-          <Info label="Added" value={formatDate(file.createdAt)} />
-          <Info label="Modified" value={formatDate(file.updatedAt)} />
-          <Info label="Starred" value={file.isStarred ? "Yes" : "No"} />
-          <Info label="Hidden" value={file.isHidden ? "Yes" : "No"} />
-          <Info label="Trashed" value={file.isTrashed ? "Yes" : "No"} />
-          <Info
-            label="ID"
-            value={
-              <span className="break-all font-mono text-xs">{file.id}</span>
-            }
-          />
-          <Info
-            label="Folder"
-            value={
-              <span className="break-all font-mono text-xs">
-                {file.folderId}
-              </span>
-            }
-          />
-          {file.spaceId && (
-            <Info
-              label="Space"
-              value={
-                <span className="break-all font-mono text-xs">
-                  {file.spaceId}
-                </span>
-              }
-            />
-          )}
-          <Info
-            label="Key"
-            value={
-              <span className="break-all font-mono text-xs">
-                {file.storageKey}
-              </span>
-            }
-          />
-        </dl>
-      </div>
-    </>
+      <Section title="Details">
+        <Info
+          label="Type"
+          value={
+            // An Office type runs to seventy characters; the extension above
+            // already says it in four.
+            <span title={file.mimeType} className="block truncate">
+              {file.mimeType || "—"}
+            </span>
+          }
+        />
+        <Info label="Added" value={formatDate(file.createdAt)} />
+        <Info label="Modified" value={formatDate(file.updatedAt)} />
+      </Section>
+      <Section title="Reference">
+        <Info label="ID" value={<Mono>{file.id}</Mono>} />
+        <Info label="Folder" value={<Mono>{file.folderId}</Mono>} />
+        {file.spaceId && <Info label="Space" value={<Mono>{file.spaceId}</Mono>} />}
+        <Info label="Key" value={<Mono>{file.storageKey}</Mono>} />
+      </Section>
+    </div>
   )
 
   // One tree for every layout. The viewer keeps its place while the chrome
   // around it changes, so turning a tablet, resizing the window or entering
   // cinema mode restyles the player instead of remounting it — a remount
   // reloads the video and throws it back to where it started.
+  //
+  // On a wide window that chrome is two cards floating over the blurred page:
+  // the media, and the details beside it.
   const full = compact || cinema
   return (
     <div
       className={`fixed inset-0 z-50 flex ${
-        full ? "" : "items-center justify-center bg-black/70 p-4"
+        full ? "" : "items-center justify-center bg-black/70 p-4 backdrop-blur-md"
       }`}
       onClick={onClose}
     >
@@ -509,7 +516,7 @@ export function FilePreview({
         className={`relative flex outline-none ${
           full
             ? `h-full w-full flex-col ${cinema ? "bg-black" : "bg-background"}`
-            : `overflow-hidden rounded-lg border bg-background transition-[width,height,max-width,max-height] duration-300 ${
+            : `gap-3 transition-[width,height,max-width,max-height] duration-300 ${
                 pdfFocusMode
                   ? "h-[94vh] w-[96vw]"
                   : "max-h-[90vh] max-w-[95vw]"
@@ -560,9 +567,11 @@ export function FilePreview({
         )}
 
         <div
-          className={`flex min-w-0 overflow-hidden ${
+          className={`group/media relative flex min-w-0 overflow-hidden ${
+            full ? "" : "rounded-xl border"
+          } ${
             pdfFocusMode
-              ? "flex-1 bg-transparent"
+              ? "flex-1 bg-background"
               : `items-center justify-center ${full ? "min-h-0 flex-1" : ""} ${
                   cinema || videoFile ? "bg-black" : "bg-muted"
                 }`
@@ -584,62 +593,81 @@ export function FilePreview({
             startTime={startTime}
             onProgress={saveProgress}
           />
+          {/* The way out of cinema mode sits on the picture, the details card
+              being gone. Over a video it comes and goes with the player's
+              own controls; over an image it's faint until pointed at. It
+              clears a phone's notch and an installed app's window controls,
+              which share this corner. */}
+          {cinema && (
+            <div
+              className={`absolute top-[calc(max(env(safe-area-inset-top),env(titlebar-area-height,0px))+0.5rem)] right-[calc(env(safe-area-inset-right)+0.5rem)] z-10 flex gap-2 transition-opacity group-has-[.media-controls:not([data-visible])]/media:opacity-0 focus-within:opacity-100 hover:opacity-100 ${
+                videoFile ? "" : "opacity-40"
+              }`}
+            >
+              <button
+                onClick={() => setCinemaOn(false)}
+                className={GLASS_BUTTON}
+                aria-label="Exit cinema mode"
+                title="Exit cinema mode (T or Esc)"
+              >
+                <CornersInIcon size={18} />
+              </button>
+              <button onClick={onClose} className={GLASS_BUTTON} aria-label="Close">
+                <XIcon size={18} />
+              </button>
+            </div>
+          )}
         </div>
 
         {!full && !pdfFocusMode && (
-          <ScrollArea className="w-80 shrink-0 border-l">
-            <aside className="flex flex-col gap-3 p-4">
-              <div className="flex items-start justify-between gap-2">
+          <aside className="flex w-80 shrink-0 flex-col overflow-hidden rounded-xl border bg-card">
+            {/* Top to bottom: what the file is, what there is to know about
+                it (the only part that scrolls), then what you do with it,
+                pinned to the bottom edge with the download last. */}
+            <div className="flex shrink-0 items-start gap-3 p-5">
+              <div className="min-w-0 flex-1">
                 {/* Two lines, not one: most of a long release-style name
                     survives, and the hover still shows all of it. */}
-                <h3 className="min-w-0 flex-1 font-semibold">
+                <h3 className="text-lg leading-snug font-semibold">
                   <HoverName
                     as="span"
                     name={file.name}
                     className="line-clamp-2 wrap-anywhere"
                   />
                 </h3>
+                {meta}
+              </div>
+              <Button variant="outline" size="icon-sm" onClick={onClose} aria-label="Close">
+                <XIcon />
+              </Button>
+            </div>
+            <ScrollArea className="min-h-0 flex-1">
+              <div className="px-5 pb-4">{details}</div>
+            </ScrollArea>
+            <div className="shrink-0 px-5 pb-5">
+              <div className="flex flex-col gap-2 border-t pt-4">
                 {cinemaFile && (
-                  <button
-                    className="shrink-0 rounded p-1 hover:bg-accent"
+                  <Button
+                    variant="outline"
+                    size="lg"
                     onClick={() => setCinemaOn(true)}
                     aria-label="Cinema mode"
+                    aria-keyshortcuts="T"
                     title="Cinema mode (T)"
                   >
-                    <FrameCornersIcon size={18} />
-                  </button>
+                    <FrameCornersIcon /> Cinema mode
+                    <kbd className="ml-1 rounded border px-1 font-mono text-[10px] text-muted-foreground">
+                      T
+                    </kbd>
+                  </Button>
                 )}
-                <button
-                  className="shrink-0 rounded p-1 hover:bg-accent"
-                  onClick={onClose}
-                  aria-label="Close"
-                >
-                  <XIcon size={18} />
-                </button>
+                {/* Stretched to the card's width, so the arrows line up with
+                    the edges of the buttons above and below. */}
+                {pager && <div className="*:w-full *:justify-between">{pager}</div>}
+                {download}
               </div>
-              {pager && <div className="-my-1 -ml-1.5">{pager}</div>}
-              {propertiesContent}
-            </aside>
-          </ScrollArea>
-        )}
-
-        {/* Faint until pointed at, so they don't compete with the picture.
-            Offset past a phone's notch and an installed app's window
-            controls, both of which sit over this corner. */}
-        {cinema && (
-          <div className="absolute top-[calc(max(env(safe-area-inset-top),env(titlebar-area-height,0px))+0.5rem)] right-[calc(env(safe-area-inset-right)+0.5rem)] z-10 flex gap-1 opacity-40 transition-opacity focus-within:opacity-100 hover:opacity-100">
-            <button
-              onClick={() => setCinemaOn(false)}
-              className={CINEMA_BUTTON}
-              aria-label="Exit cinema mode"
-              title="Exit cinema mode (T or Esc)"
-            >
-              <CornersInIcon size={18} />
-            </button>
-            <button onClick={onClose} className={CINEMA_BUTTON} aria-label="Close">
-              <XIcon size={18} />
-            </button>
-          </div>
+            </div>
+          </aside>
         )}
 
         {compact && showInfo && (
@@ -655,8 +683,11 @@ export function FilePreview({
             >
               <div className="px-5 pt-3 pb-8">
                 <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted-foreground/30" />
-                <div className="mb-3 flex items-start justify-between gap-2">
-                  <h3 className="min-w-0 font-semibold wrap-anywhere">{file.name}</h3>
+                <div className="mb-4 flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <h3 className="font-semibold wrap-anywhere">{file.name}</h3>
+                    {meta}
+                  </div>
                   <button
                     onClick={() => setShowInfo(false)}
                     className="shrink-0 rounded-lg p-1.5 text-muted-foreground hover:bg-accent"
@@ -665,7 +696,8 @@ export function FilePreview({
                     <XIcon size={18} />
                   </button>
                 </div>
-                {propertiesContent}
+                <div className="mb-5">{download}</div>
+                {details}
               </div>
             </ScrollArea>
           </>
@@ -675,12 +707,38 @@ export function FilePreview({
   )
 }
 
+// Every section shares one label column, so values line up down the whole
+// panel instead of each block picking its own width.
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="border-t pt-4">
+      <h4 className="mb-3 text-sm font-semibold">{title}</h4>
+      <dl className="grid grid-cols-[4.5rem_1fr] items-baseline gap-x-3 gap-y-2 text-sm">
+        {children}
+      </dl>
+    </section>
+  )
+}
+
 function Info({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <>
       <dt className="text-muted-foreground">{label}</dt>
       <dd className="min-w-0 wrap-anywhere">{value}</dd>
     </>
+  )
+}
+
+// One line each, however long: a click selects the whole value for copying,
+// and the tooltip shows what the ellipsis hides.
+function Mono({ children }: { children: string }) {
+  return (
+    <span
+      title={children}
+      className="block truncate font-mono text-xs text-muted-foreground select-all"
+    >
+      {children}
+    </span>
   )
 }
 
@@ -721,13 +779,14 @@ function isPdfFile(m: string, name: string) {
   return m === "application/pdf" || /\.pdf$/i.test(name)
 }
 
-// "modal" layout caps media to the viewport minus the 20rem side panel and
-// the modal's border. "fill" layout lets the viewer take 100% of its parent
-// (used by callers that already give it a definite height, e.g. share pages).
+// "modal" layout caps media to the viewport minus the 20rem details card, the
+// 0.75rem gap beside it and the media card's own border. "fill" layout lets
+// the viewer take 100% of its parent (used by callers that already give it a
+// definite height, e.g. share pages).
 const MODAL_MEDIA = {
-  w: "max-w-[calc(95vw-20rem-2px)]",
+  w: "max-w-[calc(95vw-20.75rem-2px)]",
   h: "max-h-[calc(90vh-2px)]",
-  doc: "w-[calc(95vw-20rem-2px)] h-[calc(90vh-2px)] overflow-hidden",
+  doc: "w-[calc(95vw-20.75rem-2px)] h-[calc(90vh-2px)] overflow-hidden",
 }
 const FILL_MEDIA = {
   w: "max-w-full",

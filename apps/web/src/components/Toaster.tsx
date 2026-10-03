@@ -13,7 +13,7 @@ function iconFor(kind: ToastKind) {
       <CheckCircleIcon
         size={size}
         weight="fill"
-        className="text-emerald-500"
+        className="text-success"
       />
     )
   if (kind === "error")

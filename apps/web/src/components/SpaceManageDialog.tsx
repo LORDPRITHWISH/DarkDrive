@@ -642,7 +642,7 @@ export function SpaceManageDialog({
                             variant="ghost"
                             size="icon-sm"
                             onClick={() => void updateMemberRole(space.id, m.userId, { role: "EDITOR" })}
-                            className="text-emerald-600 hover:bg-emerald-500/15 dark:text-emerald-400"
+                            className="text-success hover:bg-success/15"
                             title="Approve upload access"
                             aria-label={`Approve ${m.name}`}
                           >

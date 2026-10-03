@@ -1,5 +1,5 @@
 import { create } from "zustand"
-import { apiGet, apiJson, apiUpload } from "@/lib/api"
+import { apiGet, apiJson, apiUpload, type HttpError } from "@/lib/api"
 import { getSocket } from "@/lib/socket"
 import type {
   Breadcrumb,
@@ -322,11 +322,9 @@ export const useDrive = create<DriveState>((set, get) => ({
   setPreview: (file) => set({ preview: file }),
   select: (id, multi) => {
     const cur = new Set(get().selection)
-    if (multi) cur.has(id) ? cur.delete(id) : cur.add(id)
-    else {
-      cur.clear()
-      cur.add(id)
-    }
+    if (!multi) cur.clear()
+    if (cur.has(id)) cur.delete(id)
+    else cur.add(id)
     set({ selection: cur, selectionAnchor: id })
   },
   // Shift-click range select: spans from the last non-range anchor to the
@@ -368,8 +366,8 @@ export const useDrive = create<DriveState>((set, get) => ({
         breadcrumbs: data.breadcrumbs,
         loading: false,
       })
-    } catch (e: any) {
-      set({ loading: false, error: e.message })
+    } catch (e) {
+      set({ loading: false, error: e instanceof Error ? e.message : "failed" })
     }
   },
   refresh: async () => {
@@ -451,7 +449,8 @@ export const useDrive = create<DriveState>((set, get) => ({
         ),
       })
       await get().refresh()
-    } catch (e: any) {
+    } catch (err) {
+      const e = err as HttpError
       set({
         uploads: get().uploads.map((u) =>
           u.id === uid ? { ...u, error: e?.body?.error || e?.message, done: true } : u
@@ -705,10 +704,11 @@ export const useDrive = create<DriveState>((set, get) => ({
               : u
           ),
         })
-      } catch (e: any) {
+      } catch (e) {
+        const error = e instanceof Error ? e.message : "failed"
         set({
           uploads: get().uploads.map((u) =>
-            u.id === uid ? { ...u, error: e.message, speed: 0, done: true } : u
+            u.id === uid ? { ...u, error, speed: 0, done: true } : u
           ),
         })
       }
@@ -757,10 +757,11 @@ export const useDrive = create<DriveState>((set, get) => ({
           u.id === uid ? { ...u, loaded: file.size, progress: 100, speed: 0, done: true } : u
         ),
       })
-    } catch (e: any) {
+    } catch (e) {
+      const error = e instanceof Error ? e.message : "failed"
       set({
         uploads: get().uploads.map((u) =>
-          u.id === uid ? { ...u, error: e.message, speed: 0, done: true } : u
+          u.id === uid ? { ...u, error, speed: 0, done: true } : u
         ),
       })
       throw e
@@ -877,7 +878,8 @@ export const useDrive = create<DriveState>((set, get) => ({
       })
       await get().refresh()
       void useMe.getState().loadQuota()
-    } catch (e: any) {
+    } catch (err) {
+      const e = err as HttpError
       set({
         uploads: get().uploads.map((u) =>
           u.id === uid ? { ...u, error: e?.body?.error || e?.message, done: true, speed: 0 } : u
@@ -925,15 +927,11 @@ export const useDrive = create<DriveState>((set, get) => ({
     }
   },
   addMember: async (spaceId, email, can) => {
-    try {
-      await apiJson(`/api/spaces/${spaceId}/members`, "POST", { email, ...can })
-      await get().loadSpaces()
-      toast.success(`Invited ${email}.`)
-    } catch (e) {
-      // Let the dialog surface field-level errors (user_not_found, etc.) —
-      // rethrow so the caller's catch can decide. No toast on known errors.
-      throw e
-    }
+    // No catch: the dialog surfaces field-level errors (user_not_found, etc.),
+    // so failures propagate to the caller. No toast on known errors.
+    await apiJson(`/api/spaces/${spaceId}/members`, "POST", { email, ...can })
+    await get().loadSpaces()
+    toast.success(`Invited ${email}.`)
   },
   updateMemberRole: async (spaceId, userId, patch) => {
     await apiJson(`/api/spaces/${spaceId}/members/${userId}`, "PATCH", patch)

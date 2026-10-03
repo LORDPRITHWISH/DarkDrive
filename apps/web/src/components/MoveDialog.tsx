@@ -84,8 +84,8 @@ export function MoveDialog({
     try {
       await onSubmit(selected)
       onClose()
-    } catch (e: any) {
-      setErr(e.message ?? "move_failed")
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "move_failed")
     } finally {
       setBusy(false)
     }
@@ -132,7 +132,8 @@ export function MoveDialog({
           onToggle={(id) =>
             setExpanded((prev) => {
               const next = new Set(prev)
-              next.has(id) ? next.delete(id) : next.add(id)
+              if (next.has(id)) next.delete(id)
+              else next.add(id)
               return next
             })
           }

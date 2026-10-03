@@ -25,17 +25,16 @@ export function useLogs(q: string, pollMs = 5000) {
   const [entries, setEntries] = useState<LogEntry[]>([])
   const [err, setErr] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
-    try {
-      const r = await apiGet<{ entries: LogEntry[] }>(
-        `/api/admin/logs?limit=300&q=${encodeURIComponent(q)}`
-      )
-      setEntries(r.entries)
-      setErr(null)
-    } catch (e: unknown) {
-      setErr(e instanceof Error ? e.message : "failed")
-    }
-  }, [q])
+  const load = useCallback(
+    () =>
+      apiGet<{ entries: LogEntry[] }>(`/api/admin/logs?limit=300&q=${encodeURIComponent(q)}`)
+        .then((r) => {
+          setEntries(r.entries)
+          setErr(null)
+        })
+        .catch((e: unknown) => setErr(e instanceof Error ? e.message : "failed")),
+    [q]
+  )
 
   useEffect(() => {
     void load()

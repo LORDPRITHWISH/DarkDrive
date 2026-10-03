@@ -1,5 +1,5 @@
 import { create } from "zustand"
-import { apiGet, apiJson } from "@/lib/api"
+import { apiGet, apiJson, type HttpError } from "@/lib/api"
 import { desktop } from "@/lib/desktop"
 import type { User } from "@/lib/types"
 
@@ -23,7 +23,8 @@ export const useAuth = create<AuthState>((set, get) => ({
     try {
       const u = await apiGet<User>("/api/auth/me")
       set({ user: u, loading: false, hasFetched: true })
-    } catch (e: any) {
+    } catch (err) {
+      const e = err as HttpError
       set({ user: null, loading: false, hasFetched: true, error: e.status === 401 ? null : e.message })
     }
   },

@@ -84,16 +84,15 @@ export function FileGrid() {
     return folders.find((f) => f.id === id)?.name ?? files.find((f) => f.id === id)?.name ?? ""
   }
 
-  function isStarredId(id: string): boolean {
-    return (
-      folders.find((f) => f.id === id)?.isStarred ??
-      files.find((f) => f.id === id)?.isStarred ??
-      false
-    )
-  }
-
   const allSelectedStarred = useMemo(
-    () => selection.size > 0 && Array.from(selection).every((id) => isStarredId(id)),
+    () =>
+      selection.size > 0 &&
+      Array.from(selection).every(
+        (id) =>
+          folders.find((f) => f.id === id)?.isStarred ??
+          files.find((f) => f.id === id)?.isStarred ??
+          false
+      ),
     [selection, folders, files]
   )
 

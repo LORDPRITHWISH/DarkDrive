@@ -22,5 +22,11 @@ export default defineConfig([
         tsconfigRootDir: import.meta.dirname,
       },
     },
+    rules: {
+      // `catch {}` is how this app says "best effort" (localStorage, aborts).
+      'no-empty': ['error', { allowEmptyCatch: true }],
+      // Costs a full reload instead of a hot one in dev; not worth failing CI.
+      'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
+    },
   },
 ])

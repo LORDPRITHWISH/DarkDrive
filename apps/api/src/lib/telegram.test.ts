@@ -67,7 +67,7 @@ const generic = await replyForText(
   "https://drive.test/drive/f1"
 )
 assert.ok(generic.includes("/status") && generic.includes("/help"), "generic reply lists commands")
-assert.ok(generic.includes("https://drive.test/drive/f1"), "generic reply links My Photos")
+assert.ok(generic.includes("https://drive.test/drive/f1"), "generic reply links the Telegram folder")
 
 // The saved confirmation has to carry a link straight to the file, not just
 // say "saved" — that link is the only way back to it from Telegram.

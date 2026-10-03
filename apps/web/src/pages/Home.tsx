@@ -46,11 +46,10 @@ const CHIP_MIN = 200
 const CHIP_GAP = 12
 
 const sectionLabel = "text-muted-foreground text-xs font-medium tracking-wider uppercase"
-// Hover is colour, border and glow only: nothing here changes an element's
-// size, so hovering one card never nudges its neighbours.
+// Hover is the bright border and nothing else, the same as every other card
+// in the app: this page is opened every day, so nothing glows or moves.
 const card =
-  "group/card bg-card hover:border-primary hover:bg-primary/5 focus-visible:border-primary rounded-lg border text-left outline-none transition-[background-color,border-color,box-shadow] duration-200 hover:shadow-[0_8px_24px_-14px_color-mix(in_oklab,var(--primary)_45%,transparent)] focus-visible:ring-2 focus-visible:ring-primary"
-const nudge = "transition-transform duration-200"
+  "bg-card hover:border-primary focus-visible:border-primary rounded-lg border text-left outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-primary"
 
 function greeting() {
   const h = new Date().getHours()
@@ -252,7 +251,7 @@ export function HomePage() {
                         title="Another fact"
                         onClick={() => setFactIndex((i) => i + 1)}
                       >
-                        <ArrowsClockwiseIcon className="transition-transform duration-500 motion-safe:group-hover/button:rotate-180" />
+                        <ArrowsClockwiseIcon />
                       </Button>
                     </div>
                   )}
@@ -260,7 +259,7 @@ export function HomePage() {
 
                 <div className="flex flex-wrap gap-4">
                   <div
-                    className={`group/drop hover:border-primary-bright relative flex min-w-0 flex-[1.3_1_300px] flex-col items-center justify-center gap-3.5 overflow-hidden rounded-xl border-2 border-dashed px-5 py-7 text-center text-white transition-[border-color,box-shadow] duration-300 hover:shadow-[0_0_28px_-12px_color-mix(in_oklab,var(--primary)_45%,transparent)] ${
+                    className={`hover:border-primary-bright relative flex min-w-0 flex-[1.3_1_300px] flex-col items-center justify-center gap-3.5 overflow-hidden rounded-xl border-2 border-dashed px-5 py-7 text-center text-white transition-colors duration-150 ${
                       dropping ? "border-primary-bright" : "border-primary/40"
                     }`}
                   >
@@ -276,13 +275,9 @@ export function HomePage() {
                         dropping ? "bg-black/55" : "bg-black/75"
                       }`}
                     />
-                    <div className="bg-primary/10 group-hover/drop:bg-primary/25 absolute inset-0 transition-colors duration-300" />
-                    <span className="bg-primary text-primary-foreground group-hover/drop:bg-primary-bright relative grid size-12 place-items-center rounded-full transition-colors duration-300">
-                      <UploadSimpleIcon
-                        size={22}
-                        weight="bold"
-                        className={`${nudge} motion-safe:group-hover/drop:-translate-y-0.5`}
-                      />
+                    <div className="bg-primary/10 absolute inset-0" />
+                    <span className="bg-primary text-primary-foreground relative grid size-12 place-items-center rounded-full">
+                      <UploadSimpleIcon size={22} weight="bold" />
                     </span>
                     <div className="relative">
                       <div className="text-base font-semibold">
@@ -300,7 +295,7 @@ export function HomePage() {
                       <Button
                         size="lg"
                         variant="outline"
-                        className="border-primary/60 bg-primary/15 hover:border-primary hover:bg-primary hover:text-primary-foreground text-white"
+                        className="border-white/25 bg-white/10 text-white hover:bg-white/20 hover:text-white"
                         onClick={() => folderInput.current?.click()}
                       >
                         <FolderOpenIcon />
@@ -335,7 +330,7 @@ export function HomePage() {
                         onClick={a.onClick}
                         className={`${card} flex flex-1 items-center gap-3.5 px-4 py-3.5`}
                       >
-                        <span className="bg-muted group-hover/card:bg-primary group-hover/card:text-primary-foreground grid size-10 shrink-0 place-items-center rounded-lg transition-colors duration-200">
+                        <span className="bg-muted grid size-10 shrink-0 place-items-center rounded-lg">
                           {a.icon}
                         </span>
                         <span className="min-w-0">
@@ -378,7 +373,7 @@ export function HomePage() {
                           size={28}
                           weight="fill"
                           style={{ color: f.color || undefined }}
-                          className={`shrink-0 ${nudge} motion-safe:group-hover/card:-translate-y-0.5 ${f.color ? "" : "text-primary"}`}
+                          className={`shrink-0 ${f.color ? "" : "text-primary"}`}
                         />
                         <div className="min-w-0 flex-1">
                           <div className="truncate text-sm font-medium" title={f.name}>
@@ -432,10 +427,7 @@ export function HomePage() {
                           <FileThumb file={f} iconSize={18} />
                         </span>
                         <span className="min-w-0 flex-1">
-                          <span
-                            className="group-hover/card:text-primary block truncate text-[13px] font-medium transition-colors duration-200"
-                            title={f.name}
-                          >
+                          <span className="block truncate text-[13px] font-medium" title={f.name}>
                             {f.name}
                           </span>
                           <span className="text-muted-foreground block text-xs">
@@ -494,7 +486,7 @@ export function HomePage() {
                         onClick={() => setPreview(lucky)}
                         onContextMenu={(e) => openMenu(e, "file", lucky)}
                         aria-label={`Open ${lucky.name}`}
-                        className="bg-muted hover:ring-primary focus-visible:ring-primary grid h-32 place-items-center overflow-hidden rounded-md outline-none transition-shadow duration-200 hover:ring-2 focus-visible:ring-2"
+                        className="bg-muted hover:ring-primary focus-visible:ring-primary grid h-32 place-items-center overflow-hidden rounded-md outline-none hover:ring-1 focus-visible:ring-2"
                       >
                         <FileThumb file={lucky} iconSize={40} />
                       </button>
@@ -508,7 +500,7 @@ export function HomePage() {
                       </div>
                       <div className="mt-auto flex gap-2">
                         <Button className="flex-1" onClick={shuffle}>
-                          <DiceFiveIcon className="transition-transform duration-300 motion-safe:group-hover/button:rotate-90" />
+                          <DiceFiveIcon />
                           Shuffle
                         </Button>
                         <Button
@@ -650,13 +642,10 @@ function FileRows<T extends FileItem>({
           key={f.id}
           onClick={() => onOpen(f)}
           onContextMenu={(e) => onMenu(e, f)}
-          className="group/row hover:bg-primary/5 focus-visible:bg-accent/40 flex w-full items-center gap-2.5 px-3.5 py-3 text-left text-sm outline-none transition-colors duration-200 [&_svg]:shrink-0"
+          className="hover:bg-accent/60 focus-visible:bg-accent/60 flex w-full items-center gap-2.5 px-3.5 py-3 text-left text-sm outline-none transition-colors duration-150 [&_svg]:shrink-0"
         >
           {iconFor(f.mimeType, 18, f.name)}
-          <span
-            className="group-hover/row:text-primary min-w-0 flex-1 truncate transition-colors duration-200"
-            title={f.name}
-          >
+          <span className="min-w-0 flex-1 truncate" title={f.name}>
             {f.name}
           </span>
           <span className="text-muted-foreground shrink-0 text-xs">{meta(f)}</span>

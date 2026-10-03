@@ -212,3 +212,25 @@ export async function assertUserSyncRootId(user: User): Promise<string> {
   await prisma.user.update({ where: { id: user.id }, data: { syncRootFolderId: root.id } })
   return root.id
 }
+
+// Where Telegram media lands: an ordinary "Telegram" folder inside My Drive,
+// not a root — My Photos is the gallery's, and anything put there shows up in
+// its timeline. Found by name rather than pinned to the user row, so renaming
+// or trashing it just means the next upload starts a fresh one.
+//
+// Forwarding an album runs one bot handler per photo at once and Folder has
+// no unique (parentId, name), so concurrent callers share one lookup instead
+// of each creating their own folder.
+const telegramFolderLookups = new Map<string, Promise<string>>()
+export function assertUserTelegramFolderId(user: User): Promise<string> {
+  let lookup = telegramFolderLookups.get(user.id)
+  if (!lookup) {
+    lookup = (async () => {
+      const where = { name: "Telegram", ownerId: user.id, parentId: await assertUserRootFolderId(user) }
+      const found = await prisma.folder.findFirst({ where: { ...where, isTrashed: false }, select: { id: true } })
+      return (found ?? (await prisma.folder.create({ data: where }))).id
+    })().finally(() => telegramFolderLookups.delete(user.id))
+    telegramFolderLookups.set(user.id, lookup)
+  }
+  return lookup
+}

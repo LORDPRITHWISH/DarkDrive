@@ -281,7 +281,7 @@ function UploadCard({
       onClick={onOpen}
       onDoubleClick={onOpen}
       onContextMenu={onMenu}
-      className="bg-card hover:border-primary/60 flex flex-col overflow-hidden rounded-lg border text-left transition-colors"
+      className="bg-card hover:border-primary flex flex-col overflow-hidden rounded-lg border text-left transition-colors"
     >
       <div className="flex items-center gap-2 px-3 py-2">
         {iconFor(file.mimeType, 16, file.name)}

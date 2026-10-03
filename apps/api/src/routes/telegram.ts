@@ -2,7 +2,7 @@ import { Router } from "express"
 import { z } from "zod"
 import { prisma } from "../db/prisma.js"
 import { currentUser, requireAuth } from "../middleware/auth.js"
-import { getFolderWithAccess, assertUserPhotosRootId } from "../lib/access.js"
+import { getFolderWithAccess, assertUserTelegramFolderId } from "../lib/access.js"
 import { getIO } from "../realtime/socket.js"
 import {
   awaitCodeSent,
@@ -127,7 +127,7 @@ telegramRouter.post("/import", async (req, res) => {
 
     const targetFolderId = folderId
       ? (await getFolderWithAccess(user.id, folderId, "write"))?.id
-      : await assertUserPhotosRootId(user)
+      : await assertUserTelegramFolderId(user)
     if (!targetFolderId) return res.status(403).json({ error: "forbidden" })
 
     const used = await prisma.file.aggregate({

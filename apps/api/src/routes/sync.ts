@@ -1,5 +1,5 @@
 import crypto from "node:crypto"
-import { Router } from "express"
+import { Router, type NextFunction, type Request, type Response } from "express"
 import type { User } from "@prisma/client"
 import { z } from "zod"
 import { prisma } from "../db/prisma.js"
@@ -98,22 +98,54 @@ function syncRoot(drive: Awaited<ReturnType<typeof loadDrive>>, raw: unknown): s
   return f.id
 }
 
+// A sync client asks for /changes every few seconds per folder it keeps, for
+// as long as it runs, and each answer walks the account's whole folder tree
+// (all of its files too, at since=0). Left open, that is the cheapest way
+// there is to make this server work. So each account gets a budget: a daemon
+// polls twice in a window, which leaves room for 30 of them, folders times
+// computers. Past it the answer is 429 and when to come back, which the
+// daemon waits out (apps/sync) and only shows as slower sync.
+// ponytail: counted per process, one entry per account that has ever polled.
+// Count in Redis like routes/tempSessions.ts if the API ever runs clustered.
+const POLL_WINDOW_MS = 10_000
+const POLLS_PER_WINDOW = 60
+const polls = new Map<string, { window: number; n: number }>()
+function pollLimit(req: Request, res: Response, next: NextFunction) {
+  const id = currentUser(req).id
+  const window = Math.floor(Date.now() / POLL_WINDOW_MS)
+  const last = polls.get(id)
+  const n = last?.window === window ? last.n + 1 : 1
+  polls.set(id, { window, n })
+  if (n <= POLLS_PER_WINDOW) return next()
+  res.set("Retry-After", String(Math.ceil((POLL_WINDOW_MS - (Date.now() % POLL_WINDOW_MS)) / 1000)))
+  res.status(429).json({ error: "too_many_polls" })
+}
+
+// What `gone` below names things by. A client can match one against an id it
+// holds, and learns nothing of the ones it doesn't: in a shared folder those
+// are its owner's, anywhere else in their drive.
+const idTag = (id: string) => crypto.createHash("sha256").update(id).digest("hex")
+
 // Everything in the user's own drive that changed since `since`, as paths.
 // Deletes are included (isTrashed/deletedAt) so clients know to remove the
 // local copy — no separate change journal is needed because every mutation
 // already bumps updatedAt.
 //
-// A rename or move of a folder does NOT bump its descendants' updatedAt, so
-// clients must handle a changed folder path by moving the local directory;
-// the children then follow on disk for free.
+// A folder that is renamed, moved, binned or restored does NOT bump its
+// descendants' updatedAt, though it takes them all along. So a changed folder
+// is reported with everything under it: in the bin with it (deleted), or there
+// to fetch if it was just moved in or put back. Where it only moved, a client
+// that moves its directory first finds the rest already in place.
 //
-// ?root=<folderId> scopes it to one folder: paths are relative to it and
-// nothing outside it is reported.
+// ?root=<folderId> scopes it to one folder: paths are relative to it. What
+// changed outside it has no path to report, and may be something that was
+// moved out, which nothing on the row can tell. Those are `gone`: a client
+// drops the ones it holds, like a delete.
 //
 // `can` is what the user may do in that folder ("YES" | "ASK" | "NO" each to
 // adding and changing, and to binning): all YES in one of their own, a
 // member's settings in a shared one (FolderMember).
-syncRouter.get("/changes", async (req, res) => {
+syncRouter.get("/changes", pollLimit, async (req, res) => {
   const user = currentUser(req)
   const since = new Date(String(req.query.since ?? 0))
   if (Number.isNaN(since.getTime())) return res.status(400).json({ error: "bad_since" })
@@ -130,10 +162,57 @@ syncRouter.get("/changes", async (req, res) => {
   // is skipped below.
   const pathOf = pathBuilder(drive.byId, rootId)
 
+  // A first sync holds nothing that could have left, and gets every file anyway.
+  const first = since.getTime() === 0
+
+  // The changed folders under the root, and all that's under each of them.
+  const gone: string[] = []
+  const touched = new Set<string>()
+  const queue: string[] = []
+  for (const f of folders) {
+    if (f.updatedAt <= since || f.id === rootId) continue
+    if (pathOf(f.id) === null) gone.push(idTag(f.id))
+    else queue.push(f.id)
+  }
+  // Most polls find no folder changed, and skip the walk down.
+  if (queue.length) {
+    const kids = new Map<string, string[]>()
+    for (const f of folders) {
+      if (!f.parentId) continue
+      const list = kids.get(f.parentId)
+      if (list) list.push(f.id)
+      else kids.set(f.parentId, [f.id])
+    }
+    for (const id of queue) {
+      if (touched.has(id)) continue
+      touched.add(id)
+      queue.push(...(kids.get(id) ?? []))
+    }
+  }
+
+  // In the bin, or in a folder that is. Only for a folder under the root, so
+  // the walk up always ends there.
+  const binnedMemo = new Map<string, boolean>([[rootId, false]])
+  const binned = (id: string): boolean => {
+    let hit = binnedMemo.get(id)
+    if (hit === undefined) {
+      const f = drive.byId.get(id)!
+      hit = f.isTrashed || f.deletedAt !== null || binned(f.parentId!)
+      binnedMemo.set(id, hit)
+    }
+    return hit
+  }
+
   // By whose folder a file is in, not whose file it is: in a shared folder
   // each file belongs to whoever added it.
+  // ponytail: one IN list of every touched folder. Fine into the thousands;
+  // page it if someone moves a tree of tens of thousands of folders at once.
   const files = await prisma.file.findMany({
-    where: { folder: { ownerId: drive.ownerId }, spaceId: null, updatedAt: { gt: since } },
+    where: {
+      folder: { ownerId: drive.ownerId },
+      spaceId: null,
+      OR: [{ updatedAt: { gt: since } }, { folderId: { in: first ? [] : [...touched] } }],
+    },
     select: {
       id: true, name: true, folderId: true, size: true, sha256: true,
       mimeType: true, isTrashed: true, deletedAt: true, updatedAt: true,
@@ -142,17 +221,19 @@ syncRouter.get("/changes", async (req, res) => {
   })
 
   const changedFolders = []
-  for (const f of folders) {
-    if (f.updatedAt <= since || f.id === rootId) continue
-    const p = pathOf(f.id)
-    if (p === null || p === "") continue
-    changedFolders.push({ id: f.id, path: p, deleted: f.isTrashed || f.deletedAt !== null })
+  for (const id of touched) {
+    // Null only past MAX_DEPTH, which is skipped like before.
+    const p = pathOf(id)
+    if (p) changedFolders.push({ id, path: p, deleted: binned(id) })
   }
 
   const changedFiles = []
   for (const f of files) {
     const dir = pathOf(f.folderId)
-    if (dir === null) continue
+    if (dir === null) {
+      gone.push(idTag(f.id))
+      continue
+    }
     // Added by a member who has to ask, and not yet agreed to: theirs alone.
     // The owner's yes clears it, and that change is what delivers it here.
     if (f.pending === "upload" && f.ownerId !== user.id) continue
@@ -163,14 +244,23 @@ syncRouter.get("/changes", async (req, res) => {
       sha256: f.sha256,
       mimeType: f.mimeType,
       updatedAt: f.updatedAt,
-      deleted: f.isTrashed || f.deletedAt !== null,
+      deleted: f.isTrashed || f.deletedAt !== null || binned(f.folderId),
     })
   }
 
   // Shallowest first so a client can mkdir parents before children.
   changedFolders.sort((a, b) => a.path.split("/").length - b.path.split("/").length)
+  // Binned ones first: the name one left may be another file's by now, and a
+  // client that goes by path has to be done with the old before it takes the new.
+  changedFiles.sort((a, b) => Number(b.deleted) - Number(a.deleted))
 
-  res.json({ cursor: cursor.toISOString(), can: drive.can, folders: changedFolders, files: changedFiles })
+  res.json({
+    cursor: cursor.toISOString(),
+    can: drive.can,
+    folders: changedFolders,
+    files: changedFiles,
+    gone: first ? [] : gone,
+  })
 })
 
 // The secret this account's computers share for LAN sync (apps/desktop

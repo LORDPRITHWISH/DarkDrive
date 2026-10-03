@@ -196,7 +196,7 @@ export function TelegramDialog({ open, onClose }: { open: boolean; onClose: () =
             {status.linked ? (
               <>
                 <p className="text-[11px] text-muted-foreground">
-                  Pulls every photo and video from your Saved Messages into My Photos.
+                  Pulls every photo and video from your Saved Messages into the Telegram folder in My Drive.
                   Already-imported items are skipped, so it's safe to re-run.
                 </p>
                 {progress && (
@@ -317,8 +317,8 @@ export function TelegramDialog({ open, onClose }: { open: boolean; onClose: () =
             ) : status.bot.linked ? (
               <div className="flex items-center gap-2">
                 <p className="flex-1 text-[11px] text-muted-foreground">
-                  Forward photos or videos to @{status.bot.username} and they'll land in My
-                  Photos automatically.
+                  Forward photos or videos to @{status.bot.username} and they'll land in the
+                  Telegram folder in My Drive automatically.
                 </p>
                 <Button
                   size="sm"

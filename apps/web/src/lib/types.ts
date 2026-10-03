@@ -5,7 +5,7 @@ export type User = {
   avatarUrl?: string | null
   rootFolderId: string
   // Root of the gallery tree ("My Photos") — a second root alongside My
-  // Drive, where Telegram imports and DarkGallery uploads land.
+  // Drive, where DarkGallery uploads land.
   photosRootFolderId: string
   // Root of "Synced Folders", a third root: one child per folder the desktop
   // app keeps in sync with a folder on a computer.

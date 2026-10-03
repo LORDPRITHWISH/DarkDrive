@@ -145,7 +145,7 @@ function SpaceCard({
   onTogglePin: (pinned: boolean) => void
 }) {
   return (
-    <div className="group bg-card hover:border-primary/60 relative flex items-center gap-3 rounded-xl border p-3 transition-colors">
+    <div className="group bg-card hover:border-primary relative flex items-center gap-3 rounded-xl border p-3 transition-colors">
       <Link
         to={`/drive/${space.rootFolderId}`}
         className="focus-visible:ring-primary flex min-w-0 flex-1 items-center gap-3 rounded-lg outline-none focus-visible:ring-2"

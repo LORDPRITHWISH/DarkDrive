@@ -271,8 +271,8 @@ function Connections() {
           </div>
           <CardDescription>
             {tg?.bot.linked
-              ? `Forward photos and videos to @${tg.bot.username} and they land in My Photos.`
-              : "Link the bot to forward media straight into My Photos, or link your account to bulk-import Saved Messages."}
+              ? `Forward photos and videos to @${tg.bot.username} and they land in the Telegram folder in My Drive.`
+              : "Link the bot to forward media straight into your drive, or link your account to bulk-import Saved Messages."}
             {tg?.linked && tg.phone ? ` Account linked as ${tg.phone}.` : ""}
           </CardDescription>
         </CardHeader>

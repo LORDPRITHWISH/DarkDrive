@@ -10,7 +10,7 @@ import { prisma } from "../db/prisma.js"
 import { storage, newStorageKey, newScratchPath } from "../storage/index.js"
 import { queueThumbnail } from "./thumbnails.js"
 import { getIO } from "../realtime/socket.js"
-import { assertUserPhotosRootId } from "./access.js"
+import { assertUserTelegramFolderId } from "./access.js"
 import { logActivity } from "./activity.js"
 
 export function requireTelegramCreds() {
@@ -494,7 +494,7 @@ export function resultText(status: SaveResult["status"], name: string, link?: st
   const tail = link ? `\n${link}` : ""
   switch (status) {
     case "imported":
-      return `Saved \u2713 ${name}\nIt's in My Photos on DarkDrive.${tail}`
+      return `Saved \u2713 ${name}\nIt's in the Telegram folder on DarkDrive.${tail}`
     case "already_imported":
       return `Already saved \u2713 ${name}${tail}`
     case "skipped_quota":
@@ -529,7 +529,7 @@ async function replaceStatus(
 export async function replyForText(
   text: string,
   user: { id: string; email: string; storageQuotaBytes: bigint | null },
-  photosUrl: string
+  folderUrl: string
 ): Promise<string> {
   if (text.startsWith("/status")) {
     const [used, imported] = await Promise.all([
@@ -542,16 +542,16 @@ export async function replyForText(
       `${imported} file${imported === 1 ? "" : "s"} imported from Telegram`,
       `${gb(BigInt(used._sum.size ?? BigInt(0)))} GB of ${gb(user.storageQuotaBytes ?? BigInt(0))} GB used`,
       "",
-      photosUrl,
+      folderUrl,
     ].join("\n")
   }
   return [
-    "Send or forward a photo or video here and I'll save it straight to your DarkDrive Photos.",
+    "Send or forward a photo or video here and I'll save it to the Telegram folder in your DarkDrive.",
     "",
     "/status \u2014 what's linked and how much storage you have left",
     "/help \u2014 this message",
     "",
-    `Your photos: ${photosUrl}`,
+    `Your Telegram folder: ${folderUrl}`,
   ].join("\n")
 }
 
@@ -589,7 +589,7 @@ async function handleBotMessage(event: NewMessageEvent) {
     })
     tlog("bot linked", { chatId, userId: pending.userId })
     await client.sendMessage(message.chatId, {
-      message: "Linked! Send or forward photos and videos here and they'll land in your DarkDrive Photos.",
+      message: "Linked! Send or forward photos and videos here and they'll land in the Telegram folder in your DarkDrive.",
     })
     return
   }
@@ -611,17 +611,15 @@ async function handleBotMessage(event: NewMessageEvent) {
   }
   const room = getIO()?.to(`user:${user.id}`)
 
+  const folderId = await assertUserTelegramFolderId(user)
+
   if (!media) {
-    // Reads user.photosRootFolderId, only hitting the DB the first time a
-    // given account ever needs the folder created.
-    const photosUrl = `${env.WEB_URL}/drive/${await assertUserPhotosRootId(user)}`
-    const reply = await replyForText(text, user, photosUrl)
+    const reply = await replyForText(text, user, `${env.WEB_URL}/drive/${folderId}`)
     await client.sendMessage(message.chatId, { message: reply })
     tlog("bot replied to text", { chatId, user: user.email, text: text.slice(0, 500) })
     return
   }
 
-  const folderId = await assertUserPhotosRootId(user)
   const used = await prisma.file.aggregate({
     _sum: { size: true },
     where: { ownerId: user.id, isTrashed: false },

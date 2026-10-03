@@ -385,6 +385,29 @@ meRouter.get("/recently-added", async (req, res) => {
   res.json({ files: files.map((f) => ({ ...f, size: Number(f.size) })) })
 })
 
+// One random file of the user's that has been sitting untouched: uploaded more
+// than 30 days ago and not opened in that time. Backs Home's "Rediscover" card;
+// null for a drive with nothing that old.
+meRouter.get("/rediscover", async (req, res) => {
+  const user = currentUser(req)
+  const before = new Date(Date.now() - 1000 * 60 * 60 * 24 * 30)
+  const where = {
+    ownerId: user.id,
+    isTrashed: false,
+    isHidden: false,
+    createdAt: { lt: before },
+    accesses: { none: { userId: user.id, accessedAt: { gte: before } } },
+  }
+  const count = await prisma.file.count({ where })
+  if (count === 0) return res.json({ file: null })
+  const file = await prisma.file.findFirst({
+    where,
+    orderBy: { id: "asc" },
+    skip: Math.floor(Math.random() * count),
+  })
+  res.json({ file: file && { ...file, size: Number(file.size) } })
+})
+
 // Every file owned by the user, newest first — a straightforward history of
 // what they've uploaded, paged by cursor since it only grows over time.
 meRouter.get("/uploads", async (req, res) => {

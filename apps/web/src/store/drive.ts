@@ -214,7 +214,12 @@ type DriveState = {
   loadFolder: (id: string) => Promise<void>
   refresh: () => Promise<void>
 
-  createFolder: (name: string, color?: string | null, thumbnail?: File | null) => Promise<void>
+  createFolder: (
+    name: string,
+    color?: string | null,
+    thumbnail?: File | null,
+    explicitParentId?: string
+  ) => Promise<void>
   renameFolder: (id: string, name: string) => Promise<void>
   recolorFolder: (id: string, color: string | null) => Promise<void>
   renameFile: (id: string, name: string) => Promise<void>
@@ -375,8 +380,8 @@ export const useDrive = create<DriveState>((set, get) => ({
     if (id) await get().loadFolder(id)
   },
 
-  createFolder: async (name, color, thumbnail) => {
-    const parentId = get().currentFolderId
+  createFolder: async (name, color, thumbnail, explicitParentId) => {
+    const parentId = explicitParentId ?? get().currentFolderId
     if (!parentId) return
     const folder = await apiJson<Folder>("/api/folders", "POST", { name, parentId, color: color ?? null })
     if (thumbnail) {

@@ -33,4 +33,6 @@
   DeleteRegKey HKCU "${DD_FILE}"
   ; darkdrive:// links, which the app registers itself when it runs.
   DeleteRegKey HKCU "Software\Classes\darkdrive"
+  ; Launching at login, likewise the app's own: named by its appId (registerAutostart in src/main.ts).
+  DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "live.zenux.darkdrive"
 !macroend

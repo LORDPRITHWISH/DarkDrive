@@ -46,6 +46,8 @@ export function publish(s: Settings, paused: boolean, statusOf: (id: string) => 
   })
   if (next === published) return
   published = next
+  // Nothing has made it yet on a first run: settings are only written once there's something to save.
+  fs.mkdirSync(CONFIG_DIR, { recursive: true })
   // Renamed into place: the extension polls this, and must never read half of it.
   fs.writeFileSync(STATUS_FILE + ".part", next)
   fs.renameSync(STATUS_FILE + ".part", STATUS_FILE)

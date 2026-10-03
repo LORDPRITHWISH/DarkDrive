@@ -1,6 +1,8 @@
 import { apiUrl } from "./config"
 
 export type ApiError = { error: string; issues?: unknown }
+/** What a failed request throws: `handle` and the upload paths attach these. */
+export type HttpError = Error & { status?: number; body?: ApiError | null }
 
 async function handle<T>(res: Response): Promise<T> {
   if (!res.ok) {

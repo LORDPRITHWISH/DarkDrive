@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react"
 
 const BG_KEY = "dd.backgroundPlay"
 
-export const backgroundPlayEnabled = () => localStorage.getItem(BG_KEY) !== "0"
+const backgroundPlayEnabled =() => localStorage.getItem(BG_KEY) !== "0"
 
 /**
  * Audio preview that survives leaving the app.

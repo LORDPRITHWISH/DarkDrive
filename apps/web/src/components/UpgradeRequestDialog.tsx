@@ -6,7 +6,7 @@ import { formatBytes } from "@/lib/format"
 
 // Slabs a user can request. Slabs at or below the current quota are filtered
 // out client-side; the backend double-checks too.
-export const REQUEST_SLABS: { label: string; bytes: number }[] = [
+const REQUEST_SLABS:{ label: string; bytes: number }[] = [
   { label: "5 GB", bytes: 5 * 1024 ** 3 },
   { label: "10 GB", bytes: 10 * 1024 ** 3 },
   { label: "15 GB", bytes: 15 * 1024 ** 3 },

@@ -53,9 +53,16 @@ export function SyncPage() {
   const temp = useAuth((s) => !!s.user?.tempSessionExpiresAt)
   const nav = useNavigate()
 
+  // Read against the clock when the state arrives, not during render.
+  const [paused, setPaused] = useState(false)
+
   useEffect(() => {
     if (!desktop) return
-    const load = () => void desktop!.getState().then(setState)
+    const load = () =>
+      void desktop!.getState().then((s) => {
+        setState(s)
+        setPaused(s.pausedUntil > Date.now())
+      })
     load()
     return desktop.onChange(load)
   }, [])
@@ -89,7 +96,7 @@ export function SyncPage() {
           {state && state.folders.length > 0 && (
             <div className="flex items-center gap-2">
               <Badge variant={state.syncing ? "default" : "muted"}>{state.status}</Badge>
-              {state.pausedUntil > Date.now() ? (
+              {paused ? (
                 <Button size="sm" variant="outline" onClick={() => run(() => d.pauseUntil(0))}>
                   <PlayIcon size={14} />
                   Resume

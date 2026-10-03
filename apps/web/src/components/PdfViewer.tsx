@@ -112,11 +112,12 @@ export function PdfViewer({
   layout?: "modal" | "fill"
   onFocusModeChange?: (focused: boolean) => void
 }) {
+  const zoomStorageKey = `darkdrive:pdf-zoom:${fileId}`
   const [readingMode, setReadingMode] = useState<PdfReadingMode>("scroll")
   const [focusMode, setFocusMode] = useState(false)
   const [theme, setTheme] = useState<PdfTheme>("dark")
   const [zoomMode, setZoomMode] = useState<ZoomMode>("fit")
-  const [customZoom, setCustomZoom] = useState(1.35)
+  const [customZoom, setCustomZoom] = useState(() => readStoredZoom(zoomStorageKey))
   const [flipMotion, setFlipMotion] = useState(true)
   const [containerWidth, setContainerWidth] = useState(0)
   const [activeGroupStart, setActiveGroupStart] = useState(1)
@@ -132,21 +133,19 @@ export function PdfViewer({
   }>({ sourceUrl: null, data: null, error: null })
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const groupRefs = useRef<Record<number, HTMLDivElement | null>>({})
-  const zoomStorageKey = `darkdrive:pdf-zoom:${fileId}`
   const themeStyle = THEME_STYLES[theme]
 
-  useEffect(() => {
-    const stored = window.localStorage.getItem(zoomStorageKey)
-    const parsed = stored ? Number(stored) : NaN
-    setCustomZoom(
-      Number.isFinite(parsed) ? clamp(parsed, ZOOM_MIN, ZOOM_MAX) : 1.35
-    )
+  // A different file opens in the default view, at its own saved zoom.
+  const [shownFileId, setShownFileId] = useState(fileId)
+  if (shownFileId !== fileId) {
+    setShownFileId(fileId)
+    setCustomZoom(readStoredZoom(zoomStorageKey))
     setZoomMode("fit")
     setReadingMode("scroll")
     setFocusMode(false)
     setActiveGroupStart(1)
     setFlipMotion(true)
-  }, [zoomStorageKey])
+  }
 
   useEffect(() => {
     onFocusModeChange?.(focusMode)
@@ -161,26 +160,17 @@ export function PdfViewer({
     window.localStorage.setItem(zoomStorageKey, String(customZoom))
   }, [customZoom, zoomMode, zoomStorageKey])
 
+  // Only the API's preview route needs resolving to a signed source; any other
+  // URL is the PDF itself.
+  const srcUrl = new URL(src, window.location.origin)
+  const directUrl = /^\/api\/files\/[^/]+\/preview$/.test(srcUrl.pathname)
+    ? null
+    : srcUrl.toString()
+
   useEffect(() => {
+    if (directUrl) return
     let cancelled = false
     const full = new URL(src, window.location.origin)
-    const usesServerPreview = /^\/api\/files\/[^/]+\/preview$/.test(
-      full.pathname
-    )
-
-    setResolved({ src, data: null, error: null })
-
-    if (!usesServerPreview) {
-      setResolved({
-        src,
-        data: { sourceUrl: full.toString(), expiresAt: null },
-        error: null,
-      })
-      return () => {
-        cancelled = true
-      }
-    }
-
     full.searchParams.set("format", "json")
     fetch(full.toString(), { credentials: "include" })
       .then(async (response) => {
@@ -207,12 +197,14 @@ export function PdfViewer({
     return () => {
       cancelled = true
     }
-  }, [src])
+  }, [src, directUrl])
 
-  const sourceUrl =
-    resolved.src === src ? (resolved.data?.sourceUrl ?? null) : null
-  const sourceExpiresAt =
-    resolved.src === src ? (resolved.data?.expiresAt ?? null) : null
+  // A result for an earlier src is stale: that src is still resolving.
+  const current = resolved.src === src ? resolved : null
+  const sourceUrl = directUrl ?? current?.data?.sourceUrl ?? null
+  const sourceExpiresAt = current?.data?.expiresAt ?? null
+  // Likewise a document loaded from an earlier source.
+  const doc = loaded.sourceUrl === sourceUrl ? loaded : null
 
   useEffect(() => {
     if (!sourceUrl) return
@@ -220,8 +212,6 @@ export function PdfViewer({
     let cancelled = false
     let activePdf: PDFDocumentProxy | null = null
     const loadingTask = getDocument({ url: sourceUrl })
-
-    setLoaded({ sourceUrl, data: null, error: null })
 
     loadingTask.promise
       .then(async (pdf) => {
@@ -268,62 +258,9 @@ export function PdfViewer({
     return () => observer.disconnect()
   }, [layout, focusMode])
 
-  const handleShortcut = useEffectEvent((event: KeyboardEvent) => {
-    const target = event.target as HTMLElement | null
-    if (
-      target &&
-      (target.tagName === "INPUT" ||
-        target.tagName === "TEXTAREA" ||
-        target.isContentEditable)
-    ) {
-      return
-    }
-    if (event.metaKey || event.ctrlKey || event.altKey) return
-
-    if (event.key === "f" || event.key === "F") {
-      event.preventDefault()
-      setFocusMode((current) => !current)
-      return
-    }
-    if (event.key === "b" || event.key === "B") {
-      event.preventDefault()
-      setFocusMode(false)
-      setReadingMode("book")
-      return
-    }
-    if (event.key === "s" || event.key === "S") {
-      event.preventDefault()
-      setFocusMode(false)
-      setReadingMode("scroll")
-      return
-    }
-    if (event.key === "0") {
-      event.preventDefault()
-      setZoomMode("fit")
-      return
-    }
-    if (event.key === "+" || (event.key === "=" && event.shiftKey)) {
-      event.preventDefault()
-      adjustZoom(0.18)
-      return
-    }
-    if (event.key === "-") {
-      event.preventDefault()
-      adjustZoom(-0.18)
-    }
-  })
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      handleShortcut(event)
-    }
-    window.addEventListener("keydown", onKeyDown)
-    return () => window.removeEventListener("keydown", onKeyDown)
-  }, [])
-
-  const pageCount = loaded.data?.pageCount ?? 0
-  const baseWidth = loaded.data?.baseWidth ?? 900
-  const baseHeight = loaded.data?.baseHeight ?? 1260
+  const pageCount = doc?.data?.pageCount ?? 0
+  const baseWidth = doc?.data?.baseWidth ?? 900
+  const baseHeight = doc?.data?.baseHeight ?? 1260
   const spreadColumns = readingMode === "book" && containerWidth >= 940 ? 2 : 1
   const horizontalPadding = layout === "fill" || focusMode ? 56 : 72
   const usableWidth = Math.max(320, containerWidth - horizontalPadding)
@@ -408,6 +345,59 @@ export function PdfViewer({
     setZoomMode("fit")
   }
 
+  const handleShortcut = useEffectEvent((event: KeyboardEvent) => {
+    const target = event.target as HTMLElement | null
+    if (
+      target &&
+      (target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.isContentEditable)
+    ) {
+      return
+    }
+    if (event.metaKey || event.ctrlKey || event.altKey) return
+
+    if (event.key === "f" || event.key === "F") {
+      event.preventDefault()
+      setFocusMode((current) => !current)
+      return
+    }
+    if (event.key === "b" || event.key === "B") {
+      event.preventDefault()
+      setFocusMode(false)
+      setReadingMode("book")
+      return
+    }
+    if (event.key === "s" || event.key === "S") {
+      event.preventDefault()
+      setFocusMode(false)
+      setReadingMode("scroll")
+      return
+    }
+    if (event.key === "0") {
+      event.preventDefault()
+      setZoomMode("fit")
+      return
+    }
+    if (event.key === "+" || (event.key === "=" && event.shiftKey)) {
+      event.preventDefault()
+      adjustZoom(0.18)
+      return
+    }
+    if (event.key === "-") {
+      event.preventDefault()
+      adjustZoom(-0.18)
+    }
+  })
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      handleShortcut(event)
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [])
+
   function scrollToStep(direction: -1 | 1) {
     if (!activeGroup || pageGroups.length === 0) return
     const currentIndex = pageGroups.findIndex(
@@ -422,11 +412,11 @@ export function PdfViewer({
     })
   }
 
-  if (resolved.error) {
+  if (current?.error) {
     return (
       <PdfStatusCard
         title="Failed to load PDF preview"
-        body={resolved.error}
+        body={current.error}
         theme={themeStyle}
       />
     )
@@ -442,17 +432,17 @@ export function PdfViewer({
     )
   }
 
-  if (loaded.error) {
+  if (doc?.error) {
     return (
       <PdfStatusCard
         title="Failed to load PDF"
-        body={loaded.error}
+        body={doc.error}
         theme={themeStyle}
       />
     )
   }
 
-  if (!loaded.data || loaded.sourceUrl !== sourceUrl) {
+  if (!doc?.data) {
     return (
       <PdfStatusCard
         title="Loading PDF"
@@ -462,7 +452,7 @@ export function PdfViewer({
     )
   }
 
-  const pdfDocument = loaded.data.pdf
+  const pdfDocument = doc.data.pdf
 
   return (
     <div
@@ -946,6 +936,12 @@ function buildPageGroups(pageCount: number, readingMode: PdfReadingMode) {
     groups.push([page])
   }
   return groups
+}
+
+function readStoredZoom(key: string) {
+  const stored = window.localStorage.getItem(key)
+  const parsed = stored ? Number(stored) : NaN
+  return Number.isFinite(parsed) ? clamp(parsed, ZOOM_MIN, ZOOM_MAX) : 1.35
 }
 
 function clamp(value: number, min: number, max: number) {

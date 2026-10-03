@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
 import { Modal } from "@/components/Modal"
@@ -13,11 +13,16 @@ export function ImportUrlDialog({ open, onClose, onSubmit }: Props) {
   const [url, setUrl] = useState("")
   const [name, setName] = useState("")
 
-  useEffect(() => {
-    if (!open) return
-    setUrl("")
-    setName("")
-  }, [open])
+  // Start blank each time it opens. Adjusted during render rather than in an
+  // effect, so the first open frame never shows the previous import's values.
+  const [wasOpen, setWasOpen] = useState(open)
+  if (open !== wasOpen) {
+    setWasOpen(open)
+    if (open) {
+      setUrl("")
+      setName("")
+    }
+  }
 
   const valid = /^https?:\/\/.+/i.test(url.trim())
 

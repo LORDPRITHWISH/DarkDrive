@@ -238,7 +238,6 @@ it is the link that waits for the owner, and a declined one is simply dropped.
 `/api/sync/changes` tells each client its settings (`can`), since a sync
 client can't be refused after the fact: the change is already on its disk.
 Two people editing one file is the same conflict as two devices.
-`src/routes/sync.share.test.sh` in `apps/api` runs all of it against a dev API.
 
 Environment: `DD_HOME` relocates the config/state dir (run several syncs on one
 machine), `DD_POLL_MS` changes the 5s poll interval, `DD_API` sets the server

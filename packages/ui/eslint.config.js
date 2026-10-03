@@ -22,5 +22,12 @@ export default defineConfig([
         tsconfigRootDir: import.meta.dirname,
       },
     },
+    rules: {
+      // shadcn components export their cva variants next to the component.
+      'react-refresh/only-export-components': [
+        'error',
+        { allowConstantExport: true, allowExportNames: ['badgeVariants', 'buttonVariants'] },
+      ],
+    },
   },
 ])

@@ -129,6 +129,19 @@
   }
 }
 
+/* "Reduce motion": dialogs, sheets and popovers appear without the zoom or
+   slide. Near-zero rather than `none`, so Base UI's wait-for-animation on
+   close still resolves. */
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="dialog-overlay"],
+  [data-slot="dialog-content"],
+  [data-slot="sheet-content"],
+  [data-slot="popover-content"] {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 /* React Bits animations */
 @keyframes rb-gradient {
   0% {

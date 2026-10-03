@@ -123,7 +123,7 @@ export function StarredPage() {
           </div>
         </header>
 
-        <ScrollArea className="border-b">
+        <ScrollArea className="border-b" horizontal>
           <div className="flex items-center gap-2 px-4 py-3 md:px-6">
             <FilterChip active={filter === "all"} onClick={() => setFilter("all")}>
               All

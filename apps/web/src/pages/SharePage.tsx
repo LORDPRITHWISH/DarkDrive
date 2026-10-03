@@ -264,15 +264,18 @@ function SharedFileModal({
 }) {
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="flex max-h-[90vh] w-full max-w-[95vw] gap-0 overflow-hidden p-0 sm:max-w-[95vw]">
-        <div className="bg-muted flex min-w-0 items-center justify-center overflow-hidden">
-          <FileViewer file={file} src={shareInlineUrl(token, file.id, password)} />
+      {/* A fixed-size stage the viewer fills, so the same markup works as a
+          row on a wide window and, below `lg`, as a column with the details
+          on top — where the close button already sits. */}
+      <DialogContent className="flex h-[calc(100dvh-2rem)] w-full flex-col gap-0 overflow-hidden p-0 lg:flex-row">
+        <div className="bg-muted flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden">
+          <FileViewer file={file} src={shareInlineUrl(token, file.id, password)} layout="fill" />
         </div>
-        <ScrollArea className="w-72 shrink-0 border-l">
+        <ScrollArea className="max-h-[40%] shrink-0 border-b max-lg:order-first lg:max-h-none lg:w-72 lg:border-b-0 lg:border-l">
           <aside className="flex flex-col gap-3 p-4">
-            <div className="flex items-start justify-between gap-2">
-              <DialogTitle className="min-w-0 flex-1 truncate text-base font-semibold">
-                <HoverName as="span" name={file.name} className="truncate" />
+            <div className="flex items-start justify-between gap-2 pr-8">
+              <DialogTitle className="min-w-0 flex-1 text-base leading-snug font-semibold">
+                <HoverName as="span" name={file.name} className="line-clamp-2" />
               </DialogTitle>
             </div>
             <a

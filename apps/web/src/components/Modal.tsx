@@ -41,7 +41,8 @@ type Props = {
 }
 
 // The app's one dialog layout: bordered header, scrolling body, bordered
-// footer. Header and footer stay pinned; only the body scrolls, capped at 85vh.
+// footer. Header and footer stay pinned; only the body scrolls, once the
+// dialog reaches the height DialogContent caps it at.
 export function Modal({
   open,
   onClose,
@@ -60,7 +61,7 @@ export function Modal({
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent
         showCloseButton={showCloseButton}
-        className={cn("flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0", SIZES[size], className)}
+        className={cn("flex flex-col gap-0 overflow-hidden p-0", SIZES[size], className)}
       >
         <DialogHeader
           className={cn("flex-row items-start gap-3 p-4 pr-12", children != null && "border-b")}
@@ -81,7 +82,7 @@ export function Modal({
           )
         )}
         {footer && (
-          <DialogFooter className="flex-row items-center justify-end border-t p-3">
+          <DialogFooter className="flex-row flex-wrap items-center justify-end border-t p-3">
             {footer}
           </DialogFooter>
         )}

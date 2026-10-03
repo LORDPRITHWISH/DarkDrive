@@ -269,7 +269,7 @@ export function SpacePage() {
                           variant="outline"
                           className="rounded-lg"
                           onClick={() => setLinkFilesOpen(true)}
-                          title="Link files from your drive into this space"
+                          title="Link files or whole folders from your drive into this space"
                         >
                           <LinkSimpleIcon size={15} weight="bold" />
                           Link files

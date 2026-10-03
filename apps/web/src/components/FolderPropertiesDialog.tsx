@@ -236,6 +236,7 @@ export function FolderPropertiesDialog({
                         onClick={() => setColor(c.value)}
                         title={c.label}
                         aria-label={c.label}
+                        aria-pressed={selected}
                         className={`h-7 w-7 rounded-full border-2 transition-all ${
                           selected ? "scale-110 border-foreground" : "border-transparent"
                         }`}

@@ -60,6 +60,7 @@ export function JoinSpaceDialog({
             autoFocus
             className="pl-8"
             placeholder="Search public spaces…"
+            aria-label="Search public spaces"
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />

@@ -1,6 +1,14 @@
 import { Suspense, lazy, useCallback, useEffect, useEffectEvent, useRef, useState } from "react"
 import { ScrollArea } from "@workspace/ui/components/scroll-area"
-import { XIcon, DownloadIcon, InfoIcon, CaretLeftIcon, CaretRightIcon } from "@phosphor-icons/react"
+import {
+  XIcon,
+  DownloadIcon,
+  InfoIcon,
+  CaretLeftIcon,
+  CaretRightIcon,
+  FrameCornersIcon,
+  CornersInIcon,
+} from "@phosphor-icons/react"
 import type { FileItem, SubtitleTrack, AudioTrack } from "@/lib/types"
 import { apiUrl } from "@/lib/config"
 import { apiGet, apiJson } from "@/lib/api"
@@ -23,11 +31,28 @@ import { formatBytes, formatDate } from "@/lib/format"
 import { DarkPlayer } from "./player"
 import { AudioPlayer } from "@/components/AudioPlayer"
 import { HoverName } from "@/components/HoverName"
+import { ZoomableImage } from "@/components/ZoomableImage"
 
 const LazyPdfViewer = lazy(async () => {
   const module = await import("@/components/PdfViewer")
   return { default: module.PdfViewer }
 })
+
+// A phone, half a screen, or a short window: too little room to sit the media
+// beside a details panel, so the viewer takes the whole window and the details
+// open as a sheet.
+const COMPACT_QUERY = "(max-width: 1023px), (max-height: 559px)"
+
+const PAGER_BUTTON =
+  "rounded-md p-1.5 hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
+
+const CINEMA_BUTTON =
+  "rounded-full bg-black/60 p-2 text-white backdrop-blur-sm hover:bg-black/80"
+
+// What cinema mode is for: things you watch or look at, not read.
+function canCinema(mimeType: string) {
+  return mimeType.startsWith("video/") || mimeType.startsWith("image/")
+}
 
 export function FilePreview({
   file,
@@ -56,10 +81,16 @@ export function FilePreview({
   const setShowInfo = (show: boolean) => {
     if (file) setInfoState({ fileId: file.id, show })
   }
-  const [isMobile, setIsMobile] = useState(
-    () => window.matchMedia("(max-width: 767px)").matches
+  const [compact, setCompact] = useState(
+    () => window.matchMedia(COMPACT_QUERY).matches
   )
+  // Cinema mode: the video or image takes the whole window, with nothing
+  // around it. Not fullscreen: the browser and the OS stay as they are. Kept
+  // while paging between files, dropped when the preview closes.
+  const [cinemaOn, setCinemaOn] = useState(false)
+  if (!file && cinemaOn) setCinemaOn(false)
   const touchRef = useRef<{ x: number; y: number; t: number } | null>(null)
+  const dialogRef = useRef<HTMLDivElement>(null)
   // Track lists for the video controls in the Properties panel. Both are
   // fetched here rather than inside the player so the sidebar owns the
   // selection and the player just renders what it's told.
@@ -85,11 +116,24 @@ export function FilePreview({
   }>({ fileId: null, index: null })
 
   useEffect(() => {
-    const mql = window.matchMedia("(max-width: 767px)")
-    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches)
+    const mql = window.matchMedia(COMPACT_QUERY)
+    const handler = (e: MediaQueryListEvent) => setCompact(e.matches)
     mql.addEventListener("change", handler)
     return () => mql.removeEventListener("change", handler)
   }, [])
+
+  // Move focus into the preview and hand it back to whatever opened it, so a
+  // keyboard or screen reader lands in the dialog rather than behind it.
+  // ponytail: Tab can still walk out to the page underneath. Trapping it needs
+  // this to become a Base UI Dialog, which means untangling Escape from the
+  // player and the PDF viewer first.
+  const open = !!file
+  useEffect(() => {
+    if (!open) return
+    const opener = document.activeElement as HTMLElement | null
+    dialogRef.current?.focus()
+    return () => opener?.focus()
+  }, [open, compact, cinemaOn])
 
   const handleKeyDown = useEffectEvent((e: KeyboardEvent) => {
     if (!file) return
@@ -111,11 +155,31 @@ export function FilePreview({
       return
     }
 
+    // T, as in theatre mode on every video site. Not while a menu has the
+    // keyboard: there a letter jumps to the option that starts with it.
+    if (
+      e.key.toLowerCase() === "t" &&
+      !(e.ctrlKey || e.metaKey || e.altKey) &&
+      canCinema(file.mimeType) &&
+      !(e.target instanceof HTMLElement &&
+        e.target.closest('input, textarea, [role="listbox"], [role="combobox"]'))
+    ) {
+      e.preventDefault()
+      setCinemaOn(!cinemaOn)
+      return
+    }
+
     if (e.key !== "Escape") return
 
     if (showInfo) {
       e.preventDefault()
       setShowInfo(false)
+      return
+    }
+
+    if (cinemaOn && canCinema(file.mimeType)) {
+      e.preventDefault()
+      setCinemaOn(false)
       return
     }
 
@@ -191,6 +255,8 @@ export function FilePreview({
   if (!file) return null
 
   const videoFile = file.mimeType.startsWith("video/")
+  const cinemaFile = canCinema(file.mimeType)
+  const cinema = cinemaOn && cinemaFile
   const audioTracks =
     audioTracksState.fileId === file.id ? audioTracksState.tracks : []
   const subtitleTracks =
@@ -241,7 +307,7 @@ export function FilePreview({
   const officeFile = isOfficeFile(file.mimeType, file.name)
   const pdfFile = isPdfFile(file.mimeType, file.name)
   const pdfFocusMode =
-    !isMobile &&
+    !compact &&
     pdfFile &&
     pdfFocusState.fileId === file.id &&
     pdfFocusState.focused
@@ -256,7 +322,7 @@ export function FilePreview({
       : inlineSrc
   const dlHref = apiUrl(`/api/files/${file.id}/download`)
   const viewerLayout: FileViewerLayout =
-    isMobile || pdfFocusMode ? "fill" : "modal"
+    compact || pdfFocusMode || cinema ? "fill" : "modal"
 
   const currentIndex = items
     ? items.findIndex((f) => f.id === file.id)
@@ -273,6 +339,29 @@ export function FilePreview({
     items && items.length > 1 && currentIndex >= 0
       ? `${currentIndex + 1} / ${items.length}`
       : null
+  // Lives in the chrome, not floating over the media, so it never covers a
+  // small image or the details panel. Arrow keys and swipes page too.
+  const pager = counter && (
+    <div className="text-muted-foreground flex shrink-0 items-center gap-0.5 text-xs tabular-nums">
+      <button
+        onClick={goPrev}
+        disabled={!hasPrev}
+        className={PAGER_BUTTON}
+        aria-label="Previous file"
+      >
+        <CaretLeftIcon size={16} weight="bold" />
+      </button>
+      <span aria-live="polite">{counter}</span>
+      <button
+        onClick={goNext}
+        disabled={!hasNext}
+        className={PAGER_BUTTON}
+        aria-label="Next file"
+      >
+        <CaretRightIcon size={16} weight="bold" />
+      </button>
+    </div>
+  )
 
   const handleOfficeProviderChange = (provider: OfficeProvider) => {
     setOfficeProviderState({ fileId: file.id, provider })
@@ -399,52 +488,94 @@ export function FilePreview({
     </>
   )
 
-  /* ── Mobile layout ── */
-  if (isMobile) {
-    return (
-      <div className="fixed inset-0 z-50 flex flex-col bg-background">
-        <div className="flex shrink-0 items-center gap-1 border-b px-2 py-2">
-          <button
-            onClick={onClose}
-            className="shrink-0 rounded-lg p-2 text-muted-foreground active:bg-accent"
-            aria-label="Close"
-          >
-            <XIcon size={20} />
-          </button>
-          <h3 className="min-w-0 flex-1 truncate px-1 text-sm font-medium">
-            <HoverName as="span" name={file.name} className="truncate" />
-          </h3>
-          {counter && (
-            <span className="shrink-0 rounded-full bg-muted px-2.5 py-0.5 text-xs text-muted-foreground tabular-nums">
-              {counter}
-            </span>
-          )}
-          <button
-            onClick={() => setShowInfo(true)}
-            className="shrink-0 rounded-lg p-2 text-muted-foreground active:bg-accent"
-            aria-label="File info"
-          >
-            <InfoIcon size={20} />
-          </button>
-          <a
-            href={dlHref}
-            className="shrink-0 rounded-lg p-2 text-muted-foreground active:bg-accent"
-            aria-label="Download"
-          >
-            <DownloadIcon size={20} />
-          </a>
-        </div>
+  // One tree for every layout. The viewer keeps its place while the chrome
+  // around it changes, so turning a tablet, resizing the window or entering
+  // cinema mode restyles the player instead of remounting it — a remount
+  // reloads the video and throws it back to where it started.
+  const full = compact || cinema
+  return (
+    <div
+      className={`fixed inset-0 z-50 flex ${
+        full ? "" : "items-center justify-center bg-black/70 p-4"
+      }`}
+      onClick={onClose}
+    >
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={file.name}
+        tabIndex={-1}
+        className={`relative flex outline-none ${
+          full
+            ? `h-full w-full flex-col ${cinema ? "bg-black" : "bg-background"}`
+            : `overflow-hidden rounded-lg border bg-background transition-[width,height,max-width,max-height] duration-300 ${
+                pdfFocusMode
+                  ? "h-[94vh] w-[96vw]"
+                  : "max-h-[90vh] max-w-[95vw]"
+              }`
+        }`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* <header>, so an installed app's title bar rules (globals.css) keep
+            these buttons clear of the window controls. */}
+        {compact && !cinema && (
+          <header className="flex shrink-0 items-center gap-1 border-b px-2 py-2">
+            <button
+              onClick={onClose}
+              className="shrink-0 rounded-lg p-2 text-muted-foreground hover:bg-accent"
+              aria-label="Close"
+            >
+              <XIcon size={20} />
+            </button>
+            <h3 className="min-w-0 flex-1 truncate px-1 text-sm font-medium">
+              <HoverName as="span" name={file.name} className="truncate" />
+            </h3>
+            {pager}
+            {cinemaFile && (
+              <button
+                onClick={() => setCinemaOn(true)}
+                className="shrink-0 rounded-lg p-2 text-muted-foreground hover:bg-accent"
+                aria-label="Cinema mode"
+                title="Cinema mode (T)"
+              >
+                <FrameCornersIcon size={20} />
+              </button>
+            )}
+            <button
+              onClick={() => setShowInfo(true)}
+              className="shrink-0 rounded-lg p-2 text-muted-foreground hover:bg-accent"
+              aria-label="File info"
+            >
+              <InfoIcon size={20} />
+            </button>
+            <a
+              href={dlHref}
+              className="shrink-0 rounded-lg p-2 text-muted-foreground hover:bg-accent"
+              aria-label="Download"
+            >
+              <DownloadIcon size={20} />
+            </a>
+          </header>
+        )}
 
         <div
-          className="flex flex-1 items-center justify-center overflow-hidden bg-muted"
+          className={`flex min-w-0 overflow-hidden ${
+            pdfFocusMode
+              ? "flex-1 bg-transparent"
+              : `items-center justify-center ${full ? "min-h-0 flex-1" : ""} ${
+                  cinema || videoFile ? "bg-black" : "bg-muted"
+                }`
+          }`}
           onTouchStart={onTouchStart}
           onTouchEnd={onTouchEnd}
         >
           <FileViewer
             file={file}
             src={viewSrc}
-            layout="fill"
+            layout={viewerLayout}
             officeProvider={officeProvider}
+            onPdfFocusModeChange={compact ? undefined : handlePdfFocusModeChange}
             subtitleTracks={subtitleTracks}
             subtitleIndex={subtitleIndex}
             audioIndex={audioIndex}
@@ -455,19 +586,77 @@ export function FilePreview({
           />
         </div>
 
-        {showInfo && (
+        {!full && !pdfFocusMode && (
+          <ScrollArea className="w-80 shrink-0 border-l">
+            <aside className="flex flex-col gap-3 p-4">
+              <div className="flex items-start justify-between gap-2">
+                {/* Two lines, not one: most of a long release-style name
+                    survives, and the hover still shows all of it. */}
+                <h3 className="min-w-0 flex-1 font-semibold">
+                  <HoverName
+                    as="span"
+                    name={file.name}
+                    className="line-clamp-2 wrap-anywhere"
+                  />
+                </h3>
+                {cinemaFile && (
+                  <button
+                    className="shrink-0 rounded p-1 hover:bg-accent"
+                    onClick={() => setCinemaOn(true)}
+                    aria-label="Cinema mode"
+                    title="Cinema mode (T)"
+                  >
+                    <FrameCornersIcon size={18} />
+                  </button>
+                )}
+                <button
+                  className="shrink-0 rounded p-1 hover:bg-accent"
+                  onClick={onClose}
+                  aria-label="Close"
+                >
+                  <XIcon size={18} />
+                </button>
+              </div>
+              {pager && <div className="-my-1 -ml-1.5">{pager}</div>}
+              {propertiesContent}
+            </aside>
+          </ScrollArea>
+        )}
+
+        {/* Faint until pointed at, so they don't compete with the picture.
+            Offset past a phone's notch and an installed app's window
+            controls, both of which sit over this corner. */}
+        {cinema && (
+          <div className="absolute top-[calc(max(env(safe-area-inset-top),env(titlebar-area-height,0px))+0.5rem)] right-[calc(env(safe-area-inset-right)+0.5rem)] z-10 flex gap-1 opacity-40 transition-opacity focus-within:opacity-100 hover:opacity-100">
+            <button
+              onClick={() => setCinemaOn(false)}
+              className={CINEMA_BUTTON}
+              aria-label="Exit cinema mode"
+              title="Exit cinema mode (T or Esc)"
+            >
+              <CornersInIcon size={18} />
+            </button>
+            <button onClick={onClose} className={CINEMA_BUTTON} aria-label="Close">
+              <XIcon size={18} />
+            </button>
+          </div>
+        )}
+
+        {compact && showInfo && (
           <>
             <div
               className="fixed inset-0 z-60 bg-black/40"
               onClick={() => setShowInfo(false)}
             />
-            <ScrollArea className="fixed inset-x-0 bottom-0 z-70 max-h-[75vh] animate-in rounded-t-2xl border-t bg-card duration-200 slide-in-from-bottom">
+            <ScrollArea
+              role="dialog"
+              aria-label="File details"
+              className="fixed inset-x-0 bottom-0 z-70 mx-auto max-h-[75dvh] max-w-xl animate-in rounded-t-2xl border-t bg-card duration-200 slide-in-from-bottom motion-reduce:animate-none sm:border-x"
+            >
               <div className="px-5 pt-3 pb-8">
                 <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted-foreground/30" />
                 <div className="mb-3 flex items-start justify-between gap-2">
-                  <h3 className="min-w-0 truncate font-semibold">
-                    <HoverName as="span" name={file.name} className="truncate" />
-                  </h3>
+                  <h3 className="min-w-0 font-semibold wrap-anywhere">{file.name}</h3>
                   <button
                     onClick={() => setShowInfo(false)}
                     className="shrink-0 rounded-lg p-1.5 text-muted-foreground hover:bg-accent"
@@ -482,90 +671,6 @@ export function FilePreview({
           </>
         )}
       </div>
-    )
-  }
-
-  /* ── Desktop layout ── */
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-      onClick={onClose}
-    >
-      <div
-        className={`flex overflow-hidden rounded-lg border bg-background transition-[width,height,max-width,max-height] duration-300 ${
-          pdfFocusMode
-            ? "h-[94vh] w-[96vw]"
-            : "max-h-[90vh] max-w-[95vw]"
-        }`}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div
-          className={`flex min-w-0 overflow-hidden ${
-            pdfFocusMode
-              ? "flex-1 bg-transparent"
-              : "items-center justify-center bg-muted"
-          }`}
-        >
-          <FileViewer
-            file={file}
-            src={viewSrc}
-            layout={viewerLayout}
-            officeProvider={officeProvider}
-            onPdfFocusModeChange={handlePdfFocusModeChange}
-            subtitleTracks={subtitleTracks}
-            subtitleIndex={subtitleIndex}
-            audioIndex={audioIndex}
-            poster={posterUrl}
-            storyboardSrc={storyboardUrl}
-            startTime={startTime}
-            onProgress={saveProgress}
-          />
-        </div>
-
-        {!pdfFocusMode && (
-          <ScrollArea className="w-80 shrink-0 border-l">
-            <aside className="flex flex-col gap-3 p-4">
-              <div className="flex items-start justify-between gap-2">
-                <h3 className="min-w-0 flex-1 truncate font-semibold">
-                  <HoverName as="span" name={file.name} className="truncate" />
-                </h3>
-                <button
-                  className="shrink-0 rounded p-1 hover:bg-accent"
-                  onClick={onClose}
-                  aria-label="Close"
-                >
-                  <XIcon size={18} />
-                </button>
-              </div>
-              {propertiesContent}
-            </aside>
-          </ScrollArea>
-        )}
-      </div>
-
-      {hasPrev && (
-        <button
-          onClick={(e) => { e.stopPropagation(); goPrev() }}
-          className="absolute left-4 top-1/2 z-10 -translate-y-1/2 rounded-full bg-white/15 p-2.5 text-white backdrop-blur-sm transition-colors hover:bg-white/30"
-          aria-label="Previous file"
-        >
-          <CaretLeftIcon size={24} weight="bold" />
-        </button>
-      )}
-      {hasNext && (
-        <button
-          onClick={(e) => { e.stopPropagation(); goNext() }}
-          className="absolute right-4 top-1/2 z-10 -translate-y-1/2 rounded-full bg-white/15 p-2.5 text-white backdrop-blur-sm transition-colors hover:bg-white/30"
-          aria-label="Next file"
-        >
-          <CaretRightIcon size={24} weight="bold" />
-        </button>
-      )}
-      {counter && (
-        <div className="absolute bottom-5 left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/60 px-3.5 py-1 text-xs tabular-nums text-white backdrop-blur-sm">
-          {counter}
-        </div>
-      )}
     </div>
   )
 }
@@ -574,7 +679,7 @@ function Info({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <>
       <dt className="text-muted-foreground">{label}</dt>
-      <dd className="min-w-0">{value}</dd>
+      <dd className="min-w-0 wrap-anywhere">{value}</dd>
     </>
   )
 }
@@ -672,9 +777,12 @@ export function FileViewer({
 
   if (mime.startsWith("image/")) {
     return (
-      <img
+      // Keyed: the next image starts fitted, not at the last one's zoom.
+      <ZoomableImage
+        key={src}
         src={src}
         alt={file.name}
+        fill={layout === "fill"}
         className={`block ${sizing.h} ${sizing.w} object-contain`}
       />
     )
@@ -725,7 +833,7 @@ export function FileViewer({
   }
   if (isCsvFile(mime, file.name)) {
     return (
-      <ScrollArea className={sizing.doc}>
+      <ScrollArea className={sizing.doc} horizontal>
         <CsvPreview
           src={src}
           delimiter={/\.tsv$/i.test(file.name) ? "\t" : ","}
@@ -735,7 +843,7 @@ export function FileViewer({
   }
   if (isTextFile(mime, file.name)) {
     return (
-      <ScrollArea className={sizing.doc}>
+      <ScrollArea className={sizing.doc} horizontal>
         <TextPreview src={src} />
       </ScrollArea>
     )
@@ -826,7 +934,10 @@ function VideoPreview({
         storyboardSrc={storyboardSrc}
         startTime={startTime}
         onProgress={onProgress}
-        className="h-full w-full"
+        // The player's own wrappers size to the video's aspect ratio. Made to
+        // fill the box instead, the video letterboxes itself inside it —
+        // centred in a tall window, and never taller than a short one.
+        className="h-full w-full [&_.media-default-skin]:h-full [&>div]:h-full"
       />
     </div>
   )

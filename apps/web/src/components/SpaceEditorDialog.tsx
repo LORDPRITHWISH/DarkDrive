@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react"
-import { ScrollArea } from "@workspace/ui/components/scroll-area"
 import {
   UploadIcon,
   TrashIcon,
@@ -171,13 +170,13 @@ export function SpaceEditorDialog({
       }
     >
       {/* Logo preview + picker */}
-      <div className="flex items-start gap-4">
+      <div className="flex flex-col items-start gap-4 sm:flex-row">
         <SpaceLogo
           space={preview}
           size={72}
           className="ring-background shrink-0 ring-4"
         />
-        <div className="min-w-0 flex-1">
+        <div className="w-full min-w-0 flex-1">
           <Tabs value={logoTab} onValueChange={(v) => setLogoTab(v as "icon" | "image")}>
             <div className="mb-2 flex items-center justify-between gap-2">
               <div className="text-sm font-semibold">Logo</div>
@@ -204,29 +203,28 @@ export function SpaceEditorDialog({
                 Pick an icon from the set below. It's tinted with the
                 space color.
               </div>
-              <ScrollArea className="max-h-44">
-                <div className="grid grid-cols-9 gap-1 pr-3">
-                  {SPACE_ICONS.map(({ key, label, Icon }) => {
-                    const selected = icon === key
-                    return (
-                      <button
-                        key={key}
-                        type="button"
-                        title={label}
-                        onClick={() => pickIcon(key)}
-                        className={`grid aspect-square place-items-center rounded-lg border transition-all ${
-                          selected
-                            ? "border-primary bg-primary/10 text-primary"
-                            : "hover:bg-accent text-muted-foreground hover:text-foreground border-transparent"
-                        }`}
-                        aria-pressed={selected}
-                      >
-                        <Icon size={16} weight="fill" />
-                      </button>
-                    )
-                  })}
-                </div>
-              </ScrollArea>
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(2rem,1fr))] gap-1">
+                {SPACE_ICONS.map(({ key, label, Icon }) => {
+                  const selected = icon === key
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      title={label}
+                      aria-label={label}
+                      onClick={() => pickIcon(key)}
+                      className={`grid aspect-square place-items-center rounded-lg border transition-all ${
+                        selected
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "hover:bg-accent text-muted-foreground hover:text-foreground border-transparent"
+                      }`}
+                      aria-pressed={selected}
+                    >
+                      <Icon size={16} weight="fill" />
+                    </button>
+                  )
+                })}
+              </div>
               {icon && (
                 <button
                   type="button"
@@ -286,11 +284,15 @@ export function SpaceEditorDialog({
       </div>
 
       <div>
-        <label className="text-muted-foreground mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider">
+        <label
+          htmlFor="space-name"
+          className="text-muted-foreground mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider"
+        >
           <PencilSimpleIcon size={12} />
           Name
         </label>
         <Input
+          id="space-name"
           autoFocus
           placeholder="Marketing, Engineering, Design…"
           value={name}
@@ -315,6 +317,7 @@ export function SpaceEditorDialog({
                 type="button"
                 title={c.name}
                 onClick={() => setColor(c.value)}
+                aria-pressed={selected}
                 className={`h-8 w-8 rounded-full transition-all ${
                   selected
                     ? "ring-foreground ring-2 ring-offset-2 ring-offset-background scale-110"

@@ -186,6 +186,7 @@ export function NewFolderDialog({
                 onClick={() => setColor(c.value)}
                 title={c.label}
                 aria-label={c.label}
+                aria-pressed={selected}
                 className={`h-7 w-7 rounded-full border-2 transition-all ${
                   selected ? "border-foreground scale-110" : "border-transparent"
                 }`}

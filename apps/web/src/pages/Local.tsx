@@ -254,7 +254,7 @@ export function LocalPage() {
             </Button>
           </div>
           <div className="bg-border hidden h-6 w-px md:block" />
-          <div className="flex flex-1 items-center gap-2">
+          <div className="@container flex min-w-0 flex-1 flex-wrap items-center gap-2">
             <Button size="sm" onClick={newFolder}>
               <FolderPlusIcon size={16} />
               <span className="hidden md:inline">New folder</span>

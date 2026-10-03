@@ -125,6 +125,7 @@ async function api<T = any>(method: string, route: string, body?: unknown): Prom
     const err = Object.assign(new Error(`${method} ${route} -> ${res.status}`), {
       status: res.status,
       body: await res.text().catch(() => ""),
+      retryAfter: Number(res.headers.get("retry-after")) || 0,
     })
     throw err
   }
@@ -151,6 +152,18 @@ function hashFile(abs: string): Promise<string> {
       .on("error", reject)
       .on("end", () => resolve(h.digest("hex")))
   })
+}
+
+/**
+ * sha256 of what's on disk at `rel`, or null if nothing is. Takes size+mtime
+ * for it where they still match what was synced, as push() does: a pull that
+ * names a whole folder of untouched movies must not read every one of them.
+ */
+async function localSha(rel: string): Promise<string | null> {
+  const st = fs.statSync(localPath(rel), { throwIfNoEntry: false })
+  if (!st) return null
+  const known = state.files[rel]
+  return known && known.size === st.size && known.mtimeMs === st.mtimeMs ? known.sha : hashFile(localPath(rel))
 }
 
 type DiskFile = { abs: string; size: number; mtimeMs: number }
@@ -288,24 +301,25 @@ function reprefix(from: string, to: string) {
 }
 
 async function pull() {
-  const data = await api<{ cursor: string; can?: typeof can; folders: RemoteFolder[]; files: RemoteFile[] }>(
+  const data = await api<{
+    cursor: string; can?: typeof can; folders: RemoteFolder[]; files: RemoteFile[]; gone?: string[]
+  }>(
     "GET",
     `/api/sync/changes?since=${encodeURIComponent(state.cursor)}&root=${encodeURIComponent(cfg.remoteFolderId)}`
   )
   if (data.can) can = data.can
+  const files: Pick<RemoteFile, "id" | "path" | "sha256" | "deleted">[] = data.files
 
   // Folders first: creating and moving directories before the files that go
   // in them means a renamed folder carries its children on disk for free.
+  // The ones that went are only noted, by where they were here: their
+  // directories come off last, once the files in them have.
+  const left: string[] = []
   for (const f of data.folders) {
     const prev = state.folders[f.id]
     if (f.deleted) {
-      // Only if empty — a directory still holding files means those files
-      // haven't been synced away yet, and rm -rf would take them with it.
-      if (prev) {
-        const abs = localPath(prev)
-        if (fs.existsSync(abs) && fs.readdirSync(abs).length === 0) fs.rmSync(abs, { recursive: true })
-        delete state.folders[f.id]
-      }
+      if (prev) left.push(prev)
+      delete state.folders[f.id]
       continue
     }
     const abs = localPath(f.path)
@@ -320,29 +334,53 @@ async function pull() {
     state.folders[f.id] = f.path
   }
 
+  // Moved out of this folder on DarkDrive, to somewhere with no path here:
+  // named by a hash of its id (see /api/sync/changes), and gone from here like
+  // a delete. A folder takes what's under it along.
+  if (data.gone?.length) {
+    const gone = new Set(data.gone)
+    const went = (id: string) => gone.has(crypto.createHash("sha256").update(id).digest("hex"))
+    const out = Object.entries(state.folders).filter(([id]) => went(id)).map(([, rel]) => rel + "/")
+    const under = (rel: string) => out.some((dir) => (rel + "/").startsWith(dir))
+    for (const [id, rel] of Object.entries(state.folders)) {
+      if (!under(rel)) continue
+      left.push(rel)
+      delete state.folders[id]
+    }
+    for (const [rel, e] of Object.entries(state.files))
+      if (went(e.id) || under(rel)) files.push({ id: e.id, path: rel, sha256: null, deleted: true })
+  }
+
   // A file that moved server-side arrives at its new path; find and clear the
   // stale entry first, or push() would read the gap at the old path as a
   // local delete and trash the file we just moved.
   const byId = new Map(Object.entries(state.files).map(([rel, e]) => [e.id, rel]))
-  for (const f of data.files) {
+  for (const f of files) {
     const oldRel = byId.get(f.id)
     if (!oldRel || oldRel === f.path) continue
+    // Moved and then binned: it goes from where it is here.
+    if (f.deleted) {
+      f.path = oldRel
+      continue
+    }
     const entry = state.files[oldRel]
-    const oldAbs = localPath(oldRel)
     // Only relocate a copy we know is unmodified; an edited one stays put and
     // gets pushed on its own terms.
-    if (fs.existsSync(oldAbs) && (await hashFile(oldAbs)) === entry.sha && !f.deleted) {
+    if ((await localSha(oldRel)) === entry.sha) {
       fs.mkdirSync(path.dirname(localPath(f.path)), { recursive: true })
-      fs.renameSync(oldAbs, localPath(f.path))
+      fs.renameSync(localPath(oldRel), localPath(f.path))
       state.files[f.path] = entry
     }
     delete state.files[oldRel]
   }
 
-  for (const f of data.files) {
+  for (const f of files) {
+    // A delete is of the file it names. At a path that is another file's by
+    // now, or none this computer has synced, it is nothing here.
+    if (f.deleted && state.files[f.path]?.id !== f.id) continue
     const abs = localPath(f.path)
     const known = state.files[f.path]?.sha
-    const local = fs.existsSync(abs) ? await hashFile(abs) : null
+    const local = await localSha(f.path)
     switch (decidePull(local, known, { sha: f.sha256, deleted: f.deleted })) {
       case "download":
         await download(f)
@@ -369,6 +407,16 @@ async function pull() {
         }
         break
     }
+  }
+
+  // Deepest first. Only one with nothing of the user's left in it: a file
+  // still there hasn't synced away, and rm -rf would take it along. And not
+  // one that another folder has since taken the place of.
+  const live = new Set(Object.values(state.folders))
+  for (const rel of left.sort((a, b) => b.length - a.length)) {
+    const abs = localPath(rel)
+    if (live.has(rel) || !fs.existsSync(abs)) continue
+    if (fs.readdirSync(abs).every((name) => IGNORE.has(name))) fs.rmSync(abs, { recursive: true })
   }
 
   state.cursor = data.cursor
@@ -457,6 +505,9 @@ async function move(from: string, to: string, info: DiskFile, entry: Entry) {
 
 async function push() {
   const { files: disk, dirs } = walk()
+  // Asked afresh each pass: a folder can be moved or binned on DarkDrive in
+  // between, and its old id would put new files wherever it went.
+  folderIds.clear()
 
   // Paths we last synced that are gone from disk: either deleted, or the
   // source half of a move. Indexed by content hash so a file that reappears
@@ -547,16 +598,21 @@ const once = process.argv.includes("--once")
 
 console.log(`[darkdrive] syncing ${cfg.dir} <-> ${cfg.apiUrl} as "${cfg.device}"`)
 do {
+  let wait = POLL_MS
   try {
     await pull()
     await push()
     report({ type: "pass", ok: true })
   } catch (e: any) {
-    report({ type: "pass", ok: false, error: e.message, status: e.status, body: e.body ?? "" })
+    // Asked more often than the server allows an account, which a lot of
+    // folders on a lot of computers can add up to. Nothing is wrong: it waits
+    // as long as it was told to, and sync is only that much slower.
+    if (e.status === 429) wait = Math.max(POLL_MS, e.retryAfter * 1000)
+    else report({ type: "pass", ok: false, error: e.message, status: e.status, body: e.body ?? "" })
     // Transient failures (server restart, laptop lid) must not kill the
     // daemon — the next tick re-reconciles from the same state file.
     console.error(`[darkdrive] ${e.message}${e.body ? ` ${e.body}` : ""}`)
     if (once) process.exit(1)
   }
-  if (!once) await new Promise((r) => setTimeout(r, POLL_MS))
+  if (!once) await new Promise((r) => setTimeout(r, wait))
 } while (!once && !stopping)

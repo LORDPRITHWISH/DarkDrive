@@ -210,7 +210,7 @@ export function SharePage() {
             <button
               key={f.id}
               onClick={() => setPreview(f)}
-              className="bg-card hover:border-primary/60 overflow-hidden rounded-lg border text-left transition-colors"
+              className="bg-card hover:border-primary overflow-hidden rounded-lg border text-left transition-colors"
             >
               <div className="bg-muted grid aspect-4/3 place-items-center overflow-hidden">
                 {isImg ? (

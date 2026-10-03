@@ -3,6 +3,7 @@ import { CaretDownIcon, CaretRightIcon, FolderIcon } from "@phosphor-icons/react
 import { Button } from "@workspace/ui/components/button"
 import { Modal } from "@/components/Modal"
 import { apiGet } from "@/lib/api"
+import { useAuth } from "@/store/auth"
 
 type FolderNode = { id: string; name: string; parentId: string | null }
 type TreeResponse = { rootId: string; folders: FolderNode[] }
@@ -29,6 +30,7 @@ export function MoveDialog({
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const syncRootId = useAuth((s) => s.user?.syncRootFolderId)
 
   useEffect(() => {
     if (!open) return
@@ -53,11 +55,12 @@ export function MoveDialog({
       .catch((e) => setErr(e.message))
   }, [open, currentParentId])
 
-  // Folders that can't be the target: any selected folder itself and its descendants.
+  // Folders that can't be the target: any selected folder itself and its
+  // descendants, and "Synced Folders" itself, which holds only the synced
+  // folders. What's put in one of those goes to every computer that keeps it.
   const forbidden = useMemo(() => {
     if (!tree) return new Set<string>()
     const folderIds = items.filter((i) => i.type === "folder").map((i) => i.id)
-    if (folderIds.length === 0) return new Set<string>()
     const childrenOf = new Map<string, string[]>()
     for (const f of tree.folders) {
       if (!f.parentId) continue
@@ -75,8 +78,9 @@ export function MoveDialog({
         }
       }
     }
+    if (syncRootId) blocked.add(syncRootId)
     return blocked
-  }, [tree, items])
+  }, [tree, items, syncRootId])
 
   async function submit() {
     if (!selected || busy) return
@@ -123,6 +127,7 @@ export function MoveDialog({
       ) : (
         <FolderTree
           rootId={tree.rootId}
+          syncRootId={syncRootId}
           folders={tree.folders}
           selected={selected}
           expanded={expanded}
@@ -145,6 +150,7 @@ export function MoveDialog({
 
 function FolderTree({
   rootId,
+  syncRootId,
   folders,
   selected,
   expanded,
@@ -154,6 +160,7 @@ function FolderTree({
   onToggle,
 }: {
   rootId: string
+  syncRootId?: string
   folders: FolderNode[]
   selected: string | null
   expanded: Set<string>
@@ -224,5 +231,11 @@ function FolderTree({
     )
   }
 
-  return <div>{render(rootId, "My Drive", 0)}</div>
+  return (
+    <div>
+      {render(rootId, "My Drive", 0)}
+      {/* Only once there is a synced folder to put things in. */}
+      {syncRootId && childrenOf.has(syncRootId) && render(syncRootId, "Synced Folders", 0)}
+    </div>
+  )
 }

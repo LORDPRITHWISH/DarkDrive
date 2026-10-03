@@ -275,7 +275,7 @@ function RecentCard({
       onClick={onOpen}
       onDoubleClick={onOpen}
       onContextMenu={onMenu}
-      className="bg-card hover:border-primary/60 focus-visible:border-primary flex flex-col overflow-hidden rounded-lg border text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary"
+      className="bg-card hover:border-primary focus-visible:border-primary flex flex-col overflow-hidden rounded-lg border text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary"
     >
       <div className="flex items-center gap-2 px-3 py-2">
         {iconFor(file.mimeType, 16, file.name)}

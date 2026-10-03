@@ -628,7 +628,7 @@ function RecentFileCard({
   }
 
   return (
-    <div className="bg-card hover:border-primary/60 group relative overflow-hidden rounded-lg border transition-colors">
+    <div className="bg-card hover:border-primary group relative overflow-hidden rounded-lg border transition-colors">
       <button
         onClick={onPreview}
         className="focus-visible:ring-primary block w-full text-left outline-none focus-visible:ring-2"

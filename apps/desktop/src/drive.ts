@@ -160,7 +160,7 @@ export function open(route?: string) {
     height: 820,
     title: "DarkDrive",
     icon,
-    backgroundColor: "#0a0a0a",
+    backgroundColor: "#070b0e",
     autoHideMenuBar: true,
     webPreferences: { session: drive(), preload: path.join(__dirname, "drive-preload.cjs") },
   })
@@ -187,7 +187,7 @@ export function dropZone(on: boolean, onClose: () => void) {
     height: 260,
     title: "Drop to DarkDrive",
     icon,
-    backgroundColor: "#0a0a0a",
+    backgroundColor: "#070b0e",
     // ponytail: GNOME on Wayland ignores this for ordinary windows; there the
     // title bar's own "Always on Top" does it.
     alwaysOnTop: true,

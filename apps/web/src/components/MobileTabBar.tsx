@@ -25,7 +25,7 @@ export function MobileTabBar() {
   const setMobileOpen = useSidebar((s) => s.setMobileOpen)
 
   return (
-    <nav className="bg-card/95 fixed inset-x-0 bottom-0 z-30 flex border-t backdrop-blur-lg md:hidden pb-safe">
+    <nav className="bg-sidebar/95 fixed inset-x-0 bottom-0 z-30 flex border-t backdrop-blur-lg md:hidden pb-safe">
       {TABS.map(({ to, label, Icon }) => {
         const active = loc.pathname === to || loc.pathname.startsWith(to + "/")
         return (

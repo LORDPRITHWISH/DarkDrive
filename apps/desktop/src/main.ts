@@ -51,7 +51,7 @@ const RECENT = 8
 
 /** A bare page in the app's colours, for the browser tab sign-in ends in. */
 const plainPage = (html: string) =>
-  `<!doctype html><meta charset="utf-8"><title>DarkDrive</title><body style="margin:0;min-height:100vh;display:grid;place-items:center;background:#0a0a0a;color:#e5e5e5;font:16px system-ui,sans-serif"><div style="text-align:center">${html}</div></body>`
+  `<!doctype html><meta charset="utf-8"><title>DarkDrive</title><body style="margin:0;min-height:100vh;display:grid;place-items:center;background:#070b0e;color:#e5e5e5;font:16px system-ui,sans-serif"><div style="text-align:center">${html}</div></body>`
 
 let cancelSignIn = () => {}
 // The pairing page a sign-in is waiting on, shown in the app too: the browser

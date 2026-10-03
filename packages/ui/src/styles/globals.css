@@ -34,6 +34,10 @@
   --color-secondary-foreground: var(--secondary-foreground);
   --color-secondary: var(--secondary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-disabled: var(--disabled);
+  --color-success: var(--success);
+  --color-secondary-bright: var(--secondary-bright);
+  --color-primary-bright: var(--primary-bright);
   --color-primary: var(--primary);
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
@@ -51,73 +55,91 @@
   --font-serif: "Roboto Slab Variable", serif;
 }
 
+/* Theme tokens. Dark is the designed palette; light mirrors it (dark's text
+   colour is light's background, dark's disabled grey is light's muted text,
+   and so on) with the accents deepened so they stay readable on white.
+   On top of shadcn's set: primary-bright / secondary-bright (hover and glow),
+   success, disabled, and a sidebar that is its own surface. */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.148 0.004 228.8);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.148 0.004 228.8);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.148 0.004 228.8);
-  --primary: oklch(0.52 0.105 223.128);
-  --primary-foreground: oklch(0.984 0.019 200.873);
-  --secondary: oklch(0.967 0.001 286.375);
-  --secondary-foreground: oklch(0.21 0.006 285.885);
-  --muted: oklch(0.963 0.002 197.1);
-  --muted-foreground: oklch(0.56 0.021 213.5);
-  --accent: oklch(0.963 0.002 197.1);
-  --accent-foreground: oklch(0.218 0.008 223.9);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.925 0.005 214.3);
-  --input: oklch(0.925 0.005 214.3);
-  --ring: oklch(0.723 0.014 214.4);
-  --chart-1: oklch(0.865 0.127 207.078);
-  --chart-2: oklch(0.715 0.143 215.221);
-  --chart-3: oklch(0.609 0.126 221.723);
-  --chart-4: oklch(0.52 0.105 223.128);
-  --chart-5: oklch(0.45 0.085 224.283);
+  --background: #f2f7f9;
+  --foreground: #070b0e;
+  --card: #ffffff;
+  --card-foreground: var(--foreground);
+  --popover: #ffffff;
+  --popover-foreground: var(--foreground);
+  --primary: #006f87;
+  --primary-foreground: #ffffff;
+  --primary-bright: #007f99;
+  --secondary: #6b3fe8;
+  --secondary-foreground: #ffffff;
+  --secondary-bright: #8057ff;
+  --muted: #e4ecf0;
+  --muted-foreground: #53636b;
+  --accent: #e4ecf0;
+  --accent-foreground: var(--foreground);
+  --success: #0a7a44;
+  --disabled: #8b9aa2;
+  --destructive: oklch(0.505 0.213 27.518);
+  --border: #cfdadf;
+  --input: #cfdadf;
+  --ring: var(--primary-bright);
+  --chart-1: var(--secondary);
+  --chart-2: var(--primary);
+  --chart-3: var(--success);
+  --chart-4: var(--secondary-bright);
+  --chart-5: var(--muted-foreground);
   --radius: 0.45rem;
-  --sidebar: oklch(0.987 0.002 197.1);
-  --sidebar-foreground: oklch(0.148 0.004 228.8);
-  --sidebar-primary: oklch(0.609 0.126 221.723);
-  --sidebar-primary-foreground: oklch(0.984 0.019 200.873);
-  --sidebar-accent: oklch(0.963 0.002 197.1);
-  --sidebar-accent-foreground: oklch(0.218 0.008 223.9);
-  --sidebar-border: oklch(0.925 0.005 214.3);
-  --sidebar-ring: oklch(0.723 0.014 214.4);
+  --sidebar: #fafcfd;
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
 }
 
+/* Dark: the palette as specified. Its names map onto shadcn's like so:
+   Surface -> card/popover, Surface Hover -> accent/muted, Muted ->
+   muted-foreground, Cyan Bright -> primary-bright, Violet -> secondary.
+   --background is repeated as a literal in apps/web/vite.config.ts (PWA
+   manifest) and apps/desktop/src (window background), which can't read this. */
 .dark {
-  --background: oklch(0.148 0.004 228.8);
-  --foreground: oklch(0.987 0.002 197.1);
-  --card: oklch(0.218 0.008 223.9);
-  --card-foreground: oklch(0.987 0.002 197.1);
-  --popover: oklch(0.218 0.008 223.9);
-  --popover-foreground: oklch(0.987 0.002 197.1);
-  --primary: oklch(0.45 0.085 224.283);
-  --primary-foreground: oklch(0.984 0.019 200.873);
-  --secondary: oklch(0.274 0.006 286.033);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.275 0.011 216.9);
-  --muted-foreground: oklch(0.723 0.014 214.4);
-  --accent: oklch(0.275 0.011 216.9);
-  --accent-foreground: oklch(0.987 0.002 197.1);
+  --background: #070b0e;
+  --foreground: #f2f7f9;
+  --card: #121b20;
+  --card-foreground: var(--foreground);
+  --popover: #121b20;
+  --popover-foreground: var(--foreground);
+  --primary: #00c8e8;
+  --primary-foreground: #070b0e;
+  --primary-bright: #21d9f5;
+  --secondary: #8057ff;
+  --secondary-foreground: #070b0e;
+  --secondary-bright: #a47cff;
+  --muted: #18252b;
+  --muted-foreground: #8b9aa2;
+  --accent: #18252b;
+  --accent-foreground: var(--foreground);
+  --success: #32d583;
+  --disabled: #53636b;
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.56 0.021 213.5);
-  --chart-1: oklch(0.865 0.127 207.078);
-  --chart-2: oklch(0.715 0.143 215.221);
-  --chart-3: oklch(0.609 0.126 221.723);
-  --chart-4: oklch(0.52 0.105 223.128);
-  --chart-5: oklch(0.45 0.085 224.283);
-  --sidebar: oklch(0.218 0.008 223.9);
-  --sidebar-foreground: oklch(0.987 0.002 197.1);
-  --sidebar-primary: oklch(0.715 0.143 215.221);
-  --sidebar-primary-foreground: oklch(0.302 0.056 229.695);
-  --sidebar-accent: oklch(0.275 0.011 216.9);
-  --sidebar-accent-foreground: oklch(0.987 0.002 197.1);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.56 0.021 213.5);
+  --border: #26363d;
+  --input: #26363d;
+  --ring: var(--primary-bright);
+  --chart-1: var(--secondary-bright);
+  --chart-2: var(--primary);
+  --chart-3: var(--success);
+  --chart-4: var(--secondary);
+  --chart-5: var(--muted-foreground);
+  --sidebar: #0d1418;
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
 }
 
 @layer base {

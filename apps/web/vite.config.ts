@@ -34,8 +34,8 @@ export default defineConfig({
         name: "DarkDrive",
         short_name: "DarkDrive",
         description: "DarkDrive - Secure Cloud Storage",
-        theme_color: "#000000",
-        background_color: "#000000",
+        theme_color: "#070b0e",
+        background_color: "#070b0e",
         display: "standalone",
         // Windows/Linux: draw our own title bar instead of Chrome's. Falls
         // back to plain standalone anywhere it isn't supported.

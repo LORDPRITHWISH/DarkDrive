@@ -96,7 +96,7 @@ export function LandingPage() {
         .beam-sweep { animation: beam-sweep 14s ease-in-out infinite; }
         .twinkle { animation: twinkle 4s ease-in-out infinite; }
         .gradient-text {
-          background: linear-gradient(90deg, var(--primary), oklch(0.715 0.143 215.221), var(--primary));
+          background: linear-gradient(90deg, var(--primary), var(--chart-1), var(--primary));
           background-size: 200% 100%;
           -webkit-background-clip: text;
           background-clip: text;
@@ -245,7 +245,7 @@ export function LandingPage() {
               <SplitText text="Your space." delay={30} />
               <br />
               <GradientText
-                colors={["#60a5fa", "#22d3ee", "#3b82f6", "#06b6d4", "#60a5fa"]}
+                colors={["var(--primary)", "var(--chart-1)", "var(--primary)", "var(--chart-1)", "var(--primary)"]}
                 animationSpeed={6}
                 className="mx-0! inline-block max-w-none! p-0! font-black"
               >
@@ -441,12 +441,12 @@ export function LandingPage() {
                 className="pointer-events-none absolute inset-0 -z-10 opacity-60"
                 style={{
                   background:
-                    "radial-gradient(circle at 20% 0%, var(--primary), transparent 50%), radial-gradient(circle at 80% 100%, oklch(0.715 0.143 215.221 / 0.4), transparent 50%)",
+                    "radial-gradient(circle at 20% 0%, var(--primary), transparent 50%), radial-gradient(circle at 80% 100%, color-mix(in oklab, var(--chart-1) 40%, transparent), transparent 50%)",
                 }}
               />
               <div className="p-8 sm:p-10">
                 <div className="flex flex-col items-start gap-6 sm:flex-row sm:items-center">
-                  <div className="tilt-hover flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl bg-linear-to-br from-primary to-sky-400 text-white shadow-lg shadow-primary/30">
+                  <div className="tilt-hover flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl bg-linear-to-br from-primary to-chart-1 text-primary-foreground shadow-lg shadow-primary/30">
                     <span className="text-3xl font-black">P</span>
                   </div>
                   <div className="flex-1">
@@ -582,7 +582,7 @@ function FancyCTAButton({
   return (
     <Link
       to={to}
-      className={`group relative inline-flex h-12 items-center justify-center overflow-hidden rounded-xl px-7 text-sm font-bold text-white shadow-md shadow-primary/20 transition-all duration-300 hover:shadow-lg hover:shadow-primary/30 active:scale-[0.98] ${className}`}
+      className={`group relative inline-flex h-12 items-center justify-center overflow-hidden rounded-xl px-7 text-sm font-bold text-primary-foreground shadow-md shadow-primary/20 transition-all duration-300 hover:shadow-lg hover:shadow-primary/30 active:scale-[0.98] ${className}`}
     >
       {/* Subtle gradient background */}
       <span
@@ -590,7 +590,7 @@ function FancyCTAButton({
         className="animate-cta-gradient absolute inset-0"
         style={{
           backgroundImage:
-            "linear-gradient(110deg, #0ea5e9, #22d3ee, #3b82f6, #0ea5e9)",
+            "linear-gradient(110deg, var(--primary), var(--chart-1), var(--primary))",
           backgroundSize: "220% 100%",
         }}
       />
@@ -670,7 +670,7 @@ function Feature({
 function Step({ n, title, body }: { n: number; title: string; body: string }) {
   return (
     <div className="group relative rounded-2xl border-2 bg-card p-6 transition-all hover:-translate-y-1 hover:border-primary/40 hover:shadow-xl hover:shadow-primary/5">
-      <div className="from-primary to-sky-400 text-primary-foreground mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-linear-to-br text-xl font-black shadow-lg shadow-primary/20 transition-transform group-hover:scale-110 group-hover:-rotate-6">
+      <div className="from-primary to-chart-1 text-primary-foreground mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-linear-to-br text-xl font-black shadow-lg shadow-primary/20 transition-transform group-hover:scale-110 group-hover:-rotate-6">
         {n}
       </div>
       <h3 className="text-xl font-black tracking-tight">{title}</h3>

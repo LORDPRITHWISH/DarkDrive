@@ -234,9 +234,11 @@ type DriveState = {
   removeShortcut: (shortcutId: string) => Promise<void>
   addFileToSpace: (fileId: string, targetFolderId: string) => Promise<void>
   addFolderToSpace: (folderId: string, targetFolderId: string) => Promise<void>
+  /** `where` names the target in what it tells the user, when it isn't a space. */
   addItemsToSpace: (
     items: { type: "folder" | "file"; id: string }[],
-    targetFolderId: string
+    targetFolderId: string,
+    where?: string
   ) => Promise<void>
   moveItems: (
     items: { type: "folder" | "file"; id: string }[],
@@ -591,7 +593,7 @@ export const useDrive = create<DriveState>((set, get) => ({
     await apiJson(`/api/folders/${folderId}/mirror`, "POST", { targetFolderId })
     await get().refresh()
   },
-  addItemsToSpace: async (items, targetFolderId) => {
+  addItemsToSpace: async (items, targetFolderId, where = "space") => {
     if (items.length === 0) return
     const results = await Promise.allSettled(
       items.map((item) =>
@@ -605,11 +607,14 @@ export const useDrive = create<DriveState>((set, get) => ({
     if (failed > 0) {
       toast.error(
         items.length === 1
-          ? "Couldn't add to space."
+          ? `Couldn't add to ${where}.`
           : `Added ${items.length - failed} of ${items.length} — ${failed} failed.`
       )
     } else if (items.length > 1) {
-      toast.success(`Added ${items.length} items to space.`)
+      toast.success(`Added ${items.length} items to ${where}.`)
+    } else if (where !== "space") {
+      // A space's own dialogs show the one item arrive; this lands elsewhere.
+      toast.success(`Added to ${where}.`)
     }
   },
   moveItems: async (items, targetFolderId) => {

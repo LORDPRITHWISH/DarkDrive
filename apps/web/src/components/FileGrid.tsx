@@ -51,6 +51,7 @@ export function FileGrid() {
     extractZip,
     renameFolder,
     moveItems,
+    addItemsToSpace,
     removeShortcut,
   } = useDrive()
   const me = useAuth((s) => s.user)
@@ -131,6 +132,8 @@ export function FileGrid() {
         items: DragItem[]
         displayName: string
         currentParentId: string | null
+        // Link them into a synced folder instead (same picker).
+        link?: boolean
       }
     | null
   >(null)
@@ -141,12 +144,13 @@ export function FileGrid() {
     return selection.has(id) && selection.size > 1 ? Array.from(selection) : [id]
   }
 
-  function openMoveDialog(type: "folder" | "file", id: string, name: string) {
+  function openMoveDialog(type: "folder" | "file", id: string, name: string, link = false) {
     const ids = selectionOrSingle(id)
     setMoveTarget({
       items: ids.map((sid) => ({ type: sid === id ? type : typeOf(sid), id: sid })),
       displayName: ids.length === 1 ? name : `${ids.length} items`,
       currentParentId: currentFolderId,
+      link,
     })
   }
   const [addTarget, setAddTarget] = useState<
@@ -171,11 +175,16 @@ export function FileGrid() {
   ) {
     e.preventDefault()
     e.stopPropagation()
-    const shortcutId =
-      type === "file" ? files.find((x) => x.id === id)?.shortcutId : undefined
+    const record = type === "file" ? files.find((x) => x.id === id) : folders.find((x) => x.id === id)
+    const shortcutId = type === "file" ? files.find((x) => x.id === id)?.shortcutId : undefined
     const hasThumbnail =
       type === "folder" ? !!folders.find((x) => x.id === id)?.thumbnailKey : undefined
-    setMenu({ x: e.clientX, y: e.clientY, type, id, name, shortcutId, hasThumbnail })
+    setMenu({
+      x: e.clientX, y: e.clientY, type, id, name, shortcutId, hasThumbnail,
+      isStarred: record?.isStarred,
+      isHidden: record?.isHidden,
+      count: selectionOrSingle(id).length,
+    })
   }
   const closeMenu = () => setMenu(null)
 
@@ -431,6 +440,15 @@ export function FileGrid() {
             openAddToSpaceDialog(menu.type, menu.id, menu.name)
             closeMenu()
           }}
+          // From the user's own drive: a space's files are their uploaders'.
+          onLinkToSynced={
+            currentSpace
+              ? undefined
+              : () => {
+                  openMoveDialog(menu.type, menu.id, menu.name, true)
+                  closeMenu()
+                }
+          }
         />
       )}
 
@@ -467,9 +485,11 @@ export function FileGrid() {
           items={moveTarget.items}
           displayName={moveTarget.displayName}
           currentParentId={moveTarget.currentParentId}
+          link={moveTarget.link}
           onClose={() => setMoveTarget(null)}
           onSubmit={async (targetFolderId) => {
-            await moveItems(moveTarget.items, targetFolderId)
+            if (moveTarget.link) await addItemsToSpace(moveTarget.items, targetFolderId, "the synced folder")
+            else await moveItems(moveTarget.items, targetFolderId)
           }}
         />
       )}

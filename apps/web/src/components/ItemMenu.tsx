@@ -29,13 +29,15 @@ export function useItemMenu({
   const setStarred = useDrive((s) => s.setStarred)
   const trashItems = useDrive((s) => s.trashItems)
   const moveItems = useDrive((s) => s.moveItems)
+  const addItemsToSpace = useDrive((s) => s.addItemsToSpace)
 
   const [menu, setMenu] = useState<Menu | null>(null)
   const [share, setShare] = useState<
     { type: "FILE" | "FOLDER"; id: string; name: string; parentId?: string | null } | null
   >(null)
   const [moveTarget, setMoveTarget] = useState<
-    { type: "folder" | "file"; id: string; name: string; parentId: string | null } | null
+    // link: into a synced folder instead (same picker).
+    { type: "folder" | "file"; id: string; name: string; parentId: string | null; link?: boolean } | null
   >(null)
   const [addTarget, setAddTarget] = useState<{ type: "folder" | "file"; id: string; name: string } | null>(null)
   const [fileProps, setFileProps] = useState<FileItem | null>(null)
@@ -99,6 +101,10 @@ export function useItemMenu({
             setAddTarget({ type: menu.type, id: menu.id, name: menu.name })
             closeMenu()
           }}
+          onLinkToSynced={() => {
+            setMoveTarget({ type: menu.type, id: menu.id, name: menu.name, parentId: menu.locationId, link: true })
+            closeMenu()
+          }}
           onShare={() => {
             setShare(
               menu.type === "folder"
@@ -137,9 +143,12 @@ export function useItemMenu({
           items={[{ type: moveTarget.type, id: moveTarget.id }]}
           displayName={moveTarget.name}
           currentParentId={moveTarget.parentId}
+          link={moveTarget.link}
           onClose={() => setMoveTarget(null)}
           onSubmit={async (targetFolderId) => {
-            await moveItems([{ type: moveTarget.type, id: moveTarget.id }], targetFolderId)
+            const items = [{ type: moveTarget.type, id: moveTarget.id }]
+            if (moveTarget.link) await addItemsToSpace(items, targetFolderId, "the synced folder")
+            else await moveItems(items, targetFolderId)
             onChanged?.()
           }}
         />

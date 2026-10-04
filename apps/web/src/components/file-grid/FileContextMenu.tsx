@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { Fragment, useEffect, useState } from "react"
 import {
   ArrowsOutCardinalIcon,
   DesktopIcon,
@@ -8,6 +8,7 @@ import {
   FileZipIcon,
   InfoIcon,
   LinkBreakIcon,
+  LinkSimpleIcon,
   MapPinIcon,
   PencilSimpleIcon,
   ShareNetworkIcon,
@@ -19,6 +20,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
 } from "@workspace/ui/components/dropdown-menu"
 import { desktop } from "@/lib/desktop"
 import { toast } from "@/store/toast"
@@ -36,9 +39,10 @@ export type MenuPos = {
   name: string
   shortcutId?: string
   hasThumbnail?: boolean
-  // Only known outside the drive grid (Recent/Uploads/Search/Starred pass the
-  // record they rendered) — undefined falls back to a "Toggle star" label.
   isStarred?: boolean
+  isHidden?: boolean
+  /** How many items the menu acts on, where its host has a selection. Over one, only what applies to all of them is offered. */
+  count?: number
 }
 
 // Every action is optional: an entry renders only where its host passes a
@@ -61,6 +65,7 @@ type Props = {
   onDelete?: () => void
   onRemoveShortcut?: () => void
   onAddToSpace?: () => void
+  onLinkToSynced?: () => void
   /** The host's own entries, after the ones that open things. */
   children?: React.ReactNode
 }
@@ -82,6 +87,7 @@ export function FileContextMenu({
   onDelete,
   onRemoveShortcut,
   onAddToSpace,
+  onLinkToSynced,
   children,
 }: Props) {
   const isShortcut = !!menu.shortcutId
@@ -94,6 +100,81 @@ export function FileContextMenu({
   }, [menu.type, menu.id])
   const localPath = local?.id === menu.id ? local.path : null
   const isZip = menu.type === "file" && /\.zip$/i.test(menu.name)
+  const file = menu.type === "file"
+  const one = (menu.count ?? 1) < 2
+  const item = (icon: React.ReactNode, label: string, onClick: (() => void) | undefined, className?: string) =>
+    onClick && (
+      <DropdownMenuItem key={label} onClick={onClick} className={className}>
+        {icon}
+        {label}
+      </DropdownMenuItem>
+    )
+  // One group per thing the user came to do: open it, handle it, put it
+  // somewhere else too, mark it, be rid of it. A line between each.
+  const groups = [
+    [
+      // What a double-click does, so it stands out as the default.
+      one && file && item(<OpenEyeIcon size={16} />, "Open", onOpen, "font-medium"),
+      one && isZip && item(<FileZipIcon size={16} />, "Extract here", onExtract),
+      one && item(<MapPinIcon size={16} />, "Open location", onOpenLocation),
+      one && localPath && (
+        <DropdownMenuItem
+          key="local"
+          title={localPath}
+          onClick={() => {
+            desktop!.show(menu.type, menu.id).catch((e: Error) => toast.error(e.message))
+            onClose()
+          }}
+        >
+          <DesktopIcon size={16} />
+          Show on this computer
+        </DropdownMenuItem>
+      ),
+      one &&
+        canHandOff &&
+        !isShortcut &&
+        item(<DesktopIcon size={16} />, "Open in desktop app", () => {
+          window.location.assign(`darkdrive://${menu.type}/${menu.id}`)
+          onClose()
+        }),
+      one && children ? <Fragment key="host">{children}</Fragment> : null,
+    ],
+    [
+      item(<DownloadIcon size={16} />, "Download", onDownload),
+      one && !isShortcut && item(<PencilSimpleIcon size={16} />, "Rename", onRename),
+      item(<ArrowsOutCardinalIcon size={16} />, "Move to…", onMove),
+    ],
+    [
+      !isShortcut && item(<UsersThreeIcon size={16} />, "Add to space…", onAddToSpace),
+      !isShortcut && item(<LinkSimpleIcon size={16} />, "Link to synced folder…", onLinkToSynced),
+      one && !isShortcut && item(<ShareNetworkIcon size={16} />, "Share…", onShare),
+    ],
+    [
+      one &&
+        !isShortcut &&
+        item(
+          <StarIcon size={16} weight={menu.isStarred ? "fill" : "regular"} />,
+          menu.isStarred ? "Remove star" : "Add star",
+          onToggleStar
+        ),
+      one && !isShortcut && item(<EyeSlashIcon size={16} />, menu.isHidden ? "Unhide" : "Hide", onToggleHidden),
+      one && (file || !isShortcut) && item(<InfoIcon size={16} />, "Properties", file ? onProperties : onFolderProperties),
+    ],
+    [
+      // The link goes, the file it points at stays: not a deletion.
+      one && isShortcut && item(<LinkBreakIcon size={16} />, "Remove shortcut", onRemoveShortcut),
+      !isShortcut &&
+        item(
+          <TrashIcon size={16} />,
+          "Move to bin",
+          onDelete,
+          "text-destructive hover:text-destructive data-highlighted:text-destructive"
+        ),
+    ],
+  ]
+    .map((group) => group.filter(Boolean))
+    .filter((group) => group.length)
+
   return (
     <DropdownMenu open onOpenChange={(open) => !open && onClose()}>
       <DropdownMenuContent
@@ -106,131 +187,17 @@ export function FileContextMenu({
         align="start"
         side="bottom"
         sideOffset={0}
-        className="w-56"
+        // Icons sit back so the labels lead, and come forward with the row
+        // that is pointed at. The host's own entries get the same.
+        className="w-56 [&_[data-slot=dropdown-menu-item]>svg]:text-muted-foreground [&_[data-slot=dropdown-menu-item][data-highlighted]>svg]:text-current [&_[data-slot=dropdown-menu-item].text-destructive>svg]:text-current"
       >
-        {menu.type === "file" && (
-          <>
-            {onOpen && (
-              <DropdownMenuItem onClick={onOpen}>
-                <OpenEyeIcon size={16} />
-                Open
-              </DropdownMenuItem>
-            )}
-            {onProperties && (
-              <DropdownMenuItem onClick={onProperties}>
-                <InfoIcon size={16} />
-                Properties
-              </DropdownMenuItem>
-            )}
-            {isZip && onExtract && (
-              <DropdownMenuItem onClick={onExtract}>
-                <FileZipIcon size={16} />
-                Extract here
-              </DropdownMenuItem>
-            )}
-          </>
-        )}
-        {menu.type === "folder" && !isShortcut && onFolderProperties && (
-          <DropdownMenuItem onClick={onFolderProperties}>
-            <InfoIcon size={16} />
-            Properties…
-          </DropdownMenuItem>
-        )}
-        {onOpenLocation && (
-          <DropdownMenuItem onClick={onOpenLocation}>
-            <MapPinIcon size={16} />
-            Open location
-          </DropdownMenuItem>
-        )}
-        {localPath && (
-          <DropdownMenuItem
-            title={localPath}
-            onClick={() => {
-              desktop!.show(menu.type, menu.id).catch((e: Error) => toast.error(e.message))
-              onClose()
-            }}
-          >
-            <DesktopIcon size={16} />
-            Show on this computer
-          </DropdownMenuItem>
-        )}
-        {canHandOff && !isShortcut && (
-          <DropdownMenuItem
-            onClick={() => {
-              window.location.href = `darkdrive://${menu.type}/${menu.id}`
-              onClose()
-            }}
-          >
-            <DesktopIcon size={16} />
-            Open in desktop app
-          </DropdownMenuItem>
-        )}
-        {children}
-        {onDownload && (
-          <DropdownMenuItem onClick={onDownload}>
-            <DownloadIcon size={16} />
-            Download
-          </DropdownMenuItem>
-        )}
-        {isShortcut && onRemoveShortcut && (
-          <DropdownMenuItem onClick={onRemoveShortcut}>
-            <LinkBreakIcon size={16} />
-            Remove shortcut
-          </DropdownMenuItem>
-        )}
-        {!isShortcut && onRename && (
-          <DropdownMenuItem onClick={onRename}>
-            <PencilSimpleIcon size={16} />
-            Rename
-          </DropdownMenuItem>
-        )}
-        {onMove && (
-          <DropdownMenuItem onClick={onMove}>
-            <ArrowsOutCardinalIcon size={16} />
-            Move to…
-          </DropdownMenuItem>
-        )}
-        {!isShortcut && (
-          <>
-            {onAddToSpace && (
-              <DropdownMenuItem onClick={onAddToSpace}>
-                <UsersThreeIcon size={16} />
-                Add to space…
-              </DropdownMenuItem>
-            )}
-            {onShare && (
-              <DropdownMenuItem onClick={onShare}>
-                <ShareNetworkIcon size={16} />
-                Share…
-              </DropdownMenuItem>
-            )}
-            {onToggleStar && (
-              <DropdownMenuItem onClick={onToggleStar}>
-                <StarIcon size={16} weight={menu.isStarred ? "fill" : "regular"} />
-                {menu.isStarred === undefined
-                  ? "Toggle star"
-                  : menu.isStarred
-                    ? "Remove star"
-                    : "Add star"}
-              </DropdownMenuItem>
-            )}
-            {onToggleHidden && (
-              <DropdownMenuItem onClick={onToggleHidden}>
-                <EyeSlashIcon size={16} />
-                Toggle hidden
-              </DropdownMenuItem>
-            )}
-            {onDelete && (
-              <DropdownMenuItem
-                onClick={onDelete}
-                className="text-destructive hover:text-destructive data-highlighted:text-destructive"
-              >
-                <TrashIcon size={16} weight="fill" />
-                {menu.type === "folder" ? "Delete folder" : "Delete file"}
-              </DropdownMenuItem>
-            )}
-          </>
-        )}
+        {!one && <DropdownMenuLabel className="normal-case tracking-normal">{menu.count} items selected</DropdownMenuLabel>}
+        {groups.map((group, i) => (
+          <Fragment key={i}>
+            {(i > 0 || !one) && <DropdownMenuSeparator />}
+            {group}
+          </Fragment>
+        ))}
       </DropdownMenuContent>
     </DropdownMenu>
   )

@@ -1,3 +1,4 @@
+import { useState } from "react"
 import {
   Popover,
   PopoverContent,
@@ -16,13 +17,16 @@ export function HoverName({
   as?: "span" | "div"
 }) {
   const Tag = as
+  // Shut by a right-click: the context menu opens under the pointer, and
+  // this would sit on its corner.
+  const [open, setOpen] = useState(false)
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         nativeButton={false}
         openOnHover
         delay={300}
-        render={<Tag className={className} />}
+        render={<Tag className={className} onContextMenu={() => setOpen(false)} />}
       >
         {name}
       </PopoverTrigger>

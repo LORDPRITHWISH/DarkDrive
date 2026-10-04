@@ -142,6 +142,8 @@ const idTag = (id: string) => crypto.createHash("sha256").update(id).digest("hex
 // moved out, which nothing on the row can tell. Those are `gone`: a client
 // drops the ones it holds, like a delete.
 //
+// ?links=1 adds the files linked into the folder, each with `link` set.
+//
 // `can` is what the user may do in that folder ("YES" | "ASK" | "NO" each to
 // adding and changing, and to binning): all YES in one of their own, a
 // member's settings in a shared one (FolderMember).
@@ -220,6 +222,41 @@ syncRouter.get("/changes", pollLimit, async (req, res) => {
     },
   })
 
+  // Files linked into this folder (FileShortcut), for a client that asks
+  // (links=1): each stays where it is on DarkDrive and is kept on these
+  // computers too, under its own name, with no second copy in storage. A link
+  // has no updatedAt and unlinking deletes its row, so there is nothing to
+  // tell a change by: every one is named in every answer, and a client drops
+  // those it holds that no longer are. Only in a folder of the user's own: a
+  // link there doesn't let a member read the file (getFileWithAccess).
+  // ponytail: all of them each poll. Fine into the hundreds; give FileShortcut
+  // an updatedAt and a soft delete if someone links tens of thousands.
+  const links =
+    req.query.links === "1" && !drive.shared
+      ? await prisma.fileShortcut.findMany({
+          where: {
+            folder: { ownerId: drive.ownerId, spaceId: null },
+            file: { isTrashed: false },
+            // Not one a member added that still waits for the owner's yes.
+            OR: [{ pending: null }, { pending: "delete" }],
+          },
+          select: {
+            id: true, folderId: true,
+            file: {
+              select: { id: true, name: true, folderId: true, size: true, sha256: true, mimeType: true, updatedAt: true },
+            },
+          },
+          orderBy: { createdAt: "asc" },
+        })
+      : []
+  // By file: a client has one file at one path. So not one whose file is in
+  // this folder as itself, nor a second link to the same file.
+  const linked = new Map<string, (typeof links)[number]>()
+  for (const l of links) {
+    if (pathOf(l.folderId) === null || binned(l.folderId)) continue
+    if (pathOf(l.file.folderId) === null && !linked.has(l.file.id)) linked.set(l.file.id, l)
+  }
+
   const changedFolders = []
   for (const id of touched) {
     // Null only past MAX_DEPTH, which is skipped like before.
@@ -231,7 +268,8 @@ syncRouter.get("/changes", pollLimit, async (req, res) => {
   for (const f of files) {
     const dir = pathOf(f.folderId)
     if (dir === null) {
-      gone.push(idTag(f.id))
+      // Unless it is still here by a link, which names it below.
+      if (!linked.has(f.id)) gone.push(idTag(f.id))
       continue
     }
     // Added by a member who has to ask, and not yet agreed to: theirs alone.
@@ -245,6 +283,20 @@ syncRouter.get("/changes", pollLimit, async (req, res) => {
       mimeType: f.mimeType,
       updatedAt: f.updatedAt,
       deleted: f.isTrashed || f.deletedAt !== null || binned(f.folderId),
+    })
+  }
+  for (const { id: link, folderId, file: f } of linked.values()) {
+    const dir = pathOf(folderId)
+    changedFiles.push({
+      id: f.id,
+      path: dir === "" ? f.name : `${dir}/${f.name}`,
+      size: Number(f.size),
+      sha256: f.sha256,
+      mimeType: f.mimeType,
+      updatedAt: f.updatedAt,
+      deleted: false,
+      // The FileShortcut: what a client removes where it would bin a file.
+      link,
     })
   }
 

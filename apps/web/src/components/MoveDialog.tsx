@@ -13,6 +13,8 @@ type Props = {
   items: { type: "folder" | "file"; id: string }[]
   displayName: string
   currentParentId: string | null // folderId for files, parentId for folders
+  /** Pick where to link the items instead: only a synced folder can be chosen. */
+  link?: boolean
   onClose: () => void
   onSubmit: (targetFolderId: string) => void | Promise<void>
 }
@@ -22,6 +24,7 @@ export function MoveDialog({
   items,
   displayName,
   currentParentId,
+  link,
   onClose,
   onSubmit,
 }: Props) {
@@ -50,10 +53,11 @@ export function MoveDialog({
           cur = byId.get(cur)?.parentId ?? null
         }
         exp.add(r.rootId)
+        if (link && syncRootId) exp.add(syncRootId)
         setExpanded(exp)
       })
       .catch((e) => setErr(e.message))
-  }, [open, currentParentId])
+  }, [open, currentParentId, link, syncRootId])
 
   // Folders that can't be the target: any selected folder itself and its
   // descendants, and "Synced Folders" itself, which holds only the synced
@@ -101,7 +105,7 @@ export function MoveDialog({
       onClose={onClose}
       className="h-[520px]"
       bodyClassName="p-2 text-sm"
-      title="Move"
+      title={link ? "Link to synced folder" : "Move"}
       description={
         <span className="block truncate" title={displayName}>
           {displayName}
@@ -116,17 +120,22 @@ export function MoveDialog({
             onClick={submit}
             disabled={!selected || selected === currentParentId || busy}
           >
-            {busy ? "Moving…" : "Move"}
+            {link ? (busy ? "Linking…" : "Link") : busy ? "Moving…" : "Move"}
           </Button>
         </>
       }
     >
+      {link && (
+        <div className="text-muted-foreground mb-2 px-2 text-xs">
+          Stays where it is, and is kept on every computer that syncs the folder.
+        </div>
+      )}
       {err && <div className="text-destructive mb-2 px-2">{err}</div>}
       {!tree ? (
         <div className="text-muted-foreground p-4 text-sm">Loading…</div>
       ) : (
         <FolderTree
-          rootId={tree.rootId}
+          rootId={link ? undefined : tree.rootId}
           syncRootId={syncRootId}
           folders={tree.folders}
           selected={selected}
@@ -159,7 +168,7 @@ function FolderTree({
   onSelect,
   onToggle,
 }: {
-  rootId: string
+  rootId?: string
   syncRootId?: string
   folders: FolderNode[]
   selected: string | null
@@ -233,9 +242,15 @@ function FolderTree({
 
   return (
     <div>
-      {render(rootId, "My Drive", 0)}
+      {rootId && render(rootId, "My Drive", 0)}
       {/* Only once there is a synced folder to put things in. */}
-      {syncRootId && childrenOf.has(syncRootId) && render(syncRootId, "Synced Folders", 0)}
+      {syncRootId && childrenOf.has(syncRootId)
+        ? render(syncRootId, "Synced Folders", 0)
+        : !rootId && (
+            <div className="text-muted-foreground p-4">
+              No synced folders yet. Start one from the DarkDrive desktop app.
+            </div>
+          )}
     </div>
   )
 }

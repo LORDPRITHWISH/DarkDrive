@@ -33,7 +33,10 @@ const IGNORE = new Set([".darkdrive", ".DS_Store", "Thumbs.db", "desktop.ini", "
 
 // remoteFolderId: the DarkDrive folder the local dir mirrors; "" = whole drive.
 type Config = { apiUrl: string; token: string; dir: string; device: string; remoteFolderId: string }
-type Entry = { id: string; sha: string; size: number; mtimeMs: number }
+// link + at: a file linked into the folder on DarkDrive, which lives elsewhere
+// there. `link` is the link itself (what goes when the file is deleted here),
+// `at` the file's updatedAt when it was last looked at.
+type Entry = { id: string; sha: string; size: number; mtimeMs: number; link?: string; at?: string }
 type State = { cursor: string; files: Record<string, Entry>; folders: Record<string, string> }
 
 // ---------------------------------------------------------------- config
@@ -211,8 +214,11 @@ function moveAside(rel: string): string {
 
 type RemoteFile = {
   id: string; path: string; size: number; sha256: string | null
-  mimeType: string; updatedAt: string; deleted: boolean
+  mimeType: string; updatedAt: string; deleted: boolean; link?: string
 }
+// As much of one as pull() goes by, and can make up for a file that went.
+type Pulled = Pick<RemoteFile, "id" | "path" | "sha256"> & Partial<Pick<RemoteFile, "updatedAt" | "link">>
+const linkOf = (f: Pulled) => (f.link ? { link: f.link, at: f.updatedAt } : {})
 type RemoteFolder = { id: string; path: string; deleted: boolean }
 
 // What this account may do in the folder, as the server last said: all YES in
@@ -260,7 +266,7 @@ async function fromLan(sha: string, tmp: string): Promise<boolean> {
   return false
 }
 
-async function download(f: Pick<RemoteFile, "id" | "path" | "sha256">) {
+async function download(f: Pulled) {
   const abs = localPath(f.path)
   fs.mkdirSync(path.dirname(abs), { recursive: true })
   // Straight to a .dd-part and renamed on success, so a killed transfer never
@@ -283,6 +289,7 @@ async function download(f: Pick<RemoteFile, "id" | "path" | "sha256">) {
     sha: f.sha256 ?? (await hashFile(abs)),
     size: st.size,
     mtimeMs: st.mtimeMs,
+    ...linkOf(f),
   }
   console.log(`  ↓ ${f.path}${viaLan ? " (from this network)" : ""}`)
   report({ type: "file", dir: "down", path: f.path, sha: state.files[f.path].sha })
@@ -305,10 +312,10 @@ async function pull() {
     cursor: string; can?: typeof can; folders: RemoteFolder[]; files: RemoteFile[]; gone?: string[]
   }>(
     "GET",
-    `/api/sync/changes?since=${encodeURIComponent(state.cursor)}&root=${encodeURIComponent(cfg.remoteFolderId)}`
+    `/api/sync/changes?links=1&since=${encodeURIComponent(state.cursor)}&root=${encodeURIComponent(cfg.remoteFolderId)}`
   )
   if (data.can) can = data.can
-  const files: Pick<RemoteFile, "id" | "path" | "sha256" | "deleted">[] = data.files
+  let files: (Pulled & { deleted: boolean })[] = data.files
 
   // Folders first: creating and moving directories before the files that go
   // in them means a renamed folder carries its children on disk for free.
@@ -350,6 +357,23 @@ async function pull() {
     for (const [rel, e] of Object.entries(state.files))
       if (went(e.id) || under(rel)) files.push({ id: e.id, path: rel, sha256: null, deleted: true })
   }
+
+  // Links, which are named in every answer (see /api/sync/changes). One this
+  // computer holds that isn't named was unlinked, or its file binned: gone
+  // from here like a delete, and first, so its name is free for what's next.
+  const named = new Set(files.map((f) => f.id))
+  for (const [rel, e] of Object.entries(state.files))
+    if (e.link && !named.has(e.id)) files.unshift({ id: e.id, path: rel, sha256: null, deleted: true })
+  files = files.filter((f) => {
+    if (!f.link) return true
+    const held = state.files[f.path]
+    // Its file hasn't changed since it was last looked at: nothing to pull,
+    // and what was done to it here is push()'s to send.
+    if (held?.id === f.id && held.link === f.link && held.at === f.updatedAt) return false
+    // A link goes by its file's name, which something else here may have.
+    // Whatever was here first keeps the path, and the link waits for it to go.
+    return !held || held.id === f.id
+  })
 
   // A file that moved server-side arrives at its new path; find and clear the
   // stale entry first, or push() would read the gap at the old path as a
@@ -401,7 +425,7 @@ async function pull() {
       case "skip":
         if (local !== null && !f.deleted) {
           const st = fs.statSync(abs)
-          state.files[f.path] = { id: f.id, sha: local, size: st.size, mtimeMs: st.mtimeMs }
+          state.files[f.path] = { id: f.id, sha: local, size: st.size, mtimeMs: st.mtimeMs, ...linkOf(f) }
         } else if (f.deleted) {
           delete state.files[f.path]
         }
@@ -451,8 +475,9 @@ async function upload(rel: string, info: DiskFile, sha: string, replace?: Entry)
     })
   } catch (e: any) {
     // Someone else changed the file after we last saw it. Keep ours under a
-    // conflict name; the next pull brings theirs down.
-    if (e.status === 409) return void moveAside(rel)
+    // conflict name; the next pull brings theirs down. The same for a linked
+    // file that isn't this account's to change.
+    if (e.status === 409 || (e.status === 403 && replace?.link)) return void moveAside(rel)
     throw e
   }
 
@@ -479,7 +504,10 @@ async function upload(rel: string, info: DiskFile, sha: string, replace?: Entry)
       `/api/files/upload/${init.uploadId}/complete`,
       { totalChunks: total }
     )
-    state.files[rel] = { id: done.file.id, sha, size: info.size, mtimeMs: info.mtimeMs }
+    state.files[rel] = {
+      id: done.file.id, sha, size: info.size, mtimeMs: info.mtimeMs,
+      ...(replace?.link && { link: replace.link }),
+    }
     console.log(`  ↑ ${rel}`)
     report({ type: "file", dir: "up", path: rel, sha })
   } catch (e: any) {
@@ -518,10 +546,14 @@ async function push() {
     if (!disk.has(rel)) missing.set(rel, entry)
   // Only with a free hand, though: a rename is otherwise a new file to ask
   // about, and the old one to put back or ask about, like any other.
+  // ponytail: and not a link, whose file isn't in this folder to be moved
+  // about in it. Renamed here, it is unlinked and goes up as a file of its
+  // own: a re-upload. Move the link (POST /files/:id/shortcut to the new
+  // folder, DELETE the old) if renaming linked files turns out to be common.
   const movedFrom = new Map<string, string[]>()
   if (can.upload === "YES")
     for (const [rel, entry] of missing)
-      movedFrom.set(entry.sha, [...(movedFrom.get(entry.sha) ?? []), rel])
+      if (!entry.link) movedFrom.set(entry.sha, [...(movedFrom.get(entry.sha) ?? []), rel])
 
   for (const [rel, info] of disk) {
     // Read-only here: what's new or changed on this computer stays on it.
@@ -555,10 +587,17 @@ async function push() {
   for (const [rel, entry] of missing) {
     // Not this account's to delete: it comes back.
     if (can.delete === "NO") {
-      await download({ id: entry.id, path: rel, sha256: entry.sha })
+      await download({ id: entry.id, path: rel, sha256: entry.sha, link: entry.link, updatedAt: entry.at })
       continue
     }
-    const { pending } = await api<{ pending?: string }>("PATCH", `/api/files/${entry.id}`, { isTrashed: true })
+    // Of a linked file it is the link that goes: the file stays on DarkDrive.
+    // One that's already gone there is as wanted, not a reason to fail the pass.
+    const { pending } = entry.link
+      ? await api<{ pending?: string }>("DELETE", `/api/files/shortcuts/${entry.link}`).catch((e) => {
+          if (e.status !== 404) throw e
+          return { pending: undefined }
+        })
+      : await api<{ pending?: string }>("PATCH", `/api/files/${entry.id}`, { isTrashed: true })
     delete state.files[rel]
     // Held for the folder's owner: the next pull brings it back until they agree.
     console.log(pending === "delete" ? `  ? ${rel} (deleting it waits for the folder's owner)` : `  ⌫ ${rel}`)

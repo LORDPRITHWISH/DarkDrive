@@ -19,12 +19,14 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            target: --linux deb
+            target: --linux deb rpm
           - os: windows-latest
             target: --win nsis
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - if: runner.os == 'Linux'
+        run: sudo apt-get install -y rpm
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:

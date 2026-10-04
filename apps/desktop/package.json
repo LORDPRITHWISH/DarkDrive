@@ -59,7 +59,7 @@
       "releaseType": "release"
     },
     "linux": {
-      "target": "deb",
+      "target": ["deb", "rpm"],
       "category": "Network",
       "icon": "ui/icon.png",
       "syncDesktopName": true,
@@ -81,6 +81,13 @@
       "recommends": [
         "libappindicator3-1",
         "python3-nautilus"
+      ]
+    },
+    "rpm": {
+      "packageName": "darkdrive",
+      "artifactName": "darkdrive-${version}.${arch}.${ext}",
+      "fpm": [
+        "--rpm-rpmbuild-define=_build_id_links none"
       ]
     }
   }

@@ -180,6 +180,40 @@ Vite proxies `/api` and `/socket.io` to the API.
 | `GET/POST` | `/api/sync/folders/:id/requests` | what members who have to ask are waiting on / answer `{ ids, approve }` |
 | `GET`  | `/api/sync/lan-key` | the account's key for LAN sync between its own computers; a new one each UTC day |
 
+## Desktop app (`apps/desktop`)
+
+The desktop app has no UI of its own: its build copies `apps/web/dist` into
+`dist/web` and serves it from `darkdrive://app`, so it always has exactly the
+web app's features at the commit it was built from. A web change reaches the
+desktop only through a rebuild. `pnpm --filter desktop... build` builds web
+first; a bare `pnpm --filter desktop build` re-copies whatever web `dist`
+already exists.
+
+```bash
+# run from source
+pnpm --filter "desktop..." build && pnpm --filter desktop start
+
+# installer for this OS -> apps/desktop/release/ (builds web first, publishes nothing)
+pnpm --filter desktop dist
+pnpm --filter desktop exec electron-builder --win --publish never   # .exe from Linux; needs wine
+```
+
+Install by hand: `sudo apt install ./apps/desktop/release/darkdrive_<version>_amd64.deb`
+on Linux, or run `DarkDrive-Setup-<version>.exe` on Windows (per-user, no admin).
+
+### Shipping an update
+
+1. Bump `version` in `apps/desktop/package.json` and commit. Installed apps
+   only update to a *newer* version, so re-tagging the same one reaches nobody.
+2. Push a matching tag: `git tag v<version> && git push origin v<version>`.
+
+[`desktop-release.yml`](.github/workflows/desktop-release.yml) then builds the
+`.deb` (Linux runner) and the NSIS `.exe` (Windows runner) and publishes both,
+with `latest-linux.yml` / `latest.yml`, as a GitHub release. It fails if the
+tag and `package.json` version disagree. Installed apps poll that release:
+Windows updates silently and relaunches; Linux shows "restart to install" in
+the tray and asks for a password through `pkexec`.
+
 ## Folder sync (`apps/sync`)
 
 Two-way sync between a local folder and your DarkDrive, Dropbox-style. No
